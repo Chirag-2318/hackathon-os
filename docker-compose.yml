@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: hackathon-os-postgres
+    environment:
+      POSTGRES_DB: hackathon_os
+      POSTGRES_USER: hackathon
+      POSTGRES_PASSWORD: hackathon
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
