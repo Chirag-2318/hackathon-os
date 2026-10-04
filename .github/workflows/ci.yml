@@ -17,7 +17,7 @@ jobs:
           java-version: '21'
       - name: Build backend
         working-directory: backend
-        run: ./mvnw clean install -DskipTests
+        run: ./mvnw -B test
 
   frontend-check:
     runs-on: ubuntu-latest
