@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: hackathon-os-backend
+
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5433/hackathon_os
+    username: hackathon
+    password: hackathon
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+  flyway:
+    enabled: true

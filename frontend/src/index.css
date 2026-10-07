@@ -1,111 +1,569 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
+/*
+ * Phase 0a — Design Tokens
+ * Source: design.md §2.1–§2.10, PRD §4.1–§4.15
+ * Every token is defined once here. No hardcoded hex in component files.
+ */
+
+@custom-variant dark (&:is(.dark *));
+
+/* ────────────────────────────────────────────────────────
+   CSS Custom Properties — Light Theme (default)
+   ──────────────────────────────────────────────────────── */
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  /* §4.1 Neutrals */
+  --canvas: #EDEEE6;
+  --surface: #F6F8F4;
+  --surface-raised: #FFFFFF;
+  --surface-sunken: #E3E5DA;
+  --border: #DADCD2;
+  --border-strong: #C7CAC4;
+  --border-input: #8A8E86;
+  --ink-strong: #070707;
+  --ink: #2A2D32;
+  --ink-muted: #5C6068;
+  --ink-disabled: #9A9E96;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  /* §4.2 Brand / lavender scale */
+  --lav-50: #F2F2FE;
+  --lav-100: #E4E4FB;
+  --lav-200: #C4C3F6;
+  /* lav-300 intentionally not defined (OQ-7) */
+  --lav-400: #A9A9F4;
+  --lav-500: #8E8EF1;
+  --lav-600: #5F5FDC;
+  --lav-700: #4B4BC4;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /* §4.3 Sidebar and callout tokens */
+  --sidebar: #070707;
+  --sidebar-text: #E8E8EA;
+  --sidebar-muted: #9A9AA3;
+  --callout: #2A2D32;
 
-  @media (max-width: 1024px) {
-    font-size: 16px;
+  /* §4.4 Pastel fills — always paired with ink text */
+  --pastel-lavender: #C4C5FC;
+  --pastel-pink: #FCC4E0;
+  --pastel-sun: #FDE781;
+  --pastel-cream: #FBECBE;
+  --pastel-sky: #B7D9FF;
+  --pastel-ice: #D7EDFB;
+  --pastel-green: #A5EFBE;
+  --pastel-lime: #C9EF84;
+  --pastel-peach: #F9B672;
+  --pastel-amber: #FDD484;
+  --pastel-blush: #FBD9D7;
+  --pastel-violet: #C1AFFD;
+  --pastel-mint-wash: #E8F3EB;
+
+  /* §4.5 Semantic colors */
+  --color-success-fill: #C9EF84;
+  --color-success-solid: #3F6B0F;
+  --color-success-text: #3F6B0F;
+  --color-success-stroke: #4F8F1A;
+
+  --color-info-fill: #B7D9FF;
+  --color-info-solid: #3B63B8;
+  --color-info-text: #3B63B8;
+  --color-info-stroke: #5880D1;
+
+  --color-warning-fill: #F7CB2D;
+  /* warning-solid: not used */
+  --color-warning-text: #7A5C00;
+  --color-warning-stroke: #A67C00;
+
+  --color-deadline-fill: #F9B672;
+  --color-deadline-solid: #B34700;
+  --color-deadline-text: #B34700;
+  --color-deadline-stroke: #EB6404;
+
+  --color-danger-fill: #F77271;
+  --color-danger-solid: #C23A3A;
+  --color-danger-text: #A82D2D;
+  --color-danger-stroke: #E0524F;
+
+  /* §4.14 Charts palette */
+  --chart-1: #5880D1;
+  --chart-2: #C9EF84;
+  --chart-3: #B9D4FE;
+  --chart-4: #F9B672;
+  --chart-5: #C1AFFD;
+  --chart-6: #F77271;
+
+  /* §4.15 Cross-cutting interactive states */
+  --hover-row: var(--lav-50);
+  --selected-row: var(--lav-100);
+  --selected-marker: var(--lav-600);
+  --focus-ring: var(--lav-600);
+
+  /* §4.6 Dark-theme accent tokens (defined here for reference, overridden in .dark) */
+  --accent-yellow: #F8B315;
+  --accent-orange: #FCB160;
+  --accent-orange-solid: #EB6404;
+  --accent-pink: #F36498;
+  --accent-purple: #C09BF0;
+  --accent-lime: #C9EF84;
+  --accent-blue: #7FA2EA;
+  --accent-coral: #F77271;
+
+  /* §4.9 Shape / radius tokens */
+  --r-chip: 0.286rem;   /* 4px @ 14px base */
+  --r-control: 0.429rem; /* 6px */
+  --r-card: 0.714rem;   /* 10px */
+  --r-panel: 1rem;      /* 14px */
+  --r-pop: 0.571rem;    /* 8px */
+  --r-pill: 999px;
+
+  /* §4.10 Elevation tokens */
+  --e0: none;
+  --e1: 0 1px 2px rgba(20, 22, 26, 0.06);
+  --e2: 0 8px 24px rgba(20, 22, 26, 0.10);
+  --e3: 0 16px 48px rgba(20, 22, 26, 0.18);
+
+  /* §4.8 Spacing density tokens — rem so they scale with html font-size */
+  --row-height: 3.429rem;       /* 48px @ 14px base (was 56px) */
+  --control-height: 2.571rem;   /* 36px (was 40px) */
+  --card-padding: 1.143rem;     /* 16px (was 20px) */
+  --card-padding-hero: 1.429rem;/* 20px (was 24px) */
+  --card-gap-dense: 0.857rem;   /* 12px (was 16px) */
+  --card-gap-major: 1.429rem;   /* 20px (was 24px) */
+
+  /* §4.12 Avatar tokens */
+  --avatar-xs: 1.429rem;        /* 20px (was 24px) */
+  --avatar-sm: 2rem;            /* 28px (was 32px) */
+  --avatar-md: 2.571rem;        /* 36px (was 40px) */
+  --avatar-lg: 3.429rem;        /* 48px (was 56px) */
+  --avatar-stack-overlap: 0.571rem; /* 8px */
+  --avatar-ring-width: 2px;     /* keep 2px — sub-rem detail */
+  --presence-dot-size: 0.571rem; /* 8px */
+
+  /* shadcn/ui integration variables */
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface-raised);
+  --popover-foreground: var(--ink);
+  --primary: var(--lav-600);
+  --primary-foreground: #FFFFFF;
+  --secondary: var(--lav-200);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-sunken);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--lav-100);
+  --accent-foreground: var(--ink);
+  --destructive: var(--color-danger-solid);
+  --destructive-foreground: #FFFFFF;
+  --border-shadcn: var(--border);
+  --input: var(--border-input);
+  --ring: var(--lav-600);
+  --radius: var(--r-control);
+}
+
+/* ────────────────────────────────────────────────────────
+   §4.6 Dark Theme
+   ──────────────────────────────────────────────────────── */
+.dark {
+  --sidebar: #0E0E0E;
+  --canvas: #131313;
+  --surface: #1C1C1C;
+  --surface-raised: #2A2A2A;
+  --surface-sunken: #0E0E0E;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-input: #6B6B6B;
+  --ink-strong: #F5F3EE;
+  --ink: #F5F3EE;
+  --ink-muted: #AB9C9F;
+  --ink-disabled: #5A5A5A;
+
+  --lav-50: rgba(169, 169, 244, 0.06);
+  --lav-100: rgba(169, 169, 244, 0.12);
+  --lav-200: rgba(169, 169, 244, 0.20);
+  --lav-400: #A9A9F4;
+  --lav-500: #8E8EF1;
+  --lav-600: #A9A9F4;
+  --lav-700: #C4C3F6;
+
+  --callout: #2A2D32;
+  --sidebar-text: #E8E8EA;
+  --sidebar-muted: #9A9AA3;
+
+  /* Dark-theme primary */
+  --primary: #A9A9F4;
+  --primary-foreground: #14151A;
+
+  /* Dark-theme selected state */
+  --selected-fill: #F7EBD4;
+  --selected-fill-text: #131313;
+
+  /* Dark-theme focus */
+  --focus-ring: var(--lav-400);
+
+  /* Elevation: expressed via surface, not shadow in dark */
+  --e1: none;
+  --e2: none;
+  --e3: none;
+
+  /* shadcn dark overrides */
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface-raised);
+  --popover-foreground: var(--ink);
+  --secondary: rgba(169, 169, 244, 0.20);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-sunken);
+  --muted-foreground: var(--ink-muted);
+  --accent: rgba(169, 169, 244, 0.12);
+  --accent-foreground: var(--ink);
+  --destructive: #F77271;
+  --destructive-foreground: #14151A;
+  --border-shadcn: var(--border);
+  --input: var(--border-input);
+  --ring: var(--lav-400);
+}
+
+/* ────────────────────────────────────────────────────────
+   Compact density preset (§4.8)
+   ──────────────────────────────────────────────────────── */
+.density-compact {
+  --row-height: 2.571rem;    /* 36px @ 14px base (was 40px) */
+  --control-height: 2rem;    /* 28px (was 32px) */
+}
+
+/* ────────────────────────────────────────────────────────
+   Tailwind v4 Theme Registration
+   Map CSS custom properties into Tailwind's @theme
+   ──────────────────────────────────────────────────────── */
+@theme inline {
+  /* Colors — neutrals */
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-border-input: var(--border-input);
+  --color-ink-strong: var(--ink-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-disabled: var(--ink-disabled);
+
+  /* Colors — brand / lavender */
+  --color-lav-50: var(--lav-50);
+  --color-lav-100: var(--lav-100);
+  --color-lav-200: var(--lav-200);
+  --color-lav-400: var(--lav-400);
+  --color-lav-500: var(--lav-500);
+  --color-lav-600: var(--lav-600);
+  --color-lav-700: var(--lav-700);
+
+  /* Colors — sidebar & callout */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-text: var(--sidebar-text);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-callout: var(--callout);
+
+  /* Colors — pastel fills */
+  --color-pastel-lavender: var(--pastel-lavender);
+  --color-pastel-pink: var(--pastel-pink);
+  --color-pastel-sun: var(--pastel-sun);
+  --color-pastel-cream: var(--pastel-cream);
+  --color-pastel-sky: var(--pastel-sky);
+  --color-pastel-ice: var(--pastel-ice);
+  --color-pastel-green: var(--pastel-green);
+  --color-pastel-lime: var(--pastel-lime);
+  --color-pastel-peach: var(--pastel-peach);
+  --color-pastel-amber: var(--pastel-amber);
+  --color-pastel-blush: var(--pastel-blush);
+  --color-pastel-violet: var(--pastel-violet);
+  --color-pastel-mint-wash: var(--pastel-mint-wash);
+
+  /* Colors — semantic */
+  --color-success-fill: var(--color-success-fill);
+  --color-success-solid: var(--color-success-solid);
+  --color-success-text: var(--color-success-text);
+  --color-success-stroke: var(--color-success-stroke);
+  --color-info-fill: var(--color-info-fill);
+  --color-info-solid: var(--color-info-solid);
+  --color-info-text: var(--color-info-text);
+  --color-info-stroke: var(--color-info-stroke);
+  --color-warning-fill: var(--color-warning-fill);
+  --color-warning-text: var(--color-warning-text);
+  --color-warning-stroke: var(--color-warning-stroke);
+  --color-deadline-fill: var(--color-deadline-fill);
+  --color-deadline-solid: var(--color-deadline-solid);
+  --color-deadline-text: var(--color-deadline-text);
+  --color-deadline-stroke: var(--color-deadline-stroke);
+  --color-danger-fill: var(--color-danger-fill);
+  --color-danger-solid: var(--color-danger-solid);
+  --color-danger-text: var(--color-danger-text);
+  --color-danger-stroke: var(--color-danger-stroke);
+
+  /* Colors — charts palette */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+
+  /* Colors — interactive states */
+  --color-hover-row: var(--hover-row);
+  --color-selected-row: var(--selected-row);
+  --color-selected-marker: var(--selected-marker);
+  --color-focus-ring: var(--focus-ring);
+
+  /* Colors — accents */
+  --color-accent-yellow: var(--accent-yellow);
+  --color-accent-orange: var(--accent-orange);
+  --color-accent-orange-solid: var(--accent-orange-solid);
+  --color-accent-pink: var(--accent-pink);
+  --color-accent-purple: var(--accent-purple);
+  --color-accent-lime: var(--accent-lime);
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-coral: var(--accent-coral);
+
+  /* Colors — shadcn integration */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border-default: var(--border-shadcn);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Radii */
+  --radius-chip: var(--r-chip);
+  --radius-control: var(--r-control);
+  --radius-card: var(--r-card);
+  --radius-panel: var(--r-panel);
+  --radius-pop: var(--r-pop);
+  --radius-pill: var(--r-pill);
+
+  /* Shadows / Elevation */
+  --shadow-e0: var(--e0);
+  --shadow-e1: var(--e1);
+  --shadow-e2: var(--e2);
+  --shadow-e3: var(--e3);
+
+  /* Typography — §4.7 */
+  --font-sans: "Inter Variable", system-ui, "Noto Sans Devanagari", "Noto Sans", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+
+  /* Spacing — density-aware */
+  --spacing-row-height: var(--row-height);
+  --spacing-control-height: var(--control-height);
+
+  /* Icon sizes — §4.11 — rem so they scale */
+  --spacing-icon-sm: 1rem;     /* 14px (was 16px) */
+  --spacing-icon-md: 1.286rem; /* 18px (was 20px) */
+  --spacing-icon-lg: 1.571rem; /* 22px (was 24px) */
+}
+
+/* ────────────────────────────────────────────────────────
+   Base layer — global styles
+   ──────────────────────────────────────────────────────── */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-color: var(--border);
+  }
+
+  html {
+    /* §4.7 density: 87.5% of 16px = 14px effective base. All rem values scale from here.
+     * Result: 100% browser zoom looks as dense as the previous 80% zoom appearance.
+     * Do NOT use CSS zoom or transform:scale — those break hit-targets and blur text. */
+    font-size: 87.5%;
+    scroll-behavior: smooth;
+  }
+
+  /* ── Hide all scrollbars globally ── */
+  /* Chrome, Safari, Edge */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+  /* Firefox */
+  * {
+    scrollbar-width: none;
+  }
+  /* IE / old Edge */
+  * {
+    -ms-overflow-style: none;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 1rem;         /* 14px @ 87.5% html = 14px */
+    line-height: 1.571rem;   /* 22px */
+    font-weight: 500;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* §4.7 Typography scale — all in rem so they scale with html font-size */
+  .text-display {
+    font-size: 2.857rem;   /* 40px → now renders as 40px @ 14px base */
+    line-height: 3.429rem; /* 48px */
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .text-page-greeting {
+    font-size: 2.286rem;   /* 32px */
+    line-height: 2.857rem; /* 40px */
+    font-weight: 800;
+  }
+
+  h1, .text-h1 {
+    font-size: 2rem;       /* 28px */
+    line-height: 2.571rem; /* 36px */
+    font-weight: 700;
+  }
+
+  h2, .text-h2 {
+    font-size: 1.429rem;   /* 20px */
+    line-height: 2rem;     /* 28px */
+    font-weight: 700;
+  }
+
+  h3, .text-h3 {
+    font-size: 1.143rem;   /* 16px */
+    line-height: 1.714rem; /* 24px */
+    font-weight: 600;
+  }
+
+  .text-body {
+    font-size: 1rem;       /* 14px */
+    line-height: 1.571rem; /* 22px */
+    font-weight: 500;
+  }
+
+  .text-body-strong {
+    font-size: 1rem;       /* 14px */
+    line-height: 1.571rem; /* 22px */
+    font-weight: 700;
+  }
+
+  .text-label {
+    font-size: 0.929rem;   /* 13px */
+    line-height: 1.286rem; /* 18px */
+    font-weight: 600;
+  }
+
+  .text-caption {
+    font-size: 0.857rem;   /* 12px */
+    line-height: 1.143rem; /* 16px */
+    font-weight: 600;
+  }
+
+  .text-code {
+    font-family: var(--font-mono);
+    font-size: 0.929rem;   /* 13px */
+    line-height: 1.429rem; /* 20px */
+    font-weight: 400;
+  }
+
+  /* §4.7 Tabular figures for KPIs, countdowns, tables, charts */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* §4.7 Sentence case rule — no ALL CAPS */
+  /* (enforced by convention, not by CSS) */
+
+  /* Focus ring — §4.15 */
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  /* Selection color */
+  ::selection {
+    background-color: var(--lav-200);
+    color: var(--ink);
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
+/* ────────────────────────────────────────────────────────
+   Utility layer — reusable helpers
+   ──────────────────────────────────────────────────────── */
+@utility icon-stroke-1-5 {
+  & svg {
+    stroke-width: 1.5px;
   }
 }
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
+/* ────────────────────────────────────────────────────────
+   Icon effect keyframes — animations.md §4.4
+   ──────────────────────────────────────────────────────── */
+
+@keyframes icon-swap {
+  0% { opacity: 0; transform: scale(0.85); filter: blur(2px); }
+  100% { opacity: 1; transform: scale(1); filter: blur(0); }
 }
 
-body {
-  margin: 0;
+@keyframes icon-draw {
+  0% { stroke-dashoffset: 1; }
+  100% { stroke-dashoffset: 0; }
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+@keyframes icon-bounce {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.12); }
+  100% { transform: scale(1); }
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
+@keyframes icon-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(8deg); }
+  75% { transform: rotate(-8deg); }
 }
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
+@keyframes icon-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+@keyframes icon-rotate-90 {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(90deg); }
+}
+
+@keyframes icon-rotate-45 {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(45deg); }
+}
+
+@keyframes icon-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes icon-spin-reduced {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }

@@ -1,4 +1,4 @@
-# problem.md: Hackathon Operating System ("Jira for Hackathons")
+cd backend# problem.md: Hackathon Operating System ("Jira for Hackathons")
 
 **Status:** Step 1 of the project, problem research
 **Written:** 19 Sep 2026

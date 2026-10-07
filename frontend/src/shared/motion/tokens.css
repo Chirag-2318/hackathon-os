@@ -1,0 +1,122 @@
+/*
+ * Motion Tokens — CSS Custom Properties
+ * Source: animations.md §2.1–§2.4
+ * 
+ * Duration, easing, and transform tokens for the motion system.
+ * Spring tokens are JS-only (see motion-tokens.ts).
+ * Reduce Motion overrides via @media query at bottom.
+ */
+
+:root {
+  /* §2.1 Durations */
+  --t-instant: 0ms;
+  --t-micro: 100ms;
+  --t-fast: 160ms;
+  --t-base: 220ms;
+  --t-slow: 320ms;
+  --t-emph: 480ms;
+  --t-hero: 720ms;
+
+  /* Exit duration = ~65% of enter (§2.1 rule) */
+  --t-micro-exit: 65ms;
+  --t-fast-exit: 104ms;
+  --t-base-exit: 143ms;
+  --t-slow-exit: 208ms;
+  --t-emph-exit: 312ms;
+  --t-hero-exit: 468ms;
+
+  /* §2.2 Easing curves */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-soft: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-move: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-linear: linear;
+
+  /* §2.4 Transform value tokens — translate distances */
+  --translate-sm: 8px;
+  --translate-md: 16px;
+  --translate-lg: 24px;
+  --translate-tooltip: 4px;
+
+  /* §2.4 Scale tokens */
+  --scale-press: 0.97;
+  --scale-press-icon: 0.92;
+  --scale-enter: 0.96;
+  --scale-lift: 1.03;
+
+  /* §2.4 Hover lift (feature cards only) */
+  --hover-lift-y: -2px;
+
+  /* §2.4 Stagger */
+  --stagger-delay: 40ms;
+  --stagger-max-items: 8;
+
+  /* §2.4 Blur */
+  --blur-swap: 4px;
+}
+
+/* §3.1 Reduce Motion — replace movement with cross-fades */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    /* Slides/zooms → cross-fade at t-base */
+    --t-slow: var(--t-base);
+    --t-emph: var(--t-base);
+    --t-hero: 200ms;
+    --t-slow-exit: var(--t-base-exit);
+    --t-emph-exit: var(--t-base-exit);
+    --t-hero-exit: 130ms;
+
+    /* Remove all translates */
+    --translate-sm: 0px;
+    --translate-md: 0px;
+    --translate-lg: 0px;
+    --translate-tooltip: 0px;
+
+    /* Keep press scale (essential feedback) */
+    /* --scale-press stays 0.97 */
+    /* --scale-press-icon stays 0.92 */
+
+    /* Remove hover lift */
+    --hover-lift-y: 0px;
+
+    /* Remove stagger */
+    --stagger-delay: 0ms;
+  }
+}
+
+/* §3.2 User-controlled motion modes (applied via data attribute on <html>) */
+[data-motion="reduced"] {
+  --t-slow: var(--t-base);
+  --t-emph: var(--t-base);
+  --t-hero: 200ms;
+  --t-slow-exit: var(--t-base-exit);
+  --t-emph-exit: var(--t-base-exit);
+  --t-hero-exit: 130ms;
+  --translate-sm: 0px;
+  --translate-md: 0px;
+  --translate-lg: 0px;
+  --translate-tooltip: 0px;
+  --hover-lift-y: 0px;
+  --stagger-delay: 0ms;
+}
+
+[data-motion="off"] {
+  --t-instant: 0ms;
+  --t-micro: 0ms;
+  --t-fast: 0ms;
+  --t-base: 0ms;
+  --t-slow: 0ms;
+  --t-emph: 0ms;
+  --t-hero: 0ms;
+  --t-micro-exit: 0ms;
+  --t-fast-exit: 0ms;
+  --t-base-exit: 0ms;
+  --t-slow-exit: 0ms;
+  --t-emph-exit: 0ms;
+  --t-hero-exit: 0ms;
+  --translate-sm: 0px;
+  --translate-md: 0px;
+  --translate-lg: 0px;
+  --translate-tooltip: 0px;
+  --hover-lift-y: 0px;
+  --stagger-delay: 0ms;
+}
