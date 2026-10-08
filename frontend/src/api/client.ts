@@ -1,4 +1,5 @@
-const BASE_URL = 'http://localhost:8080';
+const isMSW = import.meta.env.VITE_MSW_ENABLED === 'true';
+const BASE_URL = isMSW ? '' : 'http://localhost:8080';
 
 function getCookie(name: string): string | null {
   const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));

@@ -1,25 +1,21 @@
 /**
- * AppShell — main desktop layout grid
- * Source: design.md §3.1, PRD §3.1
+ * AppShell — redesigned desktop frame (Section 4.1 / Section 8.2)
  *
- * CSS grid: sidebar + topbar + phase track + content + right rail.
- * No entrance animation on first paint (choreography rule 8).
- * max-width 1440px on main content. 12-col grid, 24px gutters.
+ * Layout: h-dvh flex-row, sidebar + inset panel.
+ * Panel: mt-2 (8px), bg-surface, 1px border, 16px top-left/right radius, internal scroll.
+ * No top bar at shell level — PanelHeader lives inside the panel.
  */
 import { cn } from 'cn';
-import { Sidebar } from './sidebar';
-import { TopBar } from './top-bar';
+import { AppSidebar } from './sidebar';
+import { PanelHeader } from './top-bar';
 import { PhaseTrack } from './phase-track';
 import { useSidebarStore } from './use-sidebar-store';
 import type { ReactNode } from 'react';
 
 interface AppShellProps {
   children: ReactNode;
-  /** Show Phase Track (room pages only) */
   showPhaseTrack?: boolean;
-  /** Current page name for breadcrumb */
   pageName?: string;
-  /** Content for the right rail */
   rightRail?: ReactNode;
 }
 
@@ -29,53 +25,47 @@ export function AppShell({
   pageName = 'Home',
   rightRail,
 }: AppShellProps) {
-  const { isCollapsed, context } = useSidebarStore();
+  const { context } = useSidebarStore();
   const inRoom = context === 'room';
-  const sidebarWidth = isCollapsed ? 64 : 220;
 
   return (
-    <div className="min-h-screen bg-canvas">
-      {/* Sidebar — fixed position, not in grid flow */}
-      <Sidebar />
+    <div className="flex h-dvh overflow-hidden bg-shell">
+      {/* Fixed-width sidebar — never scrolls */}
+      <AppSidebar />
 
-      {/* Main area — offset by sidebar width + margins */}
-      <div
-        className="flex flex-col min-h-screen transition-[margin-left] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
-        style={{ marginLeft: `${sidebarWidth + 20}px` }}
+      {/* Inset main panel — scrolls internally */}
+      <main
+        className={cn(
+          'flex-1 flex flex-col min-w-0',
+          'mt-2 bg-surface',
+          'border border-b-0 border-r-0 border-border',
+          'rounded-tl-[16px] rounded-tr-[16px]',
+          'overflow-y-auto panel-scroll',
+        )}
+        data-testid="panel"
       >
-        {/* Top bar */}
-        <TopBar inRoom={inRoom} pageName={pageName} />
+        {/* Sticky header inside the panel */}
+        <PanelHeader pageName={pageName} inRoom={inRoom} />
 
         {/* Phase Track — room pages only */}
         {showPhaseTrack && inRoom && <PhaseTrack />}
 
-        {/* Main content area */}
-        <main className="flex-1 flex">
-          {/* Content with max-width */}
-          <div
-            className={cn(
-              'flex-1 min-w-0 p-5 w-full',
-            )}
-          >
-            {/* 12-column grid available for page content */}
-            <div className="grid grid-cols-12 gap-5">
-              <div className="col-span-12">
-                {children}
-              </div>
-            </div>
+        {/* Page content */}
+        <div className="flex-1 flex min-h-0">
+          <div className="flex-1 min-w-0">
+            {children}
           </div>
-
           {/* Right rail slot */}
           {rightRail && (
             <aside
-              className="hidden xl:flex flex-col gap-5 w-[300px] shrink-0 border-l border-border p-5"
+              className="hidden xl:flex flex-col gap-5 w-[320px] shrink-0 border-l border-border p-6 overflow-y-auto"
               aria-label="Right rail"
             >
               {rightRail}
             </aside>
           )}
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

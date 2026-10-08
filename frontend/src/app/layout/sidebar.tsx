@@ -1,492 +1,338 @@
 /**
- * C01 Sidebar — desktop shell
- * Source: design.md §3.1, PRD §3.2
+ * AppSidebar — redesigned light sidebar (Section 4.2 / Section 8.1)
  *
- * Floating dark rounded container, 248px expanded / 72px collapsed.
- * Two nav groups: Workspace + This room.
- * Bottom slot: upgrade card (workspace) or next-step callout (room).
- *
- * Navigation: uses React Router NavLink so clicking actually changes the URL
- * and the <Outlet /> renders the correct page. Active state is derived from
- * the URL, not from Zustand.
+ * Width: 232px expanded / 64px collapsed icon-only rail.
+ * Padding: 20px.
+ * Background: --shell (light gray).
  */
+import * as React from 'react';
 import { cn } from 'cn';
 import {
-  Home, FolderOpen, BookOpen, Wrench, Briefcase, Settings,
-  Eye, FileText, Users, ClipboardList,
-  Lightbulb, Map, File,
-  LayoutDashboard, Calendar, Rocket, Code, Globe, GitBranch,
-  Presentation, Play, Send, CheckCircle,
-  RotateCcw, BarChart2,
-  ChevronsLeft, ChevronsRight,
+  House,
+  Wrench,
+  Briefcase,
+  Settings,
+  ChevronsLeft,
+  ChevronsRight,
+  Copy,
 } from 'lucide-react';
-import { NavLink, useMatch, useResolvedPath } from 'react-router-dom';
+import { NavLink, useMatch } from 'react-router-dom';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Button } from '@/components/ui/button';
-import { DarkCallout } from '@/components/primitives/dark-callout';
-import { BlockerFAB } from '@/components/primitives/blocker-fab';
 import { useSidebarStore } from './use-sidebar-store';
+import { TrayArrowIcon } from '@/shared/ui/icons/TrayArrowIcon';
+import { StackIcon } from '@/shared/ui/icons/StackIcon';
+import { useCurrentUser } from '@/features/auth/useCurrentUser';
 import { useOverlay } from '@/app/providers/overlay-store';
-import { useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { fetchRoomOverview } from '@/api/client';
-import type { ReactNode } from 'react';
-import { motion } from 'framer-motion';
+import { useHome } from '@/features/home/hooks/use-home';
+import { formatClock } from '@/shared/lib/clock';
+import goproImg from '../../../images/gopro.png';
 
-const TopCurve = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" className="absolute -top-[16px] right-0 pointer-events-none" style={{ fill: 'var(--canvas)' }}>
-    <path d="M 16,0 L 16,16 L 0,16 A 16,16 0 0,0 16,0 Z" />
-  </svg>
-);
-const BottomCurve = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" className="absolute -bottom-[16px] right-0 pointer-events-none" style={{ fill: 'var(--canvas)' }}>
-    <path d="M 16,16 L 16,0 L 0,0 A 16,16 0 0,1 16,16 Z" />
-  </svg>
-);
-
-// Helper to determine urgent callout
-function useUrgentCallout(roomId: string | undefined, inRoom: boolean) {
-  const { data: overview } = useQuery({
-    queryKey: ['room-overview', roomId],
-    queryFn: () => fetchRoomOverview(roomId!),
-    enabled: inRoom && !!roomId,
-    refetchInterval: 30000,
-    staleTime: 10000,
-  });
-
-  if (!overview) return null;
-
-  const { decisionTimer, clockStrip, kpis } = overview;
-  const tasksCount = parseInt(kpis.tasksOpen.value, 10) || 0;
-  const freezeUnderHour = !clockStrip.freezeCrossed && !/[1-9]\d*h/.test(clockStrip.freezeInText);
-
-  if (decisionTimer.decisionOpen) {
-    return {
-      title: 'Action required',
-      description: `Vote closes in ${decisionTimer.timeRemaining}`,
-      buttonLabel: 'Cast vote',
-    };
-  }
-
-  if (clockStrip.lastHour) {
-    return {
-      title: 'Submission approaching',
-      description: `Event ends in ${clockStrip.submitInText}. Verify links and checklist.`,
-      buttonLabel: 'Go to Submit',
-    };
-  }
-
-  if (freezeUnderHour && tasksCount > 0) {
-    return {
-      title: 'Freeze approaching',
-      description: `Feature freeze in ${clockStrip.freezeInText}. ${tasksCount} tasks open.`,
-      buttonLabel: 'Review tasks',
-    };
-  }
-
-  if (clockStrip.freezeCrossed && tasksCount > 0) {
-    return {
-      title: 'Freeze crossed',
-      description: `You have ${tasksCount} open tasks. Time to cut scope.`,
-      buttonLabel: 'Cut scope',
-    };
-  }
-
-  if (clockStrip.freezeCrossed && tasksCount === 0) {
-    return {
-      title: 'Freeze crossed',
-      description: 'Zero open tasks. Move to polish and submission.',
-      buttonLabel: 'Polish & Demo',
-    };
-  }
-
-  if (kpis.checkpointsPassed.value !== kpis.checkpointsPassed.total) {
-    return {
-      title: 'Checkpoints pending',
-      description: `${kpis.checkpointsPassed.value}/${kpis.checkpointsPassed.total} completed.`,
-      buttonLabel: 'View checkpoints',
-    };
-  }
-
-  if (tasksCount > 0) {
-    return {
-      title: 'Keep building',
-      description: `${tasksCount} open tasks in this phase.`,
-      buttonLabel: 'View board',
-    };
-  }
-
-  return {
-    title: 'On track',
-    description: 'All tasks and checkpoints are complete.',
-    buttonLabel: 'Review docs',
-  };
-}
-
-// ── Nav items ────────────────────────────────────────────────────
-
+// ── Nav configuration ──────────────────────────────────────────────
 interface NavItem {
   label: string;
-  icon: ReactNode;
+  icon: (props: { size: number; className?: string }) => React.ReactNode;
   path: string;
+  key: string;
+  badge?: number;
+  iconClassName?: string;
 }
 
-/** Absolute paths — navigate from anywhere in the app */
-const workspaceItems: NavItem[] = [
-  { label: 'Home',           icon: <Home className="size-5" />,       path: '/app/home' },
-  { label: 'My rooms',       icon: <FolderOpen className="size-5" />, path: '/app/rooms' },
-  { label: 'Playbooks',      icon: <BookOpen className="size-5" />,   path: '/app/playbooks' },
-  { label: 'Tool directory', icon: <Wrench className="size-5" />,     path: '/app/tools' },
-  { label: 'Portfolio',      icon: <Briefcase className="size-5" />,  path: '/app/portfolio' },
-  { label: 'Settings',       icon: <Settings className="size-5" />,   path: '/app/settings' },
-];
-
-interface RoomGroup {
-  title: string;
-  items: NavItem[];
-}
-
-/** Path segments — prefixed with /app/room/:roomId/ at render time */
-const roomGroups: RoomGroup[] = [
+const NAV_ITEMS: NavItem[] = [
   {
-    title: 'Set up',
-    items: [
-      { label: 'Overview',    icon: <Eye className="size-5" />,          path: 'overview' },
-      { label: 'Brief',       icon: <FileText className="size-5" />,     path: 'brief' },
-      { label: 'Team',        icon: <Users className="size-5" />,        path: 'team' },
-      { label: 'Prep',        icon: <ClipboardList className="size-5" />, path: 'prep' },
-      { label: 'Crowd Check', icon: <BarChart2 className="size-5" />,    path: 'crowd-check' },
-    ],
+    label: 'Home',
+    icon: ({ size, className }) => (
+      <House size={size} className={cn('icon-house', className)} strokeWidth={1.75} />
+    ),
+    path: '/app/home',
+    key: 'home',
   },
   {
-    title: 'Decide',
-    items: [
-      { label: 'Ideate', icon: <Lightbulb className="size-5" />, path: 'ideate' },
-      { label: 'Plan',   icon: <Map className="size-5" />,       path: 'plan' },
-      { label: 'Docs',   icon: <File className="size-5" />,      path: 'docs' },
-    ],
+    label: 'My rooms',
+    icon: ({ size, className }) => (
+      <StackIcon size={size} className={className} />
+    ),
+    path: '/app/rooms',
+    key: 'my-rooms',
   },
   {
-    title: 'Build',
-    items: [
-      { label: 'Board',    icon: <LayoutDashboard className="size-5" />, path: 'board' },
-      { label: 'Schedule', icon: <Calendar className="size-5" />,        path: 'schedule' },
-      { label: 'MVP',      icon: <Rocket className="size-5" />,          path: 'mvp' },
-      { label: 'Code',     icon: <Code className="size-5" />,            path: 'github' },
-      { label: 'APIs',     icon: <Globe className="size-5" />,           path: 'apis' },
-      { label: 'Diagrams', icon: <GitBranch className="size-5" />,       path: 'diagrams' },
-    ],
+    label: 'Playbooks',
+    icon: ({ size, className }) => (
+      <TrayArrowIcon size={size} className={className} />
+    ),
+    path: '/app/playbooks',
+    key: 'playbooks',
   },
   {
-    title: 'Ship',
-    items: [
-      { label: 'Pitch',     icon: <Presentation className="size-5" />, path: 'pitch' },
-      { label: 'Demo',      icon: <Play className="size-5" />,         path: 'demo' },
-      { label: 'Submit',    icon: <Send className="size-5" />,         path: 'submit' },
-      { label: 'Readiness', icon: <CheckCircle className="size-5" />,  path: 'readiness' },
-    ],
+    label: 'Tool directory',
+    icon: ({ size, className }) => (
+      <Wrench size={size} className={cn('icon-wrench', className)} strokeWidth={1.75} />
+    ),
+    path: '/app/tools',
+    key: 'tools',
   },
   {
-    title: 'After',
-    items: [
-      { label: 'Retro', icon: <RotateCcw className="size-5" />, path: 'retro' },
-    ],
+    label: 'Portfolio',
+    icon: ({ size, className }) => (
+      <Briefcase size={size} className={className} strokeWidth={1.75} />
+    ),
+    path: '/app/portfolio',
+    key: 'portfolio',
+  },
+  {
+    label: 'Settings',
+    icon: ({ size, className }) => (
+      <Settings size={size} className={cn('icon-settings', className)} strokeWidth={1.75} />
+    ),
+    path: '/app/settings',
+    key: 'settings',
   },
 ];
 
-// ── Shared Transition ──────────────────────────────────────────────
-const SIDEBAR_TRANSITION = "transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]";
+// ── Live clock ──────────────────────────────────────────────────────
+function useClock() {
+  const [time, setTime] = React.useState(() => formatTime());
 
-// ── SidebarItem ───────────────────────────────────────────────────
+  function formatTime() {
+    return formatClock(new Date());
+  }
 
-function SidebarItem({
+  React.useEffect(() => {
+    const id = setInterval(() => setTime(formatTime()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  return time;
+}
+
+// ── Nav row ─────────────────────────────────────────────────────────
+function NavRow({
   item,
   isCollapsed,
-  to,
-  index = 0,
-  setActiveTop,
 }: {
   item: NavItem;
   isCollapsed: boolean;
-  to: string;
-  index?: number;
-  setActiveTop: (top: number) => void;
 }) {
-  const ref = React.useRef<HTMLAnchorElement>(null);
-  const resolved = useResolvedPath(to);
-  const match = useMatch({ path: resolved.pathname, end: true });
+  const match = useMatch({ path: item.path, end: item.path === '/app/home' });
+  const isActive = !!match;
 
-  React.useEffect(() => {
-    if (match && ref.current) {
-      setActiveTop(ref.current.offsetTop);
-    }
-  }, [match, setActiveTop, isCollapsed]);
-
-  const link = (
+  const row = (
     <NavLink
-      ref={ref}
-      to={to}
-      className={({ isActive }) => cn(
-        "group relative flex items-center h-10 w-full outline-none overflow-visible rounded-pill",
-        isActive ? "text-sidebar-text font-semibold" : "text-sidebar-muted"
-      )}
+      to={item.path}
+      aria-current={isActive ? 'page' : undefined}
+      className={({ isActive: a }) =>
+        cn(
+          'nav-row group flex items-center h-8 rounded-[var(--r-control)] px-2.5 gap-2.5 w-full outline-none',
+          'transition-colors duration-[150ms] cursor-pointer text-[14px] leading-[20px] font-medium',
+          'focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2',
+          a
+            ? 'bg-active text-ink'
+            : 'bg-transparent text-ink hover:bg-hover active:scale-[0.99]',
+        )
+      }
+      style={({ isActive: a }) => ({
+        ['--nav-icon-bg' as string]: a ? 'var(--active)' : 'var(--shell)',
+      })}
+      data-testid={`nav-row-${item.key}`}
     >
-      {({ isActive }) => (
-        <>
-          {/* Active pill background */}
-          <div className={cn(
-            "absolute inset-y-0 left-0 z-0 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-            isActive ? "bg-lav-500 opacity-100" : "bg-white/5 opacity-0 group-hover:opacity-100",
-            isCollapsed ? "w-10 rounded-pill" : "w-full rounded-pill"
-          )} />
+      {/* Icon */}
+      <span className="shrink-0 flex items-center justify-center size-5" data-testid={`nav-icon-${item.key}`}>
+        {item.icon({ size: 20 })}
+      </span>
 
-          {/* Icon */}
-          <div className={cn(
-            "w-10 h-full flex items-center justify-center shrink-0 transition-colors duration-300 relative z-10",
-            isActive ? "text-[#070707]" : "text-sidebar-muted group-hover:text-sidebar-text",
-            !isActive && "group-focus-visible:ring-2 group-focus-visible:ring-lav-500 rounded-pill"
-          )}>
-            {item.icon}
-          </div>
-          
-          {/* Text */}
-          <div className="flex-1 overflow-hidden h-full flex items-center relative z-10">
-            <span 
-              className={cn(
-                "text-body whitespace-nowrap truncate pr-4 transition-all duration-200",
-                isActive ? "text-[#070707]" : "text-sidebar-text",
-                isCollapsed ? "opacity-0 -translate-x-2 pointer-events-none" : "opacity-100 translate-x-0"
-              )}
-              style={{ transitionDelay: isCollapsed ? '0ms' : `${Math.min(index * 15, 150)}ms` }}
-            >
-              {item.label}
-            </span>
-          </div>
-        </>
+      {/* Label */}
+      {!isCollapsed && (
+        <span className="flex-1 truncate" data-testid={`nav-label-${item.key}`}>
+          {item.label}
+        </span>
+      )}
+
+      {/* Badge */}
+      {!isCollapsed && item.badge != null && item.badge > 0 && (
+        <span className="ml-2 inline-flex items-center justify-center h-5 px-2 rounded-full bg-success-bg text-[12px] leading-[16px] font-semibold text-success-fg tabular-nums" data-testid={`nav-badge-${item.key}`}>
+          {item.badge}
+        </span>
       )}
     </NavLink>
   );
 
   if (isCollapsed) {
     return (
-      <Tooltip delayDuration={120}>
-        <TooltipTrigger asChild>{link}</TooltipTrigger>
-        <TooltipContent 
-          side="right" 
-          sideOffset={28}
-          className="rounded-[8px] bg-[#1c1c1e] text-white border border-white/10 shadow-lg px-3 py-1.5 text-sm animate-in fade-in slide-in-from-left-1 duration-150"
-          hideWhenDetached
-        >
+      <Tooltip delayDuration={100}>
+        <TooltipTrigger asChild>{row}</TooltipTrigger>
+        <TooltipContent side="right" sideOffset={12} className="rounded-[8px] text-[14px]">
           {item.label}
         </TooltipContent>
       </Tooltip>
     );
   }
-  return link;
+
+  return row;
 }
 
-// ── Section Divider / Header ─────────────────────────────────────
-
-function SectionDivider({ isCollapsed, label }: { isCollapsed: boolean; label: string }) {
+// ── Brand logo mark ─────────────────────────────────────────────────
+function LogoMark({ size = 18 }: { size?: number }) {
   return (
-    <div className="relative h-7 flex items-center justify-center my-1.5">
-      {/* Divider line for collapsed state */}
-      <div className={cn(
-        "absolute w-6 border-t border-white/10 transition-opacity duration-200",
-        isCollapsed ? "opacity-100 delay-100" : "opacity-0 pointer-events-none"
-      )} />
-      
-      {/* Label for expanded state */}
-      <div className={cn(
-        "absolute left-3 right-0 transition-opacity duration-200",
-        isCollapsed ? "opacity-0 pointer-events-none" : "opacity-100 delay-100"
-      )}>
-        <span className="text-caption text-sidebar-muted uppercase tracking-wider font-semibold whitespace-nowrap">
-          {label}
-        </span>
-      </div>
-    </div>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 18 18"
+      fill="none"
+      aria-hidden="true"
+      data-testid="brand-glyph"
+    >
+      <rect width="18" height="18" rx="4" fill="var(--ink)" />
+      <path
+        d="M5 4v10M13 4v10M5 9h8"
+        stroke="white"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 
-// ── Sidebar ─────────────────────────────────────────────────────
+// ── Sidebar ──────────────────────────────────────────────────────────
+export function AppSidebar() {
+  const { isCollapsed, toggleCollapsed } = useSidebarStore();
+  const { data: user } = useCurrentUser();
+  const { data: homeData } = useHome();
+  const myRoomsCount = homeData?.roomList?.length ?? 0;
+  const clock = useClock();
 
-import { AlertCircle } from 'lucide-react';
-import * as React from 'react';
+  const displayName = user?.name ?? user?.email ?? '';
 
-export function Sidebar() {
-  const { isCollapsed, toggleCollapsed, setContext } = useSidebarStore();
-  const blockerOverlay = useOverlay('blocker-dialog');
-  const [activeTop, setActiveTop] = React.useState<number | null>(null);
+  const [copyFeedback, setCopyFeedback] = React.useState(false);
 
-  // Derive room context from URL — no manual setActivePath needed
-  const roomMatch = useMatch('/app/room/:roomId/*');
-  const inRoom = !!roomMatch;
-  const effectiveRoomId = roomMatch?.params.roomId ?? '';
-
-  const urgentCallout = useUrgentCallout(effectiveRoomId, inRoom);
-
-  React.useEffect(() => {
-    setContext(inRoom ? 'room' : 'workspace');
-  }, [inRoom, setContext]);
+  function handleCopyEmail() {
+    if (user?.email) {
+      navigator.clipboard.writeText(user.email).catch(() => {});
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 1500);
+    }
+  }
 
   return (
     <aside
       className={cn(
-        'fixed left-2 top-2 bottom-2 z-40 rounded-panel bg-sidebar text-sidebar-text',
-        SIDEBAR_TRANSITION,
-        isCollapsed ? 'w-[64px]' : 'w-[220px]',
+        'flex flex-col bg-shell h-dvh shrink-0',
+        'transition-[width] duration-200',
+        'overflow-hidden',
+        isCollapsed ? 'px-[12px] pt-10 pb-8' : 'px-5 pt-10 pb-8'
       )}
+      style={{
+        width: isCollapsed ? 64 : 232,
+        transitionTimingFunction: 'var(--ease)',
+      }}
+      aria-label="Primary navigation"
+      data-testid="sidebar"
     >
-      {/* Outer wrapper to extend right edge for overflow clipping */}
-      <div className={cn(
-         "absolute inset-y-0 left-0 flex flex-col pointer-events-none",
-         SIDEBAR_TRANSITION,
-         isCollapsed ? "w-[84px]" : "w-[220px]"
-      )}>
-        {/* Logo */}
-        <div className="flex h-16 items-center px-2 shrink-0 pointer-events-auto">
-          <button 
-            onClick={toggleCollapsed}
-            className={cn(
-              "flex items-center h-[40px] overflow-hidden hover:bg-white/5 transition-colors cursor-pointer",
-              SIDEBAR_TRANSITION,
-              isCollapsed ? "w-[40px] rounded-[10px]" : "w-full rounded-[20px]"
-            )}
-            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            <div className="w-[40px] h-full flex items-center justify-center shrink-0">
-              <span className="text-xl font-bold text-sidebar-text">H</span>
-            </div>
-            <span className={cn(
-              "text-h3 font-bold text-sidebar-text whitespace-nowrap transition-all duration-200",
-              isCollapsed ? "opacity-0 -translate-x-2 pointer-events-none" : "opacity-100 translate-x-0"
-            )}>
-              ackathon OS
+      <div className="flex flex-col h-full" style={{ minWidth: isCollapsed ? 40 : 192 }}>
+
+        {/* 1. Brand row */}
+        <div className="flex h-7 items-center gap-2.5 px-2.5 mb-0">
+          <div className="shrink-0 flex items-center justify-center size-5">
+            <LogoMark size={20} />
+          </div>
+          {!isCollapsed && (
+            <span
+              className="text-[16px] leading-[24px] font-semibold text-ink truncate tracking-[-0.01em]"
+              style={{ fontWeight: 600 }}
+              data-testid="brand-text"
+            >
+              Hackathon OS
             </span>
-          </button>
+          )}
         </div>
 
-        {/* Nav */}
-        <nav 
+        {/* 2. Collapse row */}
+        <button
+          onClick={toggleCollapsed}
+          aria-expanded={!isCollapsed}
+          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           className={cn(
-            "flex-[1_1_auto] min-h-0 overflow-y-auto scrollbar-none [&::-webkit-scrollbar]:hidden flex flex-col pointer-events-auto",
-            isCollapsed ? "pl-2 pr-2" : "px-2"
+            'flex items-center gap-2.5 h-7 rounded-[8px] px-2.5 mb-4 mt-0',
+            'text-ink-2 text-[14px] cursor-pointer',
+            'hover:bg-hover transition-colors duration-[150ms]',
+            'focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2',
+            isCollapsed && 'justify-center px-0',
           )}
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
-          {/* We need a full height wrapper to catch mouse wheel over empty space */}
-          <div className="flex flex-col min-h-full w-full relative pt-5 gap-1 pb-4">
-            
-            {/* Workspace section */}
-            <div className="flex flex-col">
-              {!isCollapsed && (
-                <div className="h-7 flex items-center px-2 mb-1">
-                  <span className="text-caption text-sidebar-muted uppercase tracking-wider font-semibold whitespace-nowrap">
-                    Workspace
-                  </span>
-                </div>
-              )}
-              {workspaceItems.map((item, i) => (
-                <SidebarItem key={item.path} item={item} isCollapsed={isCollapsed} to={item.path} index={i} setActiveTop={setActiveTop} />
-              ))}
-            </div>
-
-            {/* Room section */}
-            {inRoom && effectiveRoomId && (
-              <div className="flex flex-col mt-1">
-                <SectionDivider isCollapsed={isCollapsed} label="This room" />
-                
-                {roomGroups.map((group, groupIdx) => (
-                  <div key={group.title} className="flex flex-col">
-                    {!isCollapsed && (
-                      <div className="h-7 flex items-center px-2">
-                        <span className="text-[10px] text-sidebar-muted/70 uppercase tracking-wider font-semibold whitespace-nowrap">
-                          {group.title}
-                        </span>
-                      </div>
-                    )}
-                    {group.items.map((item, itemIdx) => (
-                      <SidebarItem
-                        key={item.path}
-                        item={item}
-                        to={`/app/room/${effectiveRoomId}/${item.path}`}
-                        isCollapsed={isCollapsed}
-                        index={groupIdx * 3 + itemIdx}
-                        setActiveTop={setActiveTop}
-                      />
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </nav>
-
-        {/* Bottom Slot */}
-        <div className={cn(
-          "flex-[0_0_auto] m-4 flex justify-center pointer-events-auto border-t border-white/5 pt-4",
-          isCollapsed ? "mx-2 border-t-0 pt-0" : "m-4"
-        )}>
-          {!inRoom ? (
-            <div className={cn(
-              "overflow-hidden bg-[#AEE6FF]",
-              SIDEBAR_TRANSITION,
-              isCollapsed ? "w-[40px] h-[40px] rounded-[10px]" : "w-full h-auto rounded-[20px]"
-            )}>
-              {isCollapsed ? (
-                <Tooltip delayDuration={100}>
-                  <TooltipTrigger asChild>
-                    <button className="w-[40px] h-[40px] flex items-center justify-center text-ink hover:bg-black/10 transition-colors">
-                      <Rocket className="size-5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="rounded-[10px] bg-sidebar text-sidebar-text border border-white/10">Go Pro</TooltipContent>
-                </Tooltip>
-              ) : (
-                <div className="p-4 text-ink flex flex-col justify-center">
-                  <p className="text-body-strong mb-1 whitespace-nowrap">Go Pro</p>
-                  <p className="text-caption text-ink/70 mb-4 line-clamp-2 leading-relaxed">
-                    Unlock AI planning and auto-scheduling.
-                  </p>
-                  <Button variant="outline" size="sm" className="w-full border-ink/20 text-ink bg-transparent hover:bg-black/5 rounded-pill">
-                    Get Pro
-                  </Button>
-                </div>
-              )}
+          {isCollapsed ? (
+            <div className="shrink-0 flex items-center justify-center size-5">
+              <ChevronsRight size={16} />
             </div>
           ) : (
-            <div className={cn(
-              "overflow-hidden",
-              SIDEBAR_TRANSITION,
-              isCollapsed ? "w-[40px] h-[40px]" : "w-full h-auto"
-            )}>
-              {isCollapsed ? (
-                <Tooltip delayDuration={100}>
-                  <TooltipTrigger asChild>
-                    <button 
-                      onClick={blockerOverlay.open}
-                      className="w-[40px] h-[40px] flex items-center justify-center text-white bg-callout hover:bg-callout/90 transition-colors rounded-[10px]"
-                    >
-                      <AlertCircle className="size-5 text-pastel-peach" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="rounded-[10px] bg-sidebar text-sidebar-text border border-white/10">Report Blocker</TooltipContent>
-                </Tooltip>
-              ) : urgentCallout ? (
-                <DarkCallout
-                  title={urgentCallout.title}
-                  description={urgentCallout.description}
-                  buttonLabel={urgentCallout.buttonLabel}
-                />
-              ) : (
-                <div className="flex justify-center w-full">
-                  <BlockerFAB onClick={blockerOverlay.open} />
-                </div>
-              )}
-            </div>
+            <>
+              <div className="shrink-0 flex items-center justify-center size-5">
+                <ChevronsLeft size={16} data-testid="collapse-icon" />
+              </div>
+              <span className="text-[14px] font-normal leading-[20px]" data-testid="collapse-text">Collapse</span>
+            </>
           )}
-        </div>
+        </button>
+
+        {/* 3. Primary nav */}
+        <nav className="flex flex-col gap-1" aria-label="Primary">
+          {NAV_ITEMS.map((item) => (
+            <NavRow key={item.path} item={{ ...item, badge: item.key === 'my-rooms' ? myRoomsCount : item.badge }} isCollapsed={isCollapsed} />
+          ))}
+        </nav>
+
+        {/* 4. Promo card */}
+        {!isCollapsed && (
+          <a
+            href="/app/settings/billing"
+            className={cn(
+              'block rounded-[var(--r-card)] border border-border bg-card p-1 mt-9',
+              'hover:border-border-strong transition-colors duration-[150ms]',
+              'focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2',
+              '[@media(max-height:680px)]:hidden'
+            )}
+            aria-label="Go Pro — unlock AI planning and auto-scheduling"
+            data-testid="promo"
+          >
+            {/* Art */}
+            <div className="rounded-[10px] overflow-hidden" style={{ aspectRatio: '16/9' }}>
+              <img src={goproImg} alt="Go Pro" className="w-full h-full object-cover" />
+            </div>
+            <div className="px-1 pt-2 pb-2 flex flex-col">
+              <p className="text-[14px] leading-[20px] font-medium text-ink" data-testid="promo-title">Go Pro</p>
+              <p className="text-[11px] leading-[14px] font-normal text-ink-2" data-testid="promo-caption" style={{ textWrap: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                AI planning and auto-scheduling.
+              </p>
+            </div>
+          </a>
+        )}
+
+        {/* Spacer to push footer to bottom */}
+        <div className="flex-1" />
+
+        {/* 5. Footer: email + clock */}
+        {!isCollapsed && (
+          <div className="flex flex-col gap-0.5">
+            {displayName && (
+              <button
+                onClick={handleCopyEmail}
+                className="flex items-center h-8 gap-2.5 px-2.5 hover:text-ink-2 transition-colors cursor-pointer group focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2 rounded"
+                aria-label="Copy email"
+                title={copyFeedback ? 'Copied!' : 'Copy email'}
+              >
+                <div className="shrink-0 flex items-center justify-center size-5" data-testid="footer-copy-box">
+                  <Copy size={18} strokeWidth={1.75} className="opacity-60 group-hover:opacity-100" />
+                </div>
+                <span className="text-[14px] font-normal leading-[20px] text-ink truncate" data-testid="footer-email">{displayName}</span>
+              </button>
+            )}
+            <p
+              className="text-[13px] text-ink-3 tabular-nums leading-[16px] ml-10 mt-4"
+              aria-live="polite"
+              aria-atomic="true"
+              data-testid="footer-clock"
+            >
+              {clock}
+            </p>
+          </div>
+        )}
       </div>
     </aside>
   );

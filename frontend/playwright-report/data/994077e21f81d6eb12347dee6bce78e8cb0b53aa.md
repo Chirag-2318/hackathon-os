@@ -14,25 +14,86 @@
 ```
 Error: expect(locator).toBeVisible() failed
 
-Locator: getByText('PRD & MVP', { exact: true })
+Locator: getByText('Validation Passed')
 Expected: visible
 Timeout: 5000ms
 Error: element(s) not found
 
 Call log:
-  - Expect "toBeVisible" getByText('PRD & MVP', { exact: true }) with timeout 5000ms
-  - waiting for getByText('PRD & MVP', { exact: true })
+  - Expect "toBeVisible" getByText('Validation Passed') with timeout 5000ms
+  - waiting for getByText('Validation Passed')
 
 ```
 
 ```yaml
-- text: "[plugin:vite:import-analysis] Failed to resolve import \"@/components/primitives/button\" from \"src/features/docs/docs-page.tsx\". Does the file exist? C:/Users/Admin/.antigravity/hackathon-os/frontend/src/features/docs/docs-page.tsx:5:23 3 | import { useParams, Link } from \"react-router-dom\"; 4 | import { FramedScreen } from \"@/components/primitives/framed-screen\"; 5 | import { Button } from \"@/components/primitives/button\"; | ^ 6 | import { fetchDocsVault } from \"@/api/client\"; 7 | import { DocsFileTree } from \"./components/docs-file-tree\"; at TransformPluginContext._formatLog (file:///C:/Users/Admin/.antigravity/hackathon-os/frontend/node_modules/vite/dist/node/chunks/node.js:8393:39) at TransformPluginContext.error (file:///C:/Users/Admin/.antigravity/hackathon-os/frontend/node_modules/vite/dist/node/chunks/node.js:8390:14) at normalizeUrl (file:///C:/Users/Admin/.antigravity/hackathon-os/frontend/node_modules/vite/dist/node/chunks/node.js:26058:18) at async file:///C:/Users/Admin/.antigravity/hackathon-os/frontend/node_modules/vite/dist/node/chunks/node.js:26128:30 at async Promise.all (index 4) at async TransformPluginContext.transform (file:///C:/Users/Admin/.antigravity/hackathon-os/frontend/node_modules/vite/dist/node/chunks/node.js:26094:4) at async EnvironmentPluginContainer.transform (file:///C:/Users/Admin/.antigravity/hackathon-os/frontend/node_modules/vite/dist/node/chunks/node.js:8172:14) at async loadAndTransform (file:///C:/Users/Admin/.antigravity/hackathon-os/frontend/node_modules/vite/dist/node/chunks/node.js:19634:26) Click outside, press Esc key, or fix the code to dismiss. You can also disable this overlay by setting"
-- code: server.hmr.overlay
-- text: to
-- code: "false"
-- text: in
-- code: vite.config.ts
-- text: .
+- complementary "Primary navigation":
+  - text: Hackathon OS
+  - button "Collapse sidebar" [expanded]: Collapse
+  - navigation "Primary":
+    - link "Home":
+      - /url: /app/home
+    - link "My rooms 2":
+      - /url: /app/rooms
+    - link "Playbooks":
+      - /url: /app/playbooks
+    - link "Tool directory":
+      - /url: /app/tools
+    - link "Portfolio":
+      - /url: /app/portfolio
+    - link "Settings":
+      - /url: /app/settings
+  - link "Go Pro — unlock AI planning and auto-scheduling":
+    - /url: /app/settings/billing
+    - paragraph: Go Pro
+    - paragraph: AI planning and auto-scheduling.
+  - button "Copy email": aarav@example.com
+  - paragraph: 09:39:31 PM IST
+- main:
+  - navigation "Breadcrumb": Workspace Overview
+  - button "Search tasks, docs, rules (Ctrl K)": Search tasks, docs, rules Ctrl K
+  - button "Notifications": "3"
+  - button "User menu": AM
+  - heading "Command palette" [level=2]
+  - paragraph: Search tasks, docs, rules, or run actions
+  - text: "1"
+  - paragraph: PRD & MVP
+  - text: "2"
+  - paragraph: Tech stack and architecture
+  - text: "3"
+  - paragraph: Phases
+  - text: "4"
+  - paragraph: Tasks
+  - text: "5"
+  - paragraph: Demo & Q&A
+  - 'heading "Step 1: PRD & MVP" [level=2]'
+  - text: "1"
+  - heading "Copy this prompt" [level=3]
+  - text: "~0.2k chars Open in:"
+  - link "ChatGPT":
+    - /url: https://chatgpt.com
+  - link "Claude":
+    - /url: https://claude.ai
+  - code: "You are an expert product manager. I am building a project called 'Study Buddy Tinder'. Create a comprehensive PRD and an MVP specification. Structure the response strictly in Markdown format, with `# PRD` and `# MVP` as the main headers."
+  - button "Copy"
+  - text: "2"
+  - heading "Paste the answer" [level=3]
+  - textbox "Paste the generated response here...": Here is the PRD and MVP.
+  - text: "3"
+  - heading "Check it" [level=3]
+  - button "Validate"
+  - heading "Context pack" [level=3]
+  - paragraph: fields sent
+  - text: Idea
+  - checkbox [checked]
+  - text: Rubric
+  - checkbox [checked]
+  - text: Skills
+  - checkbox [checked]
+  - img
+  - paragraph: This prompt contains your idea text. It goes to the AI service you paste it into.
+  - heading "Skip copy-paste with Pro" [level=3]
+  - paragraph: Connect your API keys or upgrade to Managed to let the app generate these files automatically.
+  - button "Upgrade"
 ```
 
 # Test source
@@ -52,8 +113,7 @@ Call log:
   12 | 
   13 |   test('should render the Plan page and navigate through prompt bridge', async ({ page }) => {
   14 |     // Verify Stepper is present
-> 15 |     await expect(page.getByText('PRD & MVP', { exact: true })).toBeVisible();
-     |                                                                ^ Error: expect(locator).toBeVisible() failed
+  15 |     await expect(page.getByText('PRD & MVP', { exact: true })).toBeVisible();
   16 |     await expect(page.getByText('Tech stack and architecture')).toBeVisible();
   17 | 
   18 |     // Verify right rail Context pack
@@ -65,7 +125,8 @@ Call log:
   24 |     
   25 |     // Validate Step 1 (Pass)
   26 |     await page.getByRole('button', { name: 'Validate' }).click();
-  27 |     await expect(page.getByText('Validation Passed')).toBeVisible();
+> 27 |     await expect(page.getByText('Validation Passed')).toBeVisible();
+     |                                                       ^ Error: expect(locator).toBeVisible() failed
   28 | 
   29 |     // Should move to Step 2 (Tech stack)
   30 |     await expect(page.getByRole('heading', { name: 'Step 2: Tech stack and architecture' })).toBeVisible();

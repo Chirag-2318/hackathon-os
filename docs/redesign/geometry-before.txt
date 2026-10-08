@@ -1,0 +1,67 @@
+Running 3 tests using 1 worker
+
+  x  1 e2e\shell-geometry.spec.ts:24:1 › sidebar absolute geometry (4.0s)
+  x  2 e2e\shell-geometry.spec.ts:50:1 › sidebar typography (3.7s)
+  x  3 e2e\shell-geometry.spec.ts:66:1 › alignment relationships (3.9s)
+
+
+  1) e2e\shell-geometry.spec.ts:24:1 › sidebar absolute geometry ───────────────────────────────────
+
+    Error: brand glyph x got 20, want 30
+
+    expect(received).toBeLessThanOrEqual(expected)
+
+    Expected: <= 1.5
+    Received:    10
+
+      13 | };
+      14 | const near = (a: number, b: number, tol = 2, label = '') =>
+    > 15 |   expect(Math.abs(a - b), `${label} got ${a}, want ${b}`).toBeLessThanOrEqual(tol);
+         |                                                           ^
+      16 | const style = (page: Page, id: string) =>
+      17 |   page.getByTestId(id).evaluate((el) => {
+      18 |     const s = getComputedStyle(el);
+        at near (C:\Users\Admin\.antigravity\hackathon-os\frontend\e2e\shell-geometry.spec.ts:15:59)
+        at C:\Users\Admin\.antigravity\hackathon-os\frontend\e2e\shell-geometry.spec.ts:28:3
+
+  2) e2e\shell-geometry.spec.ts:50:1 › sidebar typography ──────────────────────────────────────────
+
+    Error: brand-text size
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "16px"
+    Received: "12.25px"
+
+      58 |   for (const [id, [size, weight]] of Object.entries(want)) {
+      59 |     const s = await style(page, id);
+    > 60 |     expect(s.size, `${id} size`).toBe(size);
+         |                                  ^
+      61 |     expect(s.weight, `${id} weight`).toBe(weight);
+      62 |     expect(s.family, `${id} font`).toContain('DM Sans');
+      63 |   }
+        at C:\Users\Admin\.antigravity\hackathon-os\frontend\e2e\shell-geometry.spec.ts:60:34
+
+  3) e2e\shell-geometry.spec.ts:66:1 › alignment relationships ─────────────────────────────────────
+
+    Error: glyph vs nav icon center got 29, want 39.25
+
+    expect(received).toBeLessThanOrEqual(expected)
+
+    Expected: <= 1
+    Received:    10.25
+
+      13 | };
+      14 | const near = (a: number, b: number, tol = 2, label = '') =>
+    > 15 |   expect(Math.abs(a - b), `${label} got ${a}, want ${b}`).toBeLessThanOrEqual(tol);
+         |                                                           ^
+      16 | const style = (page: Page, id: string) =>
+      17 |   page.getByTestId(id).evaluate((el) => {
+      18 |     const s = getComputedStyle(el);
+        at near (C:\Users\Admin\.antigravity\hackathon-os\frontend\e2e\shell-geometry.spec.ts:15:59)
+        at C:\Users\Admin\.antigravity\hackathon-os\frontend\e2e\shell-geometry.spec.ts:69:3
+
+  3 failed
+    e2e\shell-geometry.spec.ts:24:1 › sidebar absolute geometry ────────────────────────────────────
+    e2e\shell-geometry.spec.ts:50:1 › sidebar typography ───────────────────────────────────────────
+    e2e\shell-geometry.spec.ts:66:1 › alignment relationships ──────────────────────────────────────

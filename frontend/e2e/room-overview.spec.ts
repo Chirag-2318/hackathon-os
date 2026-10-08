@@ -12,22 +12,21 @@ test.describe('Room Overview Page (S08)', () => {
     await expect(page.getByText('Freeze in 3h 20m')).toBeVisible();
 
     // KPI Tiles
-    await expect(page.getByText('Time left')).toBeVisible();
-    await expect(page.getByText('09:05')).toBeVisible();
+    await expect(page.getByText('Submit in 9h 05m')).toBeVisible();
     
-    await expect(page.getByText('Checkpoints passed')).toBeVisible();
-    await expect(page.getByText('3/7')).toBeVisible();
+    await expect(page.getByText('Checkpoints').first()).toBeVisible();
+    await expect(page.getByText('/ 7')).toBeVisible();
 
     await expect(page.getByText('Tasks open')).toBeVisible();
-    await expect(page.getByText('18')).toBeVisible();
+    await expect(page.getByText('18').first()).toBeVisible();
 
     // Dark Callout
-    await expect(page.getByText('2 tasks are blocked.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Assign owners' })).toBeVisible();
+    await expect(page.getByText('2 tasks are blocked')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'View blocked tasks' })).toBeVisible();
   });
 
   test('renders charts', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Progress vs. Plan' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Progress vs plan' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Team Activity' })).toBeVisible();
   });
 
@@ -39,15 +38,12 @@ test.describe('Room Overview Page (S08)', () => {
     await expect(page.getByText('Build auth API')).toBeVisible();
 
     // Team members list
-    await expect(page.getByRole('heading', { name: 'Team' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Team', exact: true })).toBeVisible();
     await expect(page.getByText('Aarav Mehta')).toBeVisible();
     await expect(page.getByText('Leader')).toBeVisible();
   });
 
   test('right rail shows countdown and checkpoints', async ({ page }) => {
-    // Check right rail HeroPanel countdown
-    await expect(page.getByText('until submission')).toBeVisible();
-
     // Check week strip
     await expect(page.getByRole('heading', { name: 'Event Days' })).toBeVisible();
     

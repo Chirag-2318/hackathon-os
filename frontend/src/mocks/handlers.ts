@@ -28,6 +28,21 @@ import { mentorHandlers } from '@/features/mentor/api/mocks/handlers';
 import { speedModeHandlers } from '@/features/speed-mode/api/mocks/handlers';
 
 export const handlers = [
+  // ── Auth ───────────────────────────────────────────────────────
+  http.get('/api/v1/me', async () => {
+    await delay(300);
+    return HttpResponse.json({
+      id: 1,
+      displayName: 'Aarav Mehta',
+      email: 'aarav@example.com',
+      avatarUrl: ''
+    });
+  }),
+  http.post('/api/v1/logout', async () => {
+    await delay(300);
+    return HttpResponse.json(authFailureFixture);
+  }),
+
   // ── Phase 2a: Home & Room Overview ────────────────────────────
   http.get('/api/v1/home', async () => {
     await delay(400);

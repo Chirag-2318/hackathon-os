@@ -27,11 +27,11 @@ import { useState, type ReactNode } from 'react';
 
 /** Layout route for non-room app pages (like Home) */
 function HomeShellLayout() {
-  const [rightRail, setRightRail] = useState<ReactNode>(null);
+  // HomePage owns its own 2-column grid + right rail — no outlet context needed
   return (
-    <ResponsiveShell showPhaseTrack={false} pageName="Home" rightRail={rightRail}>
+    <ResponsiveShell showPhaseTrack={false} pageName="Home">
       <GlobalOverlays />
-      <Outlet context={{ setRightRail }} />
+      <Outlet />
     </ResponsiveShell>
   );
 }

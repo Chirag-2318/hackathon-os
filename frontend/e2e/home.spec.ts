@@ -7,8 +7,8 @@ test.describe('Home Page (S07)', () => {
   });
 
   test('renders greeting and date chip', async ({ page }) => {
-    await expect(page.getByText('Good morning,')).toBeVisible();
-    await expect(page.getByText('Aarav Mehta')).toBeVisible();
+    await expect(page.getByText('Good morning,').first()).toBeVisible();
+    await expect(page.getByText('Aarav Mehta').first()).toBeVisible();
   });
 
   test('shows urgent room feature cards', async ({ page }) => {
