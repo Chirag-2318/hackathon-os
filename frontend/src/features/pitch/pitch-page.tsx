@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { fetchPitchDeck, fetchRehearse, fetchQa } from '@/api/client';
 import type { PitchDeckResponse, RehearseResponse, QaResponse } from '@/api/client';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -12,7 +12,7 @@ import { SlideRail } from './components/slide-rail';
 import { CriteriaCoverageMatrix } from './components/criteria-coverage-matrix';
 import { SlideLintList } from './components/slide-lint-list';
 import { cn } from '@/lib/utils';
-import { Clock, Code2, HelpCircle } from 'lucide-react';
+import { Code2, HelpCircle } from 'lucide-react';
 import { useDraftStore } from '@/app/layout/use-draft-store';
 
 const RUBRIC = [
@@ -32,6 +32,9 @@ function formatTime(seconds: number): string {
 
 export function PitchPage() {
   const { roomId } = useParams<{ roomId: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const [deck, setDeck] = useState<PitchDeckResponse | null>(null);
   const [rehearse, setRehearse] = useState<RehearseResponse | null>(null);
   const [qa, setQa] = useState<QaResponse | null>(null);
@@ -42,6 +45,24 @@ export function PitchPage() {
   const setActiveTab = useDraftStore((s) => s.setPitchTab);
   
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!roomId) return;
+    if (location.pathname.endsWith('/rehearse')) {
+      setActiveTab(roomId, 'rehearse');
+    } else if (location.pathname.endsWith('/qa')) {
+      setActiveTab(roomId, 'qa');
+    } else if (location.pathname.endsWith('/deck')) {
+      setActiveTab(roomId, 'deck');
+    }
+  }, [location.pathname, roomId, setActiveTab]);
+
+  const handleTabChange = (val: string) => {
+    if (roomId) {
+      setActiveTab(roomId, val);
+      navigate(`/app/room/${roomId}/pitch/${val}`);
+    }
+  };
 
   useEffect(() => {
     if (!roomId) return;
@@ -96,7 +117,7 @@ export function PitchPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(roomId || '', v)} className="flex-1 flex flex-col">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="flex-1 flex flex-col">
         <div className="px-6 pt-4 shrink-0">
           <h1 className="text-xl font-semibold mb-3">Pitch Studio</h1>
           <TabsList className="bg-slate-100 dark:bg-slate-800/50">

@@ -104,6 +104,8 @@ import { BillingSection } from '@/features/settings/sections/billing-section';
 import { NotificationsPage } from '@/features/notifications/notifications-page';
 import { MentorPage } from '@/features/mentor/mentor-page';
 import { SpeedModePage } from '@/features/speed-mode/speed-mode-page';
+import { MyRoomsPage } from '@/features/room/my-rooms-page';
+import { DevIconsPreviewPage } from '@/components/icons/dev-icons-preview-page';
 import {
   NotFoundPage,
   ForbiddenPage,
@@ -158,7 +160,7 @@ const router = createBrowserRouter([
       { path: 'home', element: <HomePage /> },
       { path: 'situation', element: <SituationPickerPage /> },
       { path: 'create-room', element: <CreateRoomWizard /> },
-      { path: 'rooms', element: <PlaceholderPage title="My rooms" /> },
+      { path: 'rooms', element: <MyRoomsPage /> },
       { path: 'playbooks', element: <PlaybookBrowsePage /> },
       { path: 'playbooks/:slug', element: <PlaybookDetailPage /> },
       { path: 'tools', element: <ToolDirectoryPage /> },
@@ -205,10 +207,15 @@ const router = createBrowserRouter([
       { path: 'apis', element: <ApiPage /> },
       { path: 'diagrams', element: <DiagramPage /> },
       { path: 'pitch', element: <PitchPage /> },
+      { path: 'pitch/deck', element: <PitchPage /> },
+      { path: 'pitch/rehearse', element: <PitchPage /> },
+      { path: 'pitch/qa', element: <PitchPage /> },
       { path: 'demo', element: <DemoPage /> },
       { path: 'submit', element: <SubmissionPage /> },
+      { path: 'submission', element: <SubmissionPage /> },
       { path: 'readiness', element: <ReadinessPage /> },
       { path: 'retro', element: <RetroPage /> },
+      { path: 'speed-mode', element: <SpeedModePage /> },
       // S29 per-room notifications
       { path: 'notifications', element: <NotificationsPage /> },
     ],
@@ -227,6 +234,8 @@ const router = createBrowserRouter([
       { path: ':roomId', element: <SpeedModePage /> },
     ],
   },
+  // Dev-only preview route for icons
+  { path: '/dev/icons', element: <DevIconsPreviewPage /> },
   // S32 System pages
   { path: '/403', element: <ForbiddenPage /> },
   { path: '/500', element: <ServerErrorPage /> },

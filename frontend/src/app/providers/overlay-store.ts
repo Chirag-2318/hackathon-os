@@ -15,7 +15,9 @@ export type OverlayName =
   | 'task-drawer'
   | 'blocker-dialog'
   | 'scope-guard'
-  | 'invite-dialog';
+  | 'invite-dialog'
+  | 'create-room-dialog'
+  | 'join-code-dialog';
 
 interface OverlayState {
   openOverlays: Set<OverlayName>;

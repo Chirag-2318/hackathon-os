@@ -16,6 +16,7 @@ import { CountBadge } from '@/components/primitives/count-badge';
 import { BlockerFAB } from '@/components/primitives/blocker-fab';
 import { useOverlay } from '@/app/providers/overlay-store';
 import { useSidebarStore } from './use-sidebar-store';
+import { AppSidebar } from './sidebar';
 import { useState, type ReactNode } from 'react';
 
 // ── Mobile Top Bar ──────────────────────────────────────────────
@@ -148,13 +149,8 @@ export function MobileShell({ children, inRoom = false, rightRail }: MobileShell
 
       {/* Sidebar as full-height sheet (opened from "More") */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-        <SheetContent side="left" className="w-[300px] bg-sidebar text-sidebar-text p-0">
-          <div className="p-6">
-            <h2 className="text-h2 text-sidebar-text mb-4">Menu</h2>
-            <p className="text-body text-sidebar-muted">
-              Full sidebar navigation content arrives when connected to routing.
-            </p>
-          </div>
+        <SheetContent side="left" className="w-[240px] bg-shell p-0 overflow-y-auto">
+          <AppSidebar />
         </SheetContent>
       </Sheet>
     </div>

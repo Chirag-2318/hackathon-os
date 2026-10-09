@@ -1,0 +1,592 @@
+/* ────────────────────────────────────────────────────────
+   Icon Hover Animation System
+   Timing: 300 to 450ms, cubic-bezier(0.22, 1, 0.36, 1)
+   Transforms and stroke-dashoffset only.
+   Reverses smoothly on mouse leave.
+   Disabled under prefers-reduced-motion.
+   ──────────────────────────────────────────────────────── */
+
+:root {
+  --icon-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --icon-dur: 350ms;
+}
+
+/* Base icon styling */
+.nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  vertical-align: middle;
+  overflow: visible;
+}
+
+.nav-icon * {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform var(--icon-dur) var(--icon-ease),
+              stroke-dashoffset var(--icon-dur) var(--icon-ease),
+              opacity var(--icon-dur) var(--icon-ease);
+}
+
+/* 1. Home: roof lifts 1.5px while the door scales up slightly */
+.nav-icon-home .icon-home-roof {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-home .icon-home-door {
+  transform-origin: bottom center;
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible, .btn-icon:hover) .nav-icon-home .icon-home-roof {
+  transform: translateY(-1.5px);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible, .btn-icon:hover) .nav-icon-home .icon-home-door {
+  transform: scaleY(1.18);
+}
+
+/* 2. My rooms: (existing) squares spread outward */
+.nav-icon-myrooms .sq-back {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-myrooms .sq-front {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-myrooms .stack-icon-group {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-myrooms .stack-icon-group {
+  transform: scale(1.08);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-myrooms .sq-back {
+  transform: translate(1.5px, -1.5px);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-myrooms .sq-front {
+  transform: translate(-1.5px, 1.5px);
+}
+
+/* 3. Playbooks: download arrow slides down 3px and returns, tray stays */
+.nav-icon-playbooks .icon-arrow {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-playbooks .icon-arrow {
+  transform: translateY(3px);
+}
+
+/* 4. Tool directory: wrench rotates */
+.nav-icon-tooldirectory .icon-wrench {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-tooldirectory .icon-wrench {
+  transform: rotate(-18deg);
+}
+
+/* 5. Portfolio: briefcase handle pops up 2px, lid shifts up 1px */
+.nav-icon-portfolio .icon-handle {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-portfolio .icon-lid {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-portfolio .icon-handle {
+  transform: translateY(-2px);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-portfolio .icon-lid {
+  transform: translateY(-1px);
+}
+
+/* 6. Settings: gear rotates */
+.nav-icon-settings .icon-gear {
+  transition: transform 450ms var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-settings .icon-gear {
+  transform: rotate(45deg);
+}
+
+/* 7. Collapse chevrons: slide 2px in collapse direction */
+.nav-icon-collapse-left .icon-chevron {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, button:hover) .nav-icon-collapse-left .icon-chevron {
+  transform: translateX(-2px);
+}
+.nav-icon-collapse-right .icon-chevron {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, button:hover) .nav-icon-collapse-right .icon-chevron {
+  transform: translateX(2px);
+}
+
+/* 8. All rooms back arrow: slides left 3px */
+.nav-icon-back .icon-arrow-line {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, button:hover) .nav-icon-back .icon-arrow-line {
+  transform: translateX(-3px);
+}
+
+/* 9. Overview: four tiles swap scale (top-left & bottom-right shrink to 0.8, others grow to 1.1) */
+.nav-icon-overview .tile-tl,
+.nav-icon-overview .tile-br {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-overview .tile-tr,
+.nav-icon-overview .tile-bl {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-overview .tile-tl,
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-overview .tile-br {
+  transform: scale(0.8);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-overview .tile-tr,
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-overview .tile-bl {
+  transform: scale(1.14);
+}
+
+/* 10. Team: the two avatars slide apart 1.5px and the third pops in */
+.nav-icon-team .avatar-left {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-team .avatar-right {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-team .avatar-center {
+  transition: transform var(--icon-dur) var(--icon-ease), opacity var(--icon-dur) var(--icon-ease);
+  opacity: 0.4;
+  transform: scale(0.85);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-team .avatar-left {
+  transform: translateX(-1.5px);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-team .avatar-right {
+  transform: translateX(1.5px);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-team .avatar-center {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* 11. Speed mode: bolt scales 1.12, skews 6deg and glow ring fades in */
+.nav-icon-speedmode .bolt {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-speedmode .glow-ring {
+  opacity: 0;
+  transition: opacity var(--icon-dur) var(--icon-ease), transform var(--icon-dur) var(--icon-ease);
+  transform: scale(0.8);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-speedmode .bolt {
+  transform: scale(1.12) skewX(6deg);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-speedmode .glow-ring {
+  opacity: 1;
+  transform: scale(1.05);
+}
+
+/* 12. Prep: clipboard check mark redraws via stroke-dashoffset */
+.nav-icon-prep .icon-check {
+  stroke-dasharray: 20;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 400ms var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-prep .icon-check {
+  stroke-dashoffset: 20;
+  animation: checkRedraw 400ms var(--icon-ease) forwards;
+}
+@keyframes checkRedraw {
+  0% { stroke-dashoffset: 20; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* 13. Brief: text lines extend one after another (50ms stagger) */
+.nav-icon-brief .line-1 {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-brief .line-2 {
+  transition: transform var(--icon-dur) var(--icon-ease) 50ms;
+}
+.nav-icon-brief .line-3 {
+  transition: transform var(--icon-dur) var(--icon-ease) 100ms;
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-brief .line-1 {
+  transform: scaleX(1.15);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-brief .line-2 {
+  transform: scaleX(1.22);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-brief .line-3 {
+  transform: scaleX(1.18);
+}
+
+/* 14. Ideate: bulb bobs up 1.5px and ray strokes fade in */
+.nav-icon-ideate .bulb {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-ideate .rays {
+  opacity: 0.3;
+  transition: opacity var(--icon-dur) var(--icon-ease), transform var(--icon-dur) var(--icon-ease);
+  transform: scale(0.9);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-ideate .bulb {
+  transform: translateY(-1.5px);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-ideate .rays {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* 15. Crowd check: back person shifts right 2px and extra person pops in */
+.nav-icon-crowdcheck .person-back {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-crowdcheck .person-extra {
+  opacity: 0;
+  transform: scale(0.6) translateX(-4px);
+  transition: opacity var(--icon-dur) var(--icon-ease), transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-crowdcheck .person-back {
+  transform: translateX(2px);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-crowdcheck .person-extra {
+  opacity: 1;
+  transform: scale(1) translateX(0);
+}
+
+/* 16. Plan: dashed route line redraws and end pin drops 1.5px */
+.nav-icon-plan .route-line {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 400ms var(--icon-ease);
+}
+.nav-icon-plan .end-pin {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-plan .route-line {
+  animation: routeRedraw 400ms var(--icon-ease) forwards;
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-plan .end-pin {
+  transform: translateY(1.5px);
+}
+@keyframes routeRedraw {
+  0% { stroke-dashoffset: 24; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* 17. Board: card translates from column 1 to column 2 */
+.nav-icon-board .moving-card {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-board .moving-card {
+  transform: translateX(5.5px);
+}
+
+/* 18. Schedule: calendar rings bounce 1px and date dot moves one cell */
+.nav-icon-schedule .cal-rings {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-schedule .date-dot {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-schedule .cal-rings {
+  transform: translateY(-1px);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-schedule .date-dot {
+  transform: translateX(4px);
+}
+
+/* 19. MVP studio: rocket lifts 2px diagonally and flame flickers (scaleY 0.7 to 1) */
+.nav-icon-mvp .rocket {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-mvp .flame {
+  transform-origin: top center;
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-mvp .rocket {
+  transform: translate(1.8px, -1.8px);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-mvp .flame {
+  transform: scaleY(1.3) scaleX(0.85);
+}
+
+/* 20. Docs: folder front flap tilts open 12deg */
+.nav-icon-docs .folder-flap {
+  transform-origin: bottom left;
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-docs .folder-flap {
+  transform: skewX(-12deg) scaleY(0.92);
+}
+
+/* 21. GitHub: branch node slides along branch line */
+.nav-icon-github .branch-node {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-github .branch-node {
+  transform: translateY(-3.5px);
+}
+
+/* 22. API hub: curly braces spread apart 2px and center dot scales in */
+.nav-icon-apihub .brace-left {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-apihub .brace-right {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-apihub .center-dot {
+  opacity: 0.2;
+  transform: scale(0.6);
+  transition: transform var(--icon-dur) var(--icon-ease), opacity var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-apihub .brace-left {
+  transform: translateX(-1px);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-apihub .brace-right {
+  transform: translateX(1px);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-apihub .center-dot {
+  opacity: 1;
+  transform: scale(1.2);
+}
+
+/* 23. Diagrams: nodes pulse in sequence and connector lines redraw */
+.nav-icon-diagrams .node-1 {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-diagrams .node-2 {
+  transition: transform var(--icon-dur) var(--icon-ease) 60ms;
+}
+.nav-icon-diagrams .node-3 {
+  transition: transform var(--icon-dur) var(--icon-ease) 120ms;
+}
+.nav-icon-diagrams .connector-line {
+  stroke-dasharray: 16;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 350ms var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-diagrams .node-1 {
+  transform: scale(1.2);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-diagrams .node-2 {
+  transform: scale(1.2);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-diagrams .node-3 {
+  transform: scale(1.2);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-diagrams .connector-line {
+  stroke-dashoffset: 16;
+  animation: lineRedraw 350ms var(--icon-ease) forwards;
+}
+@keyframes lineRedraw {
+  0% { stroke-dashoffset: 16; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* 24. Pitch deck: screen slides up 1px and chart bars grow in sequence */
+.nav-icon-pitchdeck .screen {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-pitchdeck .bar-1 {
+  transform-origin: bottom center;
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-pitchdeck .bar-2 {
+  transform-origin: bottom center;
+  transition: transform var(--icon-dur) var(--icon-ease) 50ms;
+}
+.nav-icon-pitchdeck .bar-3 {
+  transform-origin: bottom center;
+  transition: transform var(--icon-dur) var(--icon-ease) 100ms;
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-pitchdeck .screen {
+  transform: translateY(-1px);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-pitchdeck .bar-1 {
+  transform: scaleY(1.3);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-pitchdeck .bar-2 {
+  transform: scaleY(1.4);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-pitchdeck .bar-3 {
+  transform: scaleY(1.25);
+}
+
+/* 25. Rehearse: mic sound-wave arcs emit outward in sequence */
+.nav-icon-rehearse .wave-1 {
+  opacity: 0.4;
+  transition: opacity var(--icon-dur) var(--icon-ease), transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-rehearse .wave-2 {
+  opacity: 0.2;
+  transition: opacity var(--icon-dur) var(--icon-ease) 80ms, transform var(--icon-dur) var(--icon-ease) 80ms;
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-rehearse .wave-1 {
+  opacity: 1;
+  transform: scale(1.15) translateX(1px);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-rehearse .wave-2 {
+  opacity: 1;
+  transform: scale(1.22) translateX(2px);
+}
+
+/* 26. Q&A: bubble wobbles (rotate -6 then 4 then 0deg) and question mark bounces */
+.nav-icon-qa .bubble {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-qa .qmark {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-qa .bubble {
+  animation: bubbleWobble 450ms var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-qa .qmark {
+  transform: translateY(-1.5px);
+}
+@keyframes bubbleWobble {
+  0% { transform: rotate(0deg); }
+  25% { transform: rotate(-6deg); }
+  60% { transform: rotate(4deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* 27. Demo: play triangle nudges right 1.5px and scales 1.1 */
+.nav-icon-demo .play-btn {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-demo .play-btn {
+  transform: translateX(1.5px) scale(1.1);
+}
+
+/* 28. Submission: paper plane flies 4px up-right with short trail, then settles */
+.nav-icon-submission .plane {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-submission .trail {
+  opacity: 0;
+  stroke-dasharray: 10;
+  stroke-dashoffset: 10;
+  transition: opacity var(--icon-dur) var(--icon-ease), stroke-dashoffset var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-submission .plane {
+  transform: translate(3.5px, -3.5px);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-submission .trail {
+  opacity: 1;
+  stroke-dashoffset: 0;
+}
+
+/* 29. Readiness: gauge needle sweeps from left to 70% */
+.nav-icon-readiness .needle {
+  transform-origin: bottom center;
+  transition: transform 450ms var(--icon-ease);
+  transform: rotate(-35deg);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-readiness .needle {
+  transform: rotate(35deg);
+}
+
+/* 30. Retro: history arrow rotates -45deg and returns */
+.nav-icon-retro .arrow-loop {
+  transition: transform 450ms var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-retro .arrow-loop {
+  transform: rotate(-45deg);
+}
+
+/* 31. Invite (user-plus): plus rotates 90deg and scales 1.15 */
+.nav-icon-invite .plus-icon {
+  transform-origin: center;
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, button:hover, .btn-icon:hover) .nav-icon-invite .plus-icon {
+  transform: rotate(90deg) scale(1.15);
+}
+
+/* 32. Group chevrons: rotate 180deg when group opens */
+.group-chevron {
+  transition: transform 280ms var(--icon-ease);
+}
+.group-chevron[data-open="true"],
+[aria-expanded="true"] .group-chevron {
+  transform: rotate(180deg);
+}
+
+/* 33. Bell: wiggles (rotate -12, 10, -6, 0deg over 500ms) */
+.nav-icon-bell {
+  transform-origin: top center;
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, button:hover) .nav-icon-bell {
+  animation: bellWiggle 500ms var(--icon-ease);
+}
+@keyframes bellWiggle {
+  0% { transform: rotate(0deg); }
+  20% { transform: rotate(-12deg); }
+  45% { transform: rotate(10deg); }
+  70% { transform: rotate(-6deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* 34. Search: lens scales 1.08 and tilts -6deg */
+.nav-icon-search .lens-group {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, button:hover) .nav-icon-search .lens-group {
+  transform: scale(1.08) rotate(-6deg);
+}
+
+/* 35. Avatar: 2px accent ring grows around it on hover */
+.avatar-hover-ring {
+  transition: box-shadow var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, button:hover) .avatar-hover-ring {
+  box-shadow: 0 0 0 2px var(--brand-from, #2F9BEA);
+}
+
+/* 36. Log out: arrow slides right 3px */
+.nav-icon-logout .arrow-part {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, button:hover, .dropdown-item:hover) .nav-icon-logout .arrow-part {
+  transform: translateX(3px);
+}
+
+/* 37. Copy link: two link halves slide together 1px and scales 1.05 */
+.nav-icon-copylink .link-left {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+.nav-icon-copylink .link-right {
+  transition: transform var(--icon-dur) var(--icon-ease);
+}
+:is(.group:hover, .group:focus-visible, button:hover) .nav-icon-copylink {
+  transform: scale(1.05);
+}
+:is(.group:hover, .group:focus-visible, button:hover) .nav-icon-copylink .link-left {
+  transform: translateX(1px);
+}
+:is(.group:hover, .group:focus-visible, button:hover) .nav-icon-copylink .link-right {
+  transform: translateX(-1px);
+}
+
+/* Speed Mode pulsing blue dot */
+@keyframes pulseDot {
+  0% { transform: scale(0.95); opacity: 0.8; box-shadow: 0 0 0 0 rgba(47, 155, 234, 0.6); }
+  70% { transform: scale(1.1); opacity: 1; box-shadow: 0 0 0 5px rgba(47, 155, 234, 0); }
+  100% { transform: scale(0.95); opacity: 0.8; box-shadow: 0 0 0 0 rgba(47, 155, 234, 0); }
+}
+
+.pulse-dot {
+  animation: pulseDot 2s infinite ease-in-out;
+}
+
+/* ────────────────────────────────────────────────────────
+   Reduced motion overrides
+   ──────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .nav-icon *,
+  .nav-icon-bell,
+  .pulse-dot {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}

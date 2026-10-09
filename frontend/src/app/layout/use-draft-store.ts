@@ -45,7 +45,7 @@ interface DraftStore {
   setPitchSlide: (roomId: string, slideId: string | null) => void;
 }
 
-const DEFAULT_DIAGRAM_CODE = 'graph TD\n  A[Start] --> B{Decision}\n  B -->|Yes| C[Result 1]\n  B -->|No| D[Result 2]';
+export const DEFAULT_DIAGRAM_CODE = 'graph TD\n  A[Start] --> B{Decision}\n  B -->|Yes| C[Result 1]\n  B -->|No| D[Result 2]';
 
 export const useDraftStore = create<DraftStore>()(
   persist(
@@ -71,7 +71,6 @@ export const useDraftStore = create<DraftStore>()(
           [roomId]: {
             ...state.drafts[roomId],
             plan: {
-              currentStep: 0,
               answers: {},
               ...state.drafts[roomId]?.plan,
               currentStep: stepIndex,

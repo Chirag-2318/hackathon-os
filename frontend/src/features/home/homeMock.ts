@@ -1,3 +1,10 @@
+/**
+ * homeMock.ts — Home page data.
+ * Roster and checkpoint data is imported from roomMock.ts (single source of truth).
+ * This file keeps Home-specific types and extends them as needed.
+ */
+import { CHECKPOINTS_PASSED, CHECKPOINTS_TOTAL } from '../room-overview/roomMock';
+
 export type PhaseType = 'Plan' | 'Build' | 'Freeze' | 'Polish' | 'Submit';
 
 export interface HackathonMember {
@@ -27,8 +34,8 @@ export interface HackathonEvent {
   totalDurationHours: number;
   elapsedHours: number;
   currentPhase: PhaseType;
-  phaseProgressPercent: number; // e.g. 73% through Polish
-  overallProgressPercent: number; // e.g. 81% elapsed
+  phaseProgressPercent: number;
+  overallProgressPercent: number;
   timeRemainingText: string;
   timeRemainingState: 'on-track' | 'due-soon' | 'final-stretch';
   timeRemainingRawMs: number;
@@ -42,7 +49,7 @@ export interface Task {
   title: string;
   tagLabel: string;
   tagColor: 'purple' | 'green' | 'red' | 'amber' | 'blue';
-  timeEstimate: string; // e.g. "~45 min", "in 3h", or icon-only ""
+  timeEstimate: string;
   resourceLink?: string;
   resourceHref?: string;
   completed: boolean;
@@ -54,7 +61,7 @@ export interface Deadline {
   timeHighlight: string;
   tagLabel: string;
   tagColor: 'purple' | 'green' | 'red' | 'amber' | 'blue';
-  timeRemainingText: string; // e.g. "in 4h 30m"
+  timeRemainingText: string;
   description: string;
   completed: boolean;
 }
@@ -69,9 +76,8 @@ export const mockUser: UserData = {
   firstName: 'Aarav',
 };
 
-// Now = Thursday 8 Oct, around 9:55 PM IST
-// Event ends Fri 9 Oct 7:00 AM IST. (Duration: 48h, Hour 39 of 48)
-// 9h 05m left
+// Now = Thursday 8 Oct, 10:00 PM IST = Hour 39 of 48
+// 9h 05m left to submission (Fri 9 Oct 7:00 AM IST)
 export const mockCurrentEvent: HackathonEvent = {
   id: 'evt1',
   name: 'Campus Build Sprint 2026',
@@ -81,29 +87,30 @@ export const mockCurrentEvent: HackathonEvent = {
   totalDurationHours: 48,
   elapsedHours: 39,
   currentPhase: 'Polish',
-  phaseProgressPercent: 73,
+  phaseProgressPercent: 75,
   overallProgressPercent: 81,
   timeRemainingText: '9h 05m',
   timeRemainingState: 'due-soon',
   timeRemainingRawMs: 9 * 60 * 60 * 1000 + 5 * 60 * 1000,
-  checkpointsPassed: 3,
-  checkpointsTotal: 7,
+  checkpointsPassed: CHECKPOINTS_PASSED, // 4 — from roomMock (unified)
+  checkpointsTotal: CHECKPOINTS_TOTAL,   // 7 — from roomMock (unified)
   currentCheckpoint: {
-    id: 'cp1',
+    id: 'cp5',
     label: 'Demo rehearsed 3 times',
     countPassed: 1,
     countTotal: 3,
     passed: false,
     linkText: 'Open rehearsal',
-    linkHref: '#',
+    linkHref: '/app/room/r-1/pitch/rehearse',
   },
 };
 
+// Unified roster from roomMock — first 4 members for Home display
 export const mockTeamMembers: HackathonMember[] = [
-  { id: 'm1', firstName: 'Aarav', status: 'working', tasksDoneThisPhase: 12, tasksExpectedByNow: 10 },
-  { id: 'm2', firstName: 'Priya', status: 'working', tasksDoneThisPhase: 9, tasksExpectedByNow: 10 },
-  { id: 'm3', firstName: 'Rohan', status: 'blocked', tasksDoneThisPhase: 4, tasksExpectedByNow: 9 },
-  { id: 'm4', firstName: 'Sneha', status: 'idle', tasksDoneThisPhase: 11, tasksExpectedByNow: 10 },
+  { id: 'm1', firstName: 'Aarav',  status: 'working', tasksDoneThisPhase: 12, tasksExpectedByNow: 10 },
+  { id: 'm2', firstName: 'Ishita', status: 'blocked', tasksDoneThisPhase: 7,  tasksExpectedByNow: 10 },
+  { id: 'm4', firstName: 'Sanjay', status: 'working', tasksDoneThisPhase: 11, tasksExpectedByNow: 10 },
+  { id: 'm3', firstName: 'Kabir',  status: 'idle',    tasksDoneThisPhase: 9,  tasksExpectedByNow: 9  },
 ];
 
 export const mockDeadlines: Deadline[] = [
@@ -113,7 +120,7 @@ export const mockDeadlines: Deadline[] = [
     timeHighlight: '1:30 AM',
     tagLabel: 'VIDEO',
     tagColor: 'purple',
-    timeRemainingText: 'in 4h 30m',
+    timeRemainingText: 'in 3h 30m',
     description: 'Public link, max 2 minutes',
     completed: false,
   },
@@ -123,7 +130,7 @@ export const mockDeadlines: Deadline[] = [
     timeHighlight: '4:00 AM',
     tagLabel: 'DRAFT',
     tagColor: 'blue',
-    timeRemainingText: 'in 7h',
+    timeRemainingText: 'in 6h',
     description: 'Check text, track and prizes',
     completed: false,
   },
@@ -163,7 +170,7 @@ export const mockYourTasks: Task[] = [
     title: 'Fix mobile layout on the results page',
     tagLabel: 'FRONTEND',
     tagColor: 'green',
-    timeEstimate: '', // clock-icon-only
+    timeEstimate: '',
     completed: false,
   },
   {
@@ -171,7 +178,7 @@ export const mockYourTasks: Task[] = [
     title: 'Update README with run steps',
     tagLabel: 'DOCS',
     tagColor: 'blue',
-    timeEstimate: '', // clock-icon-only
+    timeEstimate: '',
     completed: false,
   },
 ];

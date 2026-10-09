@@ -2,6 +2,7 @@
 @import "@fontsource-variable/dm-sans";
 @import "@fontsource/jetbrains-mono/400.css";
 @import "@fontsource/jetbrains-mono/500.css";
+@import "./components/icons/icons.css";
 
 /*
  * Phase 1 — Design Tokens (Section 5 of redesign spec)
@@ -733,4 +734,25 @@
   --shadow-home-tooltip: 0 8px 24px rgba(0,0,0,0.25);
   
   --ease-home: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Room overview additional tokens */
+  --dur-chart: 900ms;
+  --dur-standard: 320ms;
 }
+
+/* Room overview animation keyframes */
+@keyframes room-fade-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes room-count-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes room-bar-grow {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+

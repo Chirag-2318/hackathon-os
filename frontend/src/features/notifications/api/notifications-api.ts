@@ -3,18 +3,21 @@
  * Source: PRD Phase 6b §3.1, tech_stack.md §4.1
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiFetch } from '@/api/client';
 import type { NotificationsResponse } from './types';
 
 const BASE = '/api/v1/rooms';
 
-async function fetchNotifications(roomId: string): Promise<NotificationsResponse> {
-  const res = await fetch(`${BASE}/${roomId}/notifications`);
-  if (!res.ok) throw new Error('Failed to load notifications');
-  return res.json() as Promise<NotificationsResponse>;
+export async function fetchNotifications(roomId: string): Promise<NotificationsResponse> {
+  return apiFetch<NotificationsResponse>(`${BASE}/${roomId}/notifications`);
 }
 
-async function markRead(roomId: string, notifId: string): Promise<void> {
-  await fetch(`${BASE}/${roomId}/notifications/${notifId}/read`, { method: 'PATCH' });
+export async function markRead(roomId: string, notifId: string): Promise<void> {
+  return apiFetch<void>(`${BASE}/${roomId}/notifications/${notifId}/read`, { method: 'PATCH' });
+}
+
+export async function markAllRead(roomId: string): Promise<void> {
+  return apiFetch<void>(`${BASE}/${roomId}/notifications/mark-all-read`, { method: 'POST' });
 }
 
 export function useNotifications(roomId: string) {

@@ -1,7 +1,10 @@
-import React from 'react';
-import { Plus, Hash } from 'lucide-react';
+import { Plus, KeyRound } from 'lucide-react';
+import { useOverlay } from '@/app/providers/overlay-store';
 
 export function FirstTimeState() {
+  const createRoomModal = useOverlay('create-room-dialog');
+  const joinCodeModal = useOverlay('join-code-dialog');
+
   return (
     <div className="w-full flex flex-col items-center justify-center min-h-[60vh] font-[var(--font-inter)] text-center px-4">
       <div className="w-[120px] h-[120px] bg-[var(--color-home-tray)] rounded-full flex items-center justify-center mb-8 shadow-sm">
@@ -17,12 +20,18 @@ export function FirstTimeState() {
       </p>
       
       <div className="flex flex-col sm:flex-row items-center gap-4">
-        <button className="h-[48px] px-8 rounded-[var(--radius-home-btn)] bg-[var(--color-home-text-primary)] text-white text-[15px] font-[600] flex items-center gap-2 hover:opacity-90 transition-opacity focus-visible:outline-[var(--color-home-accent)]">
+        <button
+          onClick={() => createRoomModal.open()}
+          className="h-[48px] px-8 rounded-[var(--radius-home-btn)] bg-[var(--color-home-text-primary)] text-white text-[15px] font-[600] flex items-center gap-2 hover:opacity-90 transition-opacity focus-visible:outline-[var(--color-home-accent)] cursor-pointer"
+        >
           <Plus className="w-5 h-5" />
           Create your first room
         </button>
-        <button className="h-[48px] px-8 rounded-[var(--radius-home-btn)] bg-white border-2 border-[var(--color-home-hairline)] text-[var(--color-home-text-primary)] text-[15px] font-[600] flex items-center gap-2 hover:border-[#D0D0D0] transition-colors focus-visible:outline-[var(--color-home-accent)] shadow-sm">
-          <Hash className="w-5 h-5 text-[var(--color-home-text-secondary)]" />
+        <button
+          onClick={() => joinCodeModal.open()}
+          className="h-[48px] px-8 rounded-[var(--radius-home-btn)] bg-white border-2 border-[var(--color-home-hairline)] text-[var(--color-home-text-primary)] text-[15px] font-[600] flex items-center gap-2 hover:border-[#D0D0D0] transition-colors focus-visible:outline-[var(--color-home-accent)] shadow-sm cursor-pointer"
+        >
+          <KeyRound className="w-5 h-5 text-[var(--color-home-text-secondary)]" />
           Join with a code
         </button>
       </div>

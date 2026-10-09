@@ -11,6 +11,7 @@ import { Zap, LayoutDashboard, FileText, MessageSquare } from 'lucide-react';
 import { BlockerFAB } from '@/components/primitives/blocker-fab';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useOverlay } from '@/app/providers/overlay-store';
+import { BackArrowIcon } from '@/components/icons';
 import type { ReactNode } from 'react';
 
 // ── Icon rail items ─────────────────────────────────────────────
@@ -41,6 +42,25 @@ export function SpeedModeShell({ children }: SpeedModeShellProps) {
     <div className="dark density-compact min-h-screen bg-canvas flex">
       {/* Icon rail — 72px */}
       <aside className="w-[72px] shrink-0 flex flex-col items-center bg-sidebar border-r border-white/8 py-4 gap-2">
+        {/* Exit speed mode button */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => {
+                const match = window.location.pathname.match(/\/speed-mode\/([^/]+)/);
+                const roomId = match ? match[1] : 'r-1';
+                window.location.href = `/app/room/${roomId}/overview`;
+              }}
+              className="flex items-center justify-center size-10 rounded-control text-sidebar-muted hover:text-white hover:bg-white/10 transition-colors mb-2 cursor-pointer"
+              aria-label="Exit speed mode"
+              data-testid="exit-speed-mode"
+            >
+              <BackArrowIcon size={18} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right">Exit speed mode</TooltipContent>
+        </Tooltip>
+
         {/* Logo mark */}
         <div className="size-10 rounded-full bg-lav-500 flex items-center justify-center text-[#070707] text-label font-bold mb-4">
           H

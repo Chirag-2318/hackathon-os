@@ -9,6 +9,8 @@ import { TaskDrawerOverlay } from './task-drawer';
 import { BlockerDialogOverlay } from './blocker-dialog';
 import { ScopeGuardDialogOverlay } from './scope-guard-dialog';
 import { InviteDialogOverlay } from './invite-dialog';
+import { CreateRoomDialogOverlay } from './create-room-dialog';
+import { JoinCodeDialogOverlay } from './join-code-dialog';
 
 export function GlobalOverlays() {
   return (
@@ -20,6 +22,8 @@ export function GlobalOverlays() {
       <BlockerDialogOverlay />
       <ScopeGuardDialogOverlay />
       <InviteDialogOverlay />
+      <CreateRoomDialogOverlay />
+      <JoinCodeDialogOverlay />
     </>
   );
 }

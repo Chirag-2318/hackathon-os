@@ -21,6 +21,7 @@ import {
 
 export function PrivacySection() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
 
   const exportMutation = useMutation({
     mutationFn: requestExport,
@@ -79,25 +80,44 @@ export function PrivacySection() {
         <Button
           variant="outline"
           className="self-start border-[#A82D2D] text-[#A82D2D] hover:bg-[#FBD9D7]"
-          onClick={() => setDeleteDialogOpen(true)}
+          onClick={() => {
+            setConfirmText('');
+            setDeleteDialogOpen(true);
+          }}
         >
           Delete account
         </Button>
       </div>
 
       {/* Confirmation dialog — C25, 480px */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <Dialog open={deleteDialogOpen} onOpenChange={(open) => {
+        setDeleteDialogOpen(open);
+        if (!open) setConfirmText('');
+      }}>
         <DialogContent className="max-w-[480px]">
           <DialogHeader>
             <DialogTitle>Delete your account?</DialogTitle>
             <DialogDescription>
-              This removes all your rooms permanently.
+              This permanently removes all your rooms and account data. This action cannot be reversed.
+              Please type <strong className="font-semibold text-foreground">DELETE</strong> to confirm.
             </DialogDescription>
           </DialogHeader>
+          <div className="py-2">
+            <input
+              type="text"
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder="Type DELETE to confirm"
+              className="w-full px-3 py-2 text-sm border rounded-md border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-red-500"
+            />
+          </div>
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
-              onClick={() => setDeleteDialogOpen(false)}
+              onClick={() => {
+                setDeleteDialogOpen(false);
+                setConfirmText('');
+              }}
               disabled={deleteMutation.isPending}
             >
               Cancel
@@ -105,7 +125,7 @@ export function PrivacySection() {
             <Button
               className="bg-[#C23A3A] text-white hover:bg-[#A82D2D]"
               onClick={() => deleteMutation.mutate()}
-              disabled={deleteMutation.isPending}
+              disabled={deleteMutation.isPending || confirmText !== 'DELETE'}
             >
               {deleteMutation.isPending ? 'Deleting…' : 'Delete account'}
             </Button>

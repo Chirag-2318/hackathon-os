@@ -1,5 +1,5 @@
 /**
- * AppSidebar — redesigned light sidebar (Section 4.2 / Section 8.1)
+ * AppSidebar — redesigned light sidebar with Room Nav takeover
  *
  * Width: 232px expanded / 64px collapsed icon-only rail.
  * Padding: 20px.
@@ -7,24 +7,26 @@
  */
 import * as React from 'react';
 import { cn } from 'cn';
-import {
-  House,
-  Wrench,
-  Briefcase,
-  Settings,
-  ChevronsLeft,
-  ChevronsRight,
-  Copy,
-} from 'lucide-react';
-import { NavLink, useMatch } from 'react-router-dom';
+import { NavLink, useMatch, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSidebarStore } from './use-sidebar-store';
-import { TrayArrowIcon } from '@/shared/ui/icons/TrayArrowIcon';
-import { StackIcon } from '@/shared/ui/icons/StackIcon';
+import {
+  HomeIcon,
+  MyRoomsIcon,
+  PlaybooksIcon,
+  ToolDirectoryIcon,
+  PortfolioIcon,
+  SettingsIcon,
+  CollapseLeftIcon,
+  CollapseRightIcon,
+} from '@/components/icons';
+import { RoomNav } from './room-nav';
 import { useCurrentUser } from '@/features/auth/useCurrentUser';
 import { useOverlay } from '@/app/providers/overlay-store';
 import { useHome } from '@/features/home/hooks/use-home';
 import { formatClock } from '@/shared/lib/clock';
+import { Copy, Plus } from 'lucide-react';
 import goproImg from '../../../images/gopro.png';
 
 // ── Nav configuration ──────────────────────────────────────────────
@@ -40,49 +42,37 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   {
     label: 'Home',
-    icon: ({ size, className }) => (
-      <House size={size} className={cn('icon-house', className)} strokeWidth={1.75} />
-    ),
+    icon: ({ size, className }) => <HomeIcon size={size} className={className} />,
     path: '/app/home',
     key: 'home',
   },
   {
     label: 'My rooms',
-    icon: ({ size, className }) => (
-      <StackIcon size={size} className={className} />
-    ),
+    icon: ({ size, className }) => <MyRoomsIcon size={size} className={className} />,
     path: '/app/rooms',
     key: 'my-rooms',
   },
   {
     label: 'Playbooks',
-    icon: ({ size, className }) => (
-      <TrayArrowIcon size={size} className={className} />
-    ),
+    icon: ({ size, className }) => <PlaybooksIcon size={size} className={className} />,
     path: '/app/playbooks',
     key: 'playbooks',
   },
   {
     label: 'Tool directory',
-    icon: ({ size, className }) => (
-      <Wrench size={size} className={cn('icon-wrench', className)} strokeWidth={1.75} />
-    ),
+    icon: ({ size, className }) => <ToolDirectoryIcon size={size} className={className} />,
     path: '/app/tools',
     key: 'tools',
   },
   {
     label: 'Portfolio',
-    icon: ({ size, className }) => (
-      <Briefcase size={size} className={className} strokeWidth={1.75} />
-    ),
+    icon: ({ size, className }) => <PortfolioIcon size={size} className={className} />,
     path: '/app/portfolio',
     key: 'portfolio',
   },
   {
     label: 'Settings',
-    icon: ({ size, className }) => (
-      <Settings size={size} className={cn('icon-settings', className)} strokeWidth={1.75} />
-    ),
+    icon: ({ size, className }) => <SettingsIcon size={size} className={className} />,
     path: '/app/settings',
     key: 'settings',
   },
@@ -90,14 +80,10 @@ const NAV_ITEMS: NavItem[] = [
 
 // ── Live clock ──────────────────────────────────────────────────────
 function useClock() {
-  const [time, setTime] = React.useState(() => formatTime());
-
-  function formatTime() {
-    return formatClock(new Date());
-  }
+  const [time, setTime] = React.useState(() => formatClock(new Date()));
 
   React.useEffect(() => {
-    const id = setInterval(() => setTime(formatTime()), 1000);
+    const id = setInterval(() => setTime(formatClock(new Date())), 1000);
     return () => clearInterval(id);
   }, []);
 
@@ -108,9 +94,11 @@ function useClock() {
 function NavRow({
   item,
   isCollapsed,
+  onCreateRoom,
 }: {
   item: NavItem;
   isCollapsed: boolean;
+  onCreateRoom?: () => void;
 }) {
   const match = useMatch({ path: item.path, end: item.path === '/app/home' });
   const isActive = !!match;
@@ -136,7 +124,7 @@ function NavRow({
     >
       {/* Icon */}
       <span className="shrink-0 flex items-center justify-center size-5" data-testid={`nav-icon-${item.key}`}>
-        {item.icon({ size: 20 })}
+        {item.icon({ size: 18 })}
       </span>
 
       {/* Label */}
@@ -146,9 +134,26 @@ function NavRow({
         </span>
       )}
 
+      {/* My rooms hover '+' icon button (Section addition) */}
+      {!isCollapsed && item.key === 'my-rooms' && onCreateRoom && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onCreateRoom();
+          }}
+          aria-label="Create room"
+          title="Create room"
+          className="opacity-0 group-hover:opacity-100 size-5 rounded hover:bg-surface text-ink-2 hover:text-ink flex items-center justify-center transition-all cursor-pointer mr-0.5"
+        >
+          <Plus className="size-3.5 hover:rotate-90 transition-transform duration-200" />
+        </button>
+      )}
+
       {/* Badge */}
       {!isCollapsed && item.badge != null && item.badge > 0 && (
-        <span className="ml-2 inline-flex items-center justify-center h-5 px-2 rounded-full bg-success-bg text-[12px] leading-[16px] font-semibold text-success-fg tabular-nums" data-testid={`nav-badge-${item.key}`}>
+        <span className="ml-auto inline-flex items-center justify-center h-5 px-2 rounded-full bg-success-bg text-[12px] leading-[16px] font-semibold text-success-fg tabular-nums" data-testid={`nav-badge-${item.key}`}>
           {item.badge}
         </span>
       )}
@@ -196,10 +201,18 @@ export function AppSidebar() {
   const { isCollapsed, toggleCollapsed } = useSidebarStore();
   const { data: user } = useCurrentUser();
   const { data: homeData } = useHome();
+  const createRoomModal = useOverlay('create-room-dialog');
+  const location = useLocation();
+
   const myRoomsCount = homeData?.roomList?.length ?? 0;
   const clock = useClock();
 
-  const displayName = user?.name ?? user?.email ?? '';
+  // Detect room context
+  const roomMatch = location.pathname.match(/\/app\/room\/([^/]+)/);
+  const roomId = roomMatch ? roomMatch[1] : null;
+  const inRoom = Boolean(roomId);
+
+  const displayName = user?.displayName ?? user?.email ?? '';
 
   const [copyFeedback, setCopyFeedback] = React.useState(false);
 
@@ -229,7 +242,7 @@ export function AppSidebar() {
       <div className="flex flex-col h-full" style={{ minWidth: isCollapsed ? 40 : 192 }}>
 
         {/* 1. Brand row */}
-        <div className="flex h-7 items-center gap-2.5 px-2.5 mb-0">
+        <div className="flex h-7 items-center gap-2.5 px-2.5 mb-0 shrink-0">
           <div className="shrink-0 flex items-center justify-center size-5">
             <LogoMark size={20} />
           </div>
@@ -250,7 +263,7 @@ export function AppSidebar() {
           aria-expanded={!isCollapsed}
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           className={cn(
-            'flex items-center gap-2.5 h-7 rounded-[8px] px-2.5 mb-4 mt-0',
+            'flex items-center gap-2.5 h-7 rounded-[8px] px-2.5 mb-4 mt-0 shrink-0',
             'text-ink-2 text-[14px] cursor-pointer',
             'hover:bg-hover transition-colors duration-[150ms]',
             'focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2',
@@ -259,72 +272,129 @@ export function AppSidebar() {
         >
           {isCollapsed ? (
             <div className="shrink-0 flex items-center justify-center size-5">
-              <ChevronsRight size={16} />
+              <CollapseRightIcon size={16} />
             </div>
           ) : (
             <>
               <div className="shrink-0 flex items-center justify-center size-5">
-                <ChevronsLeft size={16} data-testid="collapse-icon" />
+                <CollapseLeftIcon size={16} data-testid="collapse-icon" />
               </div>
               <span className="text-[14px] font-normal leading-[20px]" data-testid="collapse-text">Collapse</span>
             </>
           )}
         </button>
 
-        {/* 3. Primary nav */}
-        <nav className="flex flex-col gap-1" aria-label="Primary">
-          {NAV_ITEMS.map((item) => (
-            <NavRow key={item.path} item={{ ...item, badge: item.key === 'my-rooms' ? myRoomsCount : item.badge }} isCollapsed={isCollapsed} />
-          ))}
-        </nav>
-
-        {/* 4. Promo card */}
-        {!isCollapsed && (
-          <a
-            href="/app/settings/billing"
-            className={cn(
-              'block rounded-[var(--r-card)] border border-border bg-card p-1 mt-9',
-              'hover:border-border-strong transition-colors duration-[150ms]',
-              'focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2',
-              '[@media(max-height:680px)]:hidden'
+        {/* 3. Primary nav BODY: swaps between Global list and Room list */}
+        <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
+          <AnimatePresence mode="wait" initial={false}>
+            {inRoom && roomId ? (
+              <motion.div
+                key={`room-nav-${roomId}`}
+                initial={{ opacity: 0, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 12 }}
+                transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                className="flex-1 flex flex-col min-h-0"
+              >
+                <RoomNav roomId={roomId} isCollapsed={isCollapsed} />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="global-nav"
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -12 }}
+                transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+                className="flex-1 flex flex-col min-h-0"
+              >
+                <nav className="flex flex-col gap-1" aria-label="Primary">
+                  {NAV_ITEMS.map((item) => (
+                    <NavRow
+                      key={item.path}
+                      item={{ ...item, badge: item.key === 'my-rooms' ? myRoomsCount : item.badge }}
+                      isCollapsed={isCollapsed}
+                      onCreateRoom={item.key === 'my-rooms' ? createRoomModal.open : undefined}
+                    />
+                  ))}
+                </nav>
+              </motion.div>
             )}
-            aria-label="Go Pro — unlock AI planning and auto-scheduling"
-            data-testid="promo"
-          >
-            {/* Art */}
-            <div className="rounded-[10px] overflow-hidden" style={{ aspectRatio: '16/9' }}>
-              <img src={goproImg} alt="Go Pro" className="w-full h-full object-cover" />
-            </div>
-            <div className="px-1 pt-2 pb-2 flex flex-col">
-              <p className="text-[14px] leading-[20px] font-medium text-ink" data-testid="promo-title">Go Pro</p>
-              <p className="text-[11px] leading-[14px] font-normal text-ink-2" data-testid="promo-caption" style={{ textWrap: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                AI planning and auto-scheduling.
-              </p>
-            </div>
-          </a>
-        )}
+          </AnimatePresence>
+        </div>
 
-        {/* Spacer to push footer to bottom */}
-        <div className="flex-1" />
+        {/* 4. Promo card (shown only when NOT in a room) */}
+        {!isCollapsed && (
+          <AnimatePresence>
+            {!inRoom && (
+              <motion.a
+                key="gopro-promo"
+                href="/app/settings/billing"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+                className={cn(
+                  'block rounded-[var(--r-card)] border border-border bg-card p-1 shrink-0 mt-4',
+                  'hover:border-border-strong transition-colors duration-150',
+                  'focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2',
+                  '[@media(max-height:680px)]:hidden'
+                )}
+                aria-label="Go Pro — unlock AI planning and auto-scheduling"
+                data-testid="promo"
+              >
+                {/* Art */}
+                <div className="rounded-[10px] overflow-hidden" style={{ aspectRatio: '16/9' }}>
+                  <img src={goproImg} alt="Go Pro" className="w-full h-full object-cover" />
+                </div>
+                <div className="px-1 pt-2 pb-2 flex flex-col">
+                  <p className="text-[14px] leading-[20px] font-medium text-ink" data-testid="promo-title">
+                    Go Pro
+                  </p>
+                  <p
+                    className="text-[11px] leading-[14px] font-normal text-ink-2"
+                    data-testid="promo-caption"
+                    style={{ textWrap: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                  >
+                    AI planning and auto-scheduling.
+                  </p>
+                </div>
+              </motion.a>
+            )}
+          </AnimatePresence>
+        )}
 
         {/* 5. Footer: email + clock */}
         {!isCollapsed && (
-          <div className="flex flex-col gap-0.5">
-            {displayName && (
-              <button
-                onClick={handleCopyEmail}
-                className="flex items-center h-8 gap-2.5 px-2.5 hover:text-ink-2 transition-colors cursor-pointer group focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2 rounded"
-                aria-label="Copy email"
-                title={copyFeedback ? 'Copied!' : 'Copy email'}
-              >
-                <div className="shrink-0 flex items-center justify-center size-5" data-testid="footer-copy-box">
-                  <Copy size={18} strokeWidth={1.75} className="opacity-60 group-hover:opacity-100" />
-                </div>
-                <span className="text-[14px] font-normal leading-[20px] text-ink truncate" data-testid="footer-email">{displayName}</span>
-              </button>
-            )}
+          <div className="flex flex-col mt-2 shrink-0">
+            <AnimatePresence initial={false}>
+              {!inRoom && displayName && (
+                <motion.div
+                  key="footer-email-row"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                  className="overflow-hidden"
+                >
+                  <button
+                    onClick={handleCopyEmail}
+                    className="flex items-center h-8 gap-2.5 px-2.5 hover:text-ink-2 transition-colors cursor-pointer group focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2 rounded w-full"
+                    aria-label="Copy email"
+                    title={copyFeedback ? 'Copied!' : 'Copy email'}
+                  >
+                    <div className="shrink-0 flex items-center justify-center size-5" data-testid="footer-copy-box">
+                      <Copy size={16} strokeWidth={1.75} className="opacity-60 group-hover:opacity-100" />
+                    </div>
+                    <span className="text-[14px] font-normal leading-[20px] text-ink truncate" data-testid="footer-email">
+                      {displayName}
+                    </span>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <p
-              className="text-[13px] text-ink-3 tabular-nums leading-[16px] ml-10 mt-4"
+              className="text-[13px] text-ink-3 tabular-nums leading-[16px] ml-10 mt-1 shrink-0"
               aria-live="polite"
               aria-atomic="true"
               data-testid="footer-clock"
