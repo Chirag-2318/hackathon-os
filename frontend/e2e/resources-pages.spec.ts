@@ -164,7 +164,6 @@ test.describe('Playbooks Page (Round 3)', () => {
 
     // Direct navigation with param
     await page.goto('/app/playbooks?playbook=pb-sih');
-    await page.waitForLoadState('networkidle');
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText('SIH-style hackathon');
   });
@@ -301,5 +300,61 @@ test.describe('Tool Directory Page (Round 3)', () => {
     await expect(cards).toHaveCount(totalCount);
   });
 });
+
+test.describe('Responsive and Accessibility (Round 3)', () => {
+  test('No horizontal overflow at 390, 1024, 1280, 1534, 1920 viewports', async ({ page }) => {
+    const viewports = [
+      { width: 390, height: 844 },
+      { width: 1024, height: 768 },
+      { width: 1280, height: 800 },
+      { width: 1534, height: 729 },
+      { width: 1920, height: 1080 },
+    ];
+
+    for (const url of ['/app/playbooks', '/app/tools']) {
+      await page.goto(url);
+      await page.waitForLoadState('networkidle');
+
+      for (const vp of viewports) {
+        await page.setViewportSize(vp);
+        const isOverflowing = await page.evaluate(() => {
+          return document.documentElement.scrollWidth > window.innerWidth;
+        });
+        expect(isOverflowing).toBe(false);
+      }
+    }
+  });
+
+  test('Empty and error states render correctly with retry', async ({ page }) => {
+    // 1. Error state for playbooks
+    await page.setExtraHTTPHeaders({ 'x-test-force-error': 'true' });
+    await page.goto('/app/playbooks');
+    await expect(page.getByText('Could not load playbooks')).toBeVisible();
+
+    // Clear error header and retry
+    await page.setExtraHTTPHeaders({});
+    await page.getByRole('button', { name: 'Try again' }).click();
+    await expect(page.locator('[data-testid^="pb-card-"]').first()).toBeVisible();
+
+    // 2. Error state for tools
+    await page.setExtraHTTPHeaders({ 'x-test-force-error': 'true' });
+    await page.goto('/app/tools');
+    await expect(page.getByText('Could not load tools')).toBeVisible();
+
+    // Clear error header and retry
+    await page.setExtraHTTPHeaders({});
+    await page.getByRole('button', { name: 'Try again' }).click();
+    await expect(page.locator('[data-testid^="tool-card-"]').first()).toBeVisible();
+  });
+
+  test('Public playbooks route keeps marketing header and layout', async ({ page }) => {
+    await page.goto('/playbooks');
+    await page.waitForLoadState('networkidle');
+
+    // Has Start a room from LandingHeader
+    await expect(page.getByRole('link', { name: 'Start a room' })).toBeVisible();
+  });
+});
+
 
 

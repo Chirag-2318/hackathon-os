@@ -97,8 +97,11 @@ export const handlers = [
   }),
 
   // ── F-1: Playbook list (S01) ──────────────────────────────────
-  http.get('/api/v1/playbooks', async () => {
+  http.get('/api/v1/playbooks', async ({ request }) => {
     await delay(300);
+    if (request.headers.get('x-test-force-error') === 'true') {
+      return new HttpResponse(null, { status: 500 });
+    }
     return HttpResponse.json(playbookFixtures);
   }),
 

@@ -92,6 +92,9 @@ export const phase6aHandlers = [
     const url = new URL(request.url);
     const scenario = request.headers.get('x-mock-scenario') ?? 'default';
     if (scenario === 'empty') return HttpResponse.json({ tools: [] });
+    if (request.headers.get('x-test-force-error') === 'true') {
+      return new HttpResponse(null, { status: 500 });
+    }
 
     let { tools } = toolsFixture;
     const category = url.searchParams.get('category');

@@ -32,6 +32,7 @@ export function ErrorRow({
           type="button"
           variant="outline"
           onClick={onRetry}
+          data-testid="error-retry"
           className="h-8 px-3 rounded-[var(--r-control)] border-border bg-card text-ink text-[13px] font-medium hover:bg-hover shrink-0"
         >
           Try again
