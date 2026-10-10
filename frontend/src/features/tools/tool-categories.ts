@@ -9,6 +9,15 @@ import {
   Wrench,
 } from 'lucide-react';
 
+export const TOOL_CATEGORIES = [
+  'Recording',
+  'Video',
+  'Diagrams',
+  'Design',
+  'API',
+  'Deployment',
+] as const;
+
 export interface ToolCategoryMeta {
   icon: LucideIcon;
   bgClass: string;

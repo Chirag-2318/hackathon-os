@@ -194,3 +194,112 @@ test.describe('Playbooks Page (Round 3)', () => {
   });
 });
 
+test.describe('Tool Directory Page (Round 3)', () => {
+  test('Category filter chips narrow the grid and active chip toggle returns to All', async ({ page }) => {
+    await page.goto('/app/tools');
+    await page.waitForLoadState('networkidle');
+
+    const cards = page.locator('[data-testid^="tool-card-"]');
+    await expect(cards.first()).toBeVisible();
+    const totalCount = await cards.count();
+    expect(totalCount).toBeGreaterThan(0);
+
+    // Click "Recording" chip
+    const recordingChip = page.getByTestId('tools-categories').getByRole('button', { name: /^Recording/ });
+    await expect(recordingChip).toBeVisible();
+    await recordingChip.click();
+
+    // Cards narrowed
+    const recordingCount = await cards.count();
+    expect(recordingCount).toBeLessThan(totalCount);
+    expect(recordingCount).toBeGreaterThan(0);
+
+    // Clicking it again toggles back to All
+    await recordingChip.click();
+    await expect(cards).toHaveCount(totalCount);
+  });
+
+  test('Category callout appears for specific category and disappears on All', async ({ page }) => {
+    await page.goto('/app/tools');
+    await page.waitForLoadState('networkidle');
+
+    // On initial load (All), callout is absent
+    const callout = page.getByTestId('tools-cat-callout');
+    await expect(callout).toHaveCount(0);
+
+    // Select "Video" chip
+    const videoChip = page.getByTestId('tools-categories').getByRole('button', { name: /^Video/ });
+    await videoChip.click();
+
+    await expect(callout).toBeVisible();
+    await expect(callout).toContainText('Video');
+    await expect(callout).toContainText('rehearsal');
+
+    // Select "All" chip
+    const allChip = page.getByTestId('tools-categories').getByRole('button', { name: /^All/ });
+    await allChip.click();
+    await expect(callout).toHaveCount(0);
+  });
+
+  test('Tool card clicks open external URL in new tab', async ({ page }) => {
+    await page.goto('/app/tools');
+    await page.waitForLoadState('networkidle');
+
+    const firstCard = page.locator('[data-testid^="tool-card-"]').first();
+    await expect(firstCard).toBeVisible();
+
+    await expect(firstCard).toHaveAttribute('target', '_blank');
+    await expect(firstCard).toHaveAttribute('rel', 'noopener noreferrer');
+    const href = await firstCard.getAttribute('href');
+    expect(href).toMatch(/^https?:\/\//);
+  });
+
+  test('Search input filters tool cards by name or description', async ({ page }) => {
+    await page.goto('/app/tools');
+    await page.waitForLoadState('networkidle');
+
+    const cards = page.locator('[data-testid^="tool-card-"]');
+    await expect(cards.first()).toBeVisible();
+    const totalCount = await cards.count();
+
+    const searchInput = page.getByTestId('tools-search');
+    await searchInput.fill('Figma');
+
+    await expect(cards).toHaveCount(1);
+    await expect(page.getByTestId('tool-card-t5')).toBeVisible();
+
+    // Clear search
+    await page.getByTestId('tools-clear').click();
+    await expect(cards).toHaveCount(totalCount);
+  });
+
+  test('Cost, License, and Verified filters narrow the grid, update count and Clear restores', async ({ page }) => {
+    await page.goto('/app/tools');
+    await page.waitForLoadState('networkidle');
+
+    const cards = page.locator('[data-testid^="tool-card-"]');
+    await expect(cards.first()).toBeVisible();
+    const totalCount = await cards.count();
+
+    // Cost filter: Free
+    const costSelect = page.getByTestId('tools-filter-cost');
+    await costSelect.click();
+    await page.getByRole('option', { name: 'Free', exact: true }).click();
+
+    const freeCount = await cards.count();
+    expect(freeCount).toBeLessThan(totalCount);
+    expect(freeCount).toBeGreaterThan(0);
+
+    // Verified only filter toggle
+    const verifiedBtn = page.getByTestId('tools-filter-verified');
+    await verifiedBtn.click();
+
+    // Clear restores all
+    const clearBtn = page.getByTestId('tools-clear');
+    await expect(clearBtn).toBeVisible();
+    await clearBtn.click();
+    await expect(cards).toHaveCount(totalCount);
+  });
+});
+
+
