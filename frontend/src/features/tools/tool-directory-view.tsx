@@ -13,7 +13,7 @@ import {
   ErrorRow,
 } from '@/shared/ui';
 import { TOOL_CATEGORIES, getToolCategoryMeta } from './tool-categories';
-import type { ToolCategory, ToolCost, ToolLicense, Tool } from '@/features/prep/api/types';
+import type { ToolCategory, Tool } from '@/features/prep/api/types';
 
 export function ToolDirectoryView() {
   const [search, setSearch] = useState('');

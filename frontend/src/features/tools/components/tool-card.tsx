@@ -88,7 +88,7 @@ export function ToolCard({ tool }: ToolCardProps) {
             </Lozenge>
           )}
           {isStale && (
-            <Lozenge variant="warning" title={`Checked ${formatCheckedDate(tool.lastChecked)}`}>
+            <Lozenge variant="warn" title={`Checked ${formatCheckedDate(tool.lastChecked)}`}>
               <AlertTriangle className="size-3 mr-0.5 inline-block stroke-[2]" />
               90d+
             </Lozenge>
