@@ -8,7 +8,10 @@ export interface PageContainerProps extends HTMLAttributes<HTMLDivElement> {
 export function PageContainer({ children, className, ...props }: PageContainerProps) {
   return (
     <div
-      className={cn('mx-auto w-full max-w-[1200px] px-8 pb-10', className)}
+      className={cn(
+        'mx-auto w-full max-w-[1200px] pl-[calc(80px-(100%-1200px)/2)] pr-8 pb-10',
+        className
+      )}
       {...props}
     >
       {children}

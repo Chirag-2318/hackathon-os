@@ -126,3 +126,15 @@ Auth fixtures for MSW were also correctly added to prevent 401 redirects and ens
 - `e2e/shell-geometry.spec.ts`: Checks sidebar navigation item `nav-row-playbooks` and `nav-row-tools`.
 - No existing tests touch `/app/playbooks` or `/app/tools` directly (they will be covered by the new `e2e/resources-pages.spec.ts`).
 
+### Round 3 Checklist
+
+- [x] **Phase R3-0: Audit & Baseline** (Audit documented, before screenshots captured, baseline regression test created & passed) — Commit `1f2d645`
+- [x] **Phase R3-1: Foundations** (Tokens, format helpers, categories, shared components: PageContainer, PageHeading, Lozenge, FilterSearch, FilterSelect, ClearFiltersButton, EmptyState, ErrorRow, SegmentedTimeline) — Commit `b73807a`
+- [x] **Phase R3-2: Shell Glue** (Decoupled in-app views from marketing headers/footers, dynamic breadcrumb in HomeShellLayout, public routes preserved) — Commit `1dda834`
+- [x] **Phase R3-3: Playbooks List** (Playbook cards, toolbar filters & clear, result count, 8-card skeleton loading, empty state, error state, E2E tests 1, 2, 3, 8 passing)
+- [ ] **Phase R3-4: Playbook Dialog & Use Flow** (Dialog with 2-col layout, Radix Dialog via query param, "Use this playbook" wires to Create Room dialog, E2E tests 5, 6, 7)
+- [ ] **Phase R3-5: Tool Directory** (Category chips row, toolbar filters, category callout, tool cards with badges & external links, E2E tests 9-13)
+- [ ] **Phase R3-6: Responsive & Accessibility** (No horizontal overflow at 390, 1024, 1280, 1534, 1920; keyboard nav; E2E tests 14, 15, 16)
+- [ ] **Phase R3-7: Final Verification & Report** (tsc, eslint, full playwright, no hex/rgb, screenshots, final report)
+
+
