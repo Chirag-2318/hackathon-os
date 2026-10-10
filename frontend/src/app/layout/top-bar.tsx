@@ -99,7 +99,7 @@ export function PanelHeader({ inRoom: inRoomProp = false, pageName = 'Home' }: P
             <Link to={`/app/room/${roomId}/overview`} className="text-ink-2 hover:text-ink transition-colors truncate max-w-[180px]">
               {roomTitle}
             </Link>
-            {subSection !== 'overview' && sectionMeta.group && (
+            {subSection !== 'overview' && sectionMeta.group && sectionMeta.group.toLowerCase() !== sectionMeta.label.toLowerCase() && (
               <>
                 <ChevronRight size={12} className="text-ink-3 shrink-0" />
                 <span className="text-ink-2 shrink-0">{sectionMeta.group}</span>

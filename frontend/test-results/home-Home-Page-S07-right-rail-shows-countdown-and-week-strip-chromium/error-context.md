@@ -14,14 +14,14 @@
 ```
 Error: expect(locator).toBeVisible() failed
 
-Locator: getByRole('heading', { name: 'This week' })
+Locator: getByText('until submission')
 Expected: visible
 Timeout: 5000ms
 Error: element(s) not found
 
 Call log:
-  - Expect "toBeVisible" getByRole('heading', { name: 'This week' }) with timeout 5000ms
-  - waiting for getByRole('heading', { name: 'This week' })
+  - Expect "toBeVisible" getByText('until submission') with timeout 5000ms
+  - waiting for getByText('until submission')
 
 ```
 
@@ -32,8 +32,11 @@ Call log:
   - navigation "Primary":
     - link "Home":
       - /url: /app/home
-    - link "My rooms 2":
+    - link "My rooms Create room 2":
       - /url: /app/rooms
+      - text: My rooms
+      - button "Create room"
+      - text: "2"
     - link "Playbooks":
       - /url: /app/playbooks
     - link "Tool directory":
@@ -44,64 +47,65 @@ Call log:
       - /url: /app/settings
   - link "Go Pro — unlock AI planning and auto-scheduling":
     - /url: /app/settings/billing
+    - img "Go Pro"
     - paragraph: Go Pro
     - paragraph: AI planning and auto-scheduling.
-  - button "Copy email": aarav@example.com
-  - paragraph: 09:38:54 PM IST
+  - button "Copy email": Aarav Mehta
+  - paragraph: 05:07:09 PM IST
 - main:
   - navigation "Breadcrumb": Workspace Home
   - button "Search tasks, docs, rules (Ctrl K)": Search tasks, docs, rules Ctrl K
-  - button "Notifications": "3"
-  - button "User menu": AM
+  - button "Notifications"
+  - button "User profile menu": AM
   - heading "Command palette" [level=2]
-  - paragraph: Search tasks, docs, rules, or run actions
-  - paragraph: Good morning, Aarav Mehta
-  - heading "Ready to build?" [level=1]
-  - text: Thursday, October 8
-  - heading "Active rooms" [level=2]
-  - text: "2"
-  - link "Campus Build Sprint 2026 Campus Sprint Progress 62 62% Aarav Mehta 18 tasks left":
-    - /url: /app/room/r-1/overview
-    - heading "Campus Build Sprint 2026" [level=3]
-    - text: Campus Sprint Progress
-    - progressbar
-    - text: 62% Aarav Mehta 18 tasks left
-  - 'link "Internal Round: Software Edition Internal Progress 30 30% Jane Doe 42 tasks left"':
-    - /url: /app/room/r-2/overview
-    - 'heading "Internal Round: Software Edition" [level=3]'
-    - text: Internal Progress
-    - progressbar
-    - text: 30% Jane Doe 42 tasks left
+  - paragraph: Search tasks, docs, rules, or jump to any page
+  - paragraph: Good evening, Aarav
+  - 'heading "Polish phase: record the demo and lock your submission" [level=1]'
+  - button "Campus Build Sprint 2026"
+  - text: Hour 39 of 48 Saturday, October 10 Submission closes DUE SOON 9 h 0 5 m left Fri, 9 Oct · 7:00 AM IST Plan Phase details and exit checkpoint info. Build Phase details and exit checkpoint info. Freeze Phase details and exit checkpoint info. Polish Phase details and exit checkpoint info. Submit Phase details and exit checkpoint info. Plan Build Freeze Polish Submit Demo rehearsed 3 times 1 / 3
+  - link "Open rehearsal":
+    - /url: /app/room/r-1/pitch/rehearse
+  - heading "Deadlines" [level=2]
+  - button "Upload demo video by 1:30 AM VIDEO Public link, max 2 minutes in 3h 30m"
+  - button "Review submission draft by 4:00 AM DRAFT Check text, track and prizes in 6h"
+  - button "Final submission by 7:00 AM SUBMIT All members added, links open in 9h 05m"
+  - text: / Submission checklist 5 of 9
+  - img
+  - heading "Your tasks" [level=2]
+  - text: 4 LEFT
+  - checkbox
+  - heading "Record the 90-second demo video" [level=3]
+  - text: DEMO ~45 min
+  - link "demo-script.md":
+    - /url: "#"
+  - button "Start"
+  - button "I'm blocked"
+  - button "Skip"
+  - text: Then
+  - checkbox
+  - text: Export final cut and upload DEMO in 3h
+  - checkbox
+  - text: Fix mobile layout on the results page FRONTEND
+  - checkbox
+  - text: "Update README with run steps DOCS / Quick actions Polish phase: 25%"
+  - img
+  - heading "Team workload" [level=2]
+  - button "This phase"
+  - text: 0 4 8 12 16 Aarav Ishita Sanjay Kabir Ishita is blocked on API deploy
+  - button "Help"
   - heading "Rooms you're in" [level=2]
-  - combobox "Filter rooms": Active
-  - button "Search rooms"
-  - button "Create room"
-  - button "Campus Build Sprint 2026 Aarav Mehta·Active 62 62%":
-    - paragraph: Campus Build Sprint 2026
-    - paragraph: Aarav Mehta·Active
-    - progressbar
-    - text: 62%
-  - 'button "Internal Round: Software Edition Jane Doe·Active 30 30%"':
-    - paragraph: "Internal Round: Software Edition"
-    - paragraph: Jane Doe·Active
-    - progressbar
-    - text: 30%
-  - complementary "Right rail":
-    - text: Until submission Due soon
-    - paragraph: 9h 05m
-    - text: Overall progress
-    - progressbar
-    - text: 68%
-    - row "Week calendar":
-      - cell "Sunday, October 4": Sun 4
-      - cell "Monday, October 5": Mon 5
-      - cell "Tuesday, October 6": Tue 6
-      - cell "Wednesday, October 7": Wed 7
-      - cell "Thursday, October 8": Thu 8
-      - cell "Friday, October 9": Fri 9
-      - cell "Saturday, October 10": Sat 10
-    - heading "Upcoming" [level=3]
-    - text: Freeze Submit
+  - button "Create new room"
+  - link "View all":
+    - /url: /app/rooms
+  - button "Hackathon Campus Build Sprint 2026 Build":
+    - text: Hackathon
+    - heading "Campus Build Sprint 2026" [level=3]
+    - text: Build
+  - 'button "INTERNAL Internal Round: Software Edition Build"':
+    - text: INTERNAL
+    - 'heading "Internal Round: Software Edition" [level=3]'
+    - text: Build
+- region "Notifications alt+T"
 ```
 
 # Test source
@@ -147,11 +151,11 @@ Call log:
   38 | 
   39 |   test('right rail shows countdown and week strip', async ({ page }) => {
   40 |     // Check right rail HeroPanel countdown
-  41 |     await expect(page.getByText('until submission')).toBeVisible();
+> 41 |     await expect(page.getByText('until submission')).toBeVisible();
+     |                                                      ^ Error: expect(locator).toBeVisible() failed
   42 | 
   43 |     // Check week strip
-> 44 |     await expect(page.getByRole('heading', { name: 'This week' })).toBeVisible();
-     |                                                                    ^ Error: expect(locator).toBeVisible() failed
+  44 |     await expect(page.getByRole('heading', { name: 'This week' })).toBeVisible();
   45 |     await expect(page.locator('[data-slot="week-strip"]')).toBeVisible();
   46 | 
   47 |     // Check upcoming items

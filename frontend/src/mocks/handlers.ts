@@ -49,6 +49,32 @@ export const handlers = [
     return HttpResponse.json(homeFixture);
   }),
 
+  http.get('/api/v1/rooms', async () => {
+    await delay(300);
+    return HttpResponse.json([overviewFixture]);
+  }),
+
+  http.post('/api/v1/rooms', async ({ request }) => {
+    await delay(400);
+    const body = (await request.json().catch(() => ({}))) as any;
+    const newRoom = {
+      id: 'r-' + Date.now().toString(36),
+      name: body.name || 'New Room',
+      description: body.description || '',
+      projectDescription: body.projectDescription || '',
+      templateId: body.templateId || 'pb-sih',
+      createdAt: new Date().toISOString(),
+      eventStart: body.eventStart || null,
+      eventEnd: body.eventEnd || null,
+      timezone: body.timezone || 'Asia/Kolkata',
+      ownerId: 'u-aarav',
+      memberIds: ['u-aarav'],
+      stage: 'brief',
+      stageDone: { brief: false, ideate: false, crowd: false, plan: false },
+    };
+    return HttpResponse.json(newRoom);
+  }),
+
   http.get('/api/v1/rooms/:roomId/overview', async () => {
     await delay(500);
     return HttpResponse.json(overviewFixture);

@@ -18,6 +18,8 @@ function MotionSync() {
   return null;
 }
 
+import { Toaster } from '@/components/ui/sonner';
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -25,6 +27,7 @@ function App() {
         <TooltipProvider delayDuration={300}>
           <MotionSync />
           <AppRouter />
+          <Toaster position="bottom-right" />
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

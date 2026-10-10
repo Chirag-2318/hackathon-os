@@ -9,6 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { isModuleHidden } from '@/config/featureFlags';
 import {
   BackArrowIcon,
   OverviewIcon,
@@ -36,8 +37,20 @@ import {
   GroupChevronIcon,
 } from '@/components/icons';
 import { InvitePopover } from '@/features/room/invite-popover';
-import { ChevronDown, Check } from 'lucide-react';
+import { ChevronDown, Check, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { roomService, ideaService, prepService, getCurrentRole } from '@/services';
+import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 interface RoomNavProps {
   roomId: string;
@@ -50,6 +63,7 @@ interface NavItemDef {
   path: string;
   icon: (props: { size: number; className?: string }) => React.ReactNode;
   badge?: () => React.ReactNode;
+  state?: 'done' | 'current' | 'upcoming';
 }
 
 interface NavGroupDef {
@@ -63,17 +77,38 @@ interface NavGroupDef {
 export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: homeData } = useHome();
   const { data: overviewData } = useRoomOverview(roomId);
 
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
+  const [unlockEarlyOpen, setUnlockEarlyOpen] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  const { data: roomData } = useQuery({
+    queryKey: ['room', roomId],
+    queryFn: () => roomService.getRoom(roomId),
+  });
+  const { data: ideasData = [] } = useQuery({
+    queryKey: ['ideas', roomId],
+    queryFn: () => ideaService.listIdeas(roomId),
+  });
+  const { data: prepData = [] } = useQuery({
+    queryKey: ['prep', roomId],
+    queryFn: () => prepService.getPrepItems(roomId),
+  });
+
+  const isLeader = getCurrentRole() === 'leader';
+  const isBuildUnlocked = roomData ? roomData.stage === 'build' : true;
+  const prepDone = prepData.filter((p) => p.done).length;
+  const prepTotal = prepData.length || 6;
+  const approvedIdeasCount = ideasData.filter((i) => i.status === 'approved').length;
 
   // Room details
   const rooms = homeData?.roomList ?? [];
   const currentRoom = rooms.find((r: any) => r.id === roomId) ?? {
     id: roomId,
-    title: 'Campus Build Sprint 2026',
+    title: roomData?.name || 'Campus Build Sprint 2026',
     meta: { name: 'Aarav Mehta' },
   };
 
@@ -94,8 +129,8 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
   const currentSubPath = location.pathname.replace(`/app/room/${roomId}`, '').replace(/^\//, '') || 'overview';
 
   // ── Groups definition ───────────────────────────────────────────
-  const GROUPS: NavGroupDef[] = React.useMemo(
-    () => [
+  const GROUPS: NavGroupDef[] = React.useMemo(() => {
+    const rawGroups: NavGroupDef[] = [
       {
         id: 'PLAN',
         label: 'Plan',
@@ -104,34 +139,43 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
         items: [
           {
             id: 'prep',
-            label: 'Pre-hackathon prep',
+            label: 'Prep',
             path: `/app/room/${roomId}/prep`,
             icon: (p) => <PrepIcon {...p} />,
-            badge: () => <span className="text-[10px] text-ink-3 font-mono">4/6</span>,
+            badge: () => <span className="text-[10px] text-ink-3 font-mono">{prepDone}/{prepTotal}</span>,
           },
           {
             id: 'brief',
             label: 'Brief',
             path: `/app/room/${roomId}/brief`,
             icon: (p) => <BriefIcon {...p} />,
+            state: roomData?.stageDone?.brief ? 'done' : roomData?.stage === 'brief' ? 'current' : 'upcoming',
           },
           {
             id: 'ideate',
             label: 'Ideate',
             path: `/app/room/${roomId}/ideate`,
             icon: (p) => <IdeateIcon {...p} />,
+            state: roomData?.stageDone?.ideate ? 'done' : roomData?.stage === 'ideate' ? 'current' : 'upcoming',
+            badge: approvedIdeasCount > 0 ? () => (
+              <span className="px-1.5 py-0.2 rounded-full bg-surface border border-border text-[10px] font-semibold text-ink tabular-nums">
+                {approvedIdeasCount}
+              </span>
+            ) : undefined,
           },
           {
             id: 'crowd-check',
             label: 'Crowd check',
             path: `/app/room/${roomId}/crowd-check`,
             icon: (p) => <CrowdCheckIcon {...p} />,
+            state: roomData?.stageDone?.crowd ? 'done' : roomData?.stage === 'crowd' ? 'current' : 'upcoming',
           },
           {
             id: 'plan',
             label: 'Plan',
             path: `/app/room/${roomId}/plan`,
             icon: (p) => <PlanIcon {...p} />,
+            state: roomData?.stageDone?.plan ? 'done' : roomData?.stage === 'plan' ? 'current' : 'upcoming',
           },
         ],
       },
@@ -262,9 +306,12 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
           },
         ],
       },
-    ],
-    [roomId, openTasks]
-  );
+    ];
+    return rawGroups.map((g) => ({
+      ...g,
+      items: g.items.filter((item) => !isModuleHidden(item.id)),
+    }));
+  }, [roomId, openTasks, roomData?.stage, roomData?.stageDone, approvedIdeasCount]);
 
   // Find which group contains the current route
   const activeGroupId = React.useMemo(() => {
@@ -434,21 +481,42 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
     },
   ];
 
-  const renderNavRow = (item: NavItemDef, isPinned: boolean = false) => {
+  const renderNavRow = (item: NavItemDef, isPinned: boolean = false, isLocked: boolean = false) => {
     const isActive =
       item.id === 'overview'
         ? currentSubPath === 'overview' || currentSubPath === ''
         : currentSubPath.startsWith(item.id);
 
+    const handleClick = (e: React.MouseEvent) => {
+      if (isLocked) {
+        e.preventDefault();
+        e.stopPropagation();
+        toast('Unlocks when the plan is complete', {
+          action: {
+            label: 'Go to Plan',
+            onClick: () => navigate(`/app/room/${roomId}/plan`),
+          },
+          cancel: isLeader
+            ? {
+                label: 'Unlock early',
+                onClick: () => setUnlockEarlyOpen(true),
+              }
+            : undefined,
+        });
+      }
+    };
+
     const rowContent = (
       <Link
         to={item.path}
+        onClick={handleClick}
         aria-current={isActive ? 'page' : undefined}
         className={cn(
           'group relative flex items-center rounded-[var(--r-control)] px-2.5 gap-2.5 w-full outline-none transition-colors duration-[150ms] cursor-pointer text-[14px] leading-[20px] font-medium',
           isPinned ? 'h-9' : 'h-[34px]',
           isActive ? 'bg-active text-ink font-semibold' : 'text-ink-2 hover:bg-hover hover:text-ink active:scale-[0.99]',
-          item.id === 'speed-mode' && !isActive && 'text-blue-700'
+          item.id === 'speed-mode' && !isActive && 'text-blue-700',
+          isLocked && 'opacity-60'
         )}
       >
         {/* Active shared highlight indicator */}
@@ -475,9 +543,19 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
           <span className="flex-1 truncate">{item.label}</span>
         )}
 
-        {/* Optional Badge */}
-        {!isCollapsed && item.badge && (
-          <div className="shrink-0 flex items-center">{item.badge()}</div>
+        {/* Optional Badge & State */}
+        {!isCollapsed && (
+          <div className="shrink-0 flex items-center gap-1.5 ml-auto">
+            {item.badge && item.badge()}
+            {item.state === 'done' && (
+              <span className="size-4 rounded-full bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 flex items-center justify-center">
+                <Check className="size-2.5 stroke-[3]" />
+              </span>
+            )}
+            {item.state === 'current' && (
+              <span className="size-2 rounded-full bg-blue-600 animate-pulse" />
+            )}
+          </div>
         )}
       </Link>
     );
@@ -511,13 +589,15 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
         <div className="flex flex-col gap-1.5 overflow-y-auto">
           {GROUPS.map((group) => {
             const isGroupActive = group.items.some((i) => currentSubPath.startsWith(i.id));
+            const isGroupLocked = group.id !== 'PLAN' && !isBuildUnlocked;
             return (
               <Popover key={group.id}>
                 <PopoverTrigger asChild>
                   <button
                     className={cn(
                       'group relative flex items-center justify-center size-8 rounded-[var(--r-control)] transition-colors cursor-pointer mx-auto',
-                      isGroupActive ? 'bg-active text-ink font-semibold' : 'text-ink-2 hover:bg-hover hover:text-ink'
+                      isGroupActive ? 'bg-active text-ink font-semibold' : 'text-ink-2 hover:bg-hover hover:text-ink',
+                      isGroupLocked && 'opacity-60'
                     )}
                     aria-label={group.label}
                   >
@@ -533,26 +613,13 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
                   sideOffset={12}
                   className="w-[220px] p-2 rounded-[20px] bg-card border border-border shadow-xl font-[var(--font-inter)] z-50"
                 >
-                  <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-ink-3 border-b border-border/50 mb-1">
-                    {group.label}
+                  <div className="flex items-center justify-between px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-ink-3 border-b border-border/50 mb-1">
+                    <span>{group.label}</span>
+                    {isGroupLocked && <Lock className="size-3 text-ink-3" />}
                   </div>
                   <div className="flex flex-col gap-0.5">
                     {group.items.map((item) => {
-                      const isActive = currentSubPath.startsWith(item.id);
-                      return (
-                        <Link
-                          key={item.id}
-                          to={item.path}
-                          className={cn(
-                            'group flex items-center gap-2.5 h-8 px-2 rounded-lg text-xs font-medium transition-colors',
-                            isActive ? 'bg-active text-ink font-semibold' : 'text-ink-2 hover:bg-hover hover:text-ink'
-                          )}
-                        >
-                          {item.icon({ size: 16 })}
-                          <span className="flex-1 truncate">{item.label}</span>
-                          {item.badge && item.badge()}
-                        </Link>
-                      );
+                      return renderNavRow(item, false, isGroupLocked);
                     })}
                   </div>
                 </PopoverContent>
@@ -586,6 +653,7 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
         {GROUPS.map((group) => {
           const isOpen = openGroup === group.id;
           const hasPhaseHint = isPhaseGroup(group);
+          const isGroupLocked = group.id !== 'PLAN' && !isBuildUnlocked;
 
           return (
             <div key={group.id} className="flex flex-col">
@@ -596,7 +664,8 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
                 aria-expanded={isOpen}
                 className={cn(
                   'flex items-center justify-between h-8 px-2.5 rounded-[var(--r-control)] transition-colors cursor-pointer text-ink-3 hover:text-ink hover:bg-hover/60',
-                  isOpen && 'text-ink font-semibold'
+                  isOpen && 'text-ink font-semibold',
+                  isGroupLocked && 'opacity-60'
                 )}
               >
                 <div className="flex items-center gap-2">
@@ -609,9 +678,13 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
                       title="Current phase"
                     />
                   )}
-                  <span className="text-[10px] px-1 rounded bg-surface border border-border text-ink-3 tabular-nums">
-                    {group.items.length}
-                  </span>
+                  {isGroupLocked ? (
+                    <Lock className="size-3 text-ink-3 shrink-0" />
+                  ) : (
+                    <span className="text-[10px] px-1 rounded bg-surface border border-border text-ink-3 tabular-nums">
+                      {group.items.length}
+                    </span>
+                  )}
                 </div>
 
                 <GroupChevronIcon
@@ -639,7 +712,7 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: idx * 0.025, duration: 0.2 }}
                       >
-                        {renderNavRow(item, false)}
+                        {renderNavRow(item, false, isGroupLocked)}
                       </motion.div>
                     ))}
                   </motion.div>
@@ -649,6 +722,38 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
           );
         })}
       </div>
+
+      {/* Unlock Early Confirm Dialog */}
+      <Dialog open={unlockEarlyOpen} onOpenChange={setUnlockEarlyOpen}>
+        <DialogContent className="max-w-[400px] rounded-[24px] p-6 bg-card border border-border">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-foreground">Skip planning?</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground mt-1">
+              You can still finish the plan later.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-6 flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setUnlockEarlyOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={async () => {
+                await roomService.updateRoom(roomId, { stage: 'build' });
+                queryClient.invalidateQueries({ queryKey: ['room', roomId] });
+                queryClient.invalidateQueries({ queryKey: ['rooms'] });
+                queryClient.invalidateQueries({ queryKey: ['home'] });
+                setUnlockEarlyOpen(false);
+                setOpenGroup('BUILD');
+                toast.success('Build phase unlocked early!');
+              }}
+              className="bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 font-semibold"
+            >
+              Unlock early
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

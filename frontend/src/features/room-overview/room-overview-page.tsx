@@ -10,7 +10,10 @@
  */
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useParams, Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { roomService } from '@/services';
+import { PlanningOverview } from './components/PlanningOverview';
 import { cn } from '@/lib/utils';
 import {
   Check, ChevronDown, ChevronRight, Flag, Link2, AlertCircle,
@@ -25,6 +28,24 @@ import {
   NOW_HOUR, NOW_ACTUAL_PCT, NOW_PLANNED_PCT, INVITE_LINK,
   type RoomMember, type Checkpoint, type RoomTask,
 } from './roomMock';
+import { getTasks, getPhases, getRoom, getRoomMembers, CURRENT_USER_ID } from '@/services/mockStore';
+import type { Task, BoardPhase } from '@/services/types';
+
+interface RoomOverviewContextValue {
+  roomId: string;
+  isDemo: boolean;
+  tasks: Task[];
+  phases: BoardPhase[];
+  room: any;
+}
+
+const RoomOverviewContext = React.createContext<RoomOverviewContextValue>({
+  roomId: 'r-1',
+  isDemo: true,
+  tasks: [],
+  phases: [],
+  room: null,
+});
 
 // ─── SHARED PRIMITIVES ────────────────────────────────────────────────────────
 
@@ -232,14 +253,18 @@ function FadeUp({ children, delay = 0, className }: {
 
 // ─── COMPONENT 1: PAGE HEADER ─────────────────────────────────────────────────
 function PageHeader() {
+  const { isDemo, room, phases } = React.useContext(RoomOverviewContext);
+  const title = !isDemo && room ? room.name : 'Campus Build Sprint 2026';
+  const phaseLabel = !isDemo && phases.length > 0 ? phases[0].name.replace(/^Phase\s*\d+:\s*/i, '').toUpperCase() : 'POLISH PHASE';
+
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <h1 className="text-[24px] font-[600] text-[#141414] tracking-[-0.02em] shrink-0">
-        Campus Build Sprint 2026
+        {title}
       </h1>
       <div className="flex items-center gap-2 flex-wrap">
         <TagChip label="CAMPUS" color="green" />
-        <TagChip label="POLISH PHASE" color="blue" />
+        <TagChip label={phaseLabel} color="blue" />
         <div className="h-[28px] rounded-full flex items-center gap-1.5 px-3 bg-[#F0F0F0] text-[#7A7A7E] text-[12px] font-[600] uppercase tracking-[0.02em] shrink-0">
           <Clock className="w-3.5 h-3.5" />
           Hour {ELAPSED_HOURS} of 48
@@ -251,6 +276,7 @@ function PageHeader() {
 
 // ─── COMPONENT 2: STATUS BAND ─────────────────────────────────────────────────
 function StatusBand() {
+  const { isDemo, tasks, phases } = React.useContext(RoomOverviewContext);
   const [mounted, setMounted] = useState(false);
   const [tickCounts, setTickCounts] = useState(0);
 
@@ -268,16 +294,28 @@ function StatusBand() {
     return () => clearTimeout(t);
   }, []);
 
+  const activePhases = (!isDemo && phases.length > 0)
+    ? phases.map(p => ({
+        label: p.name.replace(/^Phase\s*\d+:\s*/i, ''),
+        widthPct: p.endPct - p.startPct,
+      }))
+    : PHASES;
+
   // Calculate elapsed width for phase bar
   let elapsedWidth = 0;
-  for (let i = 0; i < CURRENT_PHASE_IDX; i++) elapsedWidth += PHASES[i].widthPct;
-  elapsedWidth += PHASES[CURRENT_PHASE_IDX].widthPct * (PHASE_PROGRESS_PCT / 100);
+  for (let i = 0; i < CURRENT_PHASE_IDX; i++) elapsedWidth += (activePhases[i]?.widthPct || 20);
+  elapsedWidth += (activePhases[CURRENT_PHASE_IDX]?.widthPct || 20) * (PHASE_PROGRESS_PCT / 100);
 
   // Stacked task bar widths
-  const taskTotal = TASKS_SUMMARY.open;
-  const toDoW = (TASKS_SUMMARY.toDo / taskTotal) * 100;
-  const ipW = (TASKS_SUMMARY.inProgress / taskTotal) * 100;
-  const blW = (TASKS_SUMMARY.blocked / taskTotal) * 100;
+  const openTasks = (!isDemo && tasks.length > 0) ? tasks.filter(t => t.status !== 'done') : [];
+  const taskTotal = (!isDemo && tasks.length > 0) ? (openTasks.length || 1) : TASKS_SUMMARY.open;
+  const toDoCount = (!isDemo && tasks.length > 0) ? tasks.filter(t => t.status === 'todo').length : TASKS_SUMMARY.toDo;
+  const inProgressCount = (!isDemo && tasks.length > 0) ? tasks.filter(t => t.status === 'inprogress').length : TASKS_SUMMARY.inProgress;
+  const blockedCount = (!isDemo && tasks.length > 0) ? tasks.filter(t => t.flagged || t.status === 'blocked').length : TASKS_SUMMARY.blocked;
+
+  const toDoW = (toDoCount / taskTotal) * 100;
+  const ipW = (inProgressCount / taskTotal) * 100;
+  const blW = (blockedCount / taskTotal) * 100;
 
   return (
     <SectionCard>
@@ -548,6 +586,7 @@ function NeedsAttention() {
 
 // ─── COMPONENT 4: CHECKPOINTS ─────────────────────────────────────────────────
 function CheckpointsCard() {
+  const { isDemo, phases: flowPhases } = React.useContext(RoomOverviewContext);
   const [view, setView] = useState<'remaining' | 'all'>('remaining');
   const [doneExpanded, setDoneExpanded] = useState(false);
   const [railMounted, setRailMounted] = useState(false);
@@ -557,15 +596,26 @@ function CheckpointsCard() {
     return () => clearTimeout(t);
   }, []);
 
-  const done = CHECKPOINTS.filter(c => c.status === 'done');
-  const rest = CHECKPOINTS.filter(c => c.status !== 'done');
+  const activeCheckpoints = (!isDemo && flowPhases.length > 0)
+    ? flowPhases.map((p, idx) => ({
+        id: p.id,
+        label: p.exitCheckpoint || p.name,
+        status: (idx === 0 ? 'done' : idx === 1 ? 'current' : 'upcoming') as 'done' | 'current' | 'upcoming',
+        timeLabel: `Phase ${idx}`,
+      }))
+    : CHECKPOINTS;
+
+  const done = activeCheckpoints.filter(c => c.status === 'done');
+  const rest = activeCheckpoints.filter(c => c.status !== 'done');
+  const passedCount = done.length;
+  const totalCount = activeCheckpoints.length;
 
   const shown = view === 'all'
-    ? CHECKPOINTS
+    ? activeCheckpoints
     : (doneExpanded ? [...done, ...rest] : rest);
 
   // Map for rail drawing
-  const allForRail = view === 'all' ? CHECKPOINTS : (doneExpanded ? [...done, ...rest] : rest);
+  const allForRail = view === 'all' ? activeCheckpoints : (doneExpanded ? [...done, ...rest] : rest);
 
   return (
     <SectionCard>
@@ -573,7 +623,7 @@ function CheckpointsCard() {
         <div className="flex items-center gap-2">
           <span className="text-[15px] font-[600] text-[#141414]">Checkpoints</span>
           <div className="h-5 min-w-[20px] px-1.5 rounded-full bg-[#F0F0F0] text-[11px] font-[600] text-[#7A7A7E] flex items-center justify-center tabular-nums">
-            {CHECKPOINTS_PASSED} / {CHECKPOINTS_TOTAL}
+            {passedCount} / {totalCount}
           </div>
         </div>
         <SegmentedControl
@@ -602,7 +652,7 @@ function CheckpointsCard() {
               <Check className="w-3 h-3 text-white" strokeWidth={3} />
             </div>
             <span className="text-[13px] text-[#8A8A8E] font-[500] flex-1 text-left">
-              {CHECKPOINTS_PASSED} checkpoints done
+              {passedCount} checkpoints done
             </span>
             <ChevronRight
               className={cn('w-4 h-4 text-[#B4B4B8] transition-transform duration-200', doneExpanded && 'rotate-90')}
@@ -736,12 +786,44 @@ const ALL_ROOM_TASKS: RoomTask[] = [
 ];
 
 function MyTasksCard() {
+  const { isDemo, tasks: flowTasks } = React.useContext(RoomOverviewContext);
   const [taskView, setTaskView] = useState<'mine' | 'all'>('mine');
-  const [tasks, setTasks] = useState<RoomTask[]>(MY_TASKS);
+
+  const userRoomTasks: RoomTask[] = (!isDemo && flowTasks.length > 0)
+    ? flowTasks
+        .filter(t => t.assigneeId === CURRENT_USER_ID && t.status !== 'done')
+        .slice(0, 4)
+        .map(t => ({
+          id: t.id,
+          title: t.summary,
+          group: 'NOW' as const,
+          tagLabel: (t.role || 'FRONTEND').toUpperCase(),
+          tagColor: 'blue' as const,
+          timeEstimate: t.estimateMin ? `${t.estimateMin}m` : '45m',
+          completed: false,
+        }))
+    : MY_TASKS;
+
+  const allRoomTasks: RoomTask[] = (!isDemo && flowTasks.length > 0)
+    ? flowTasks
+        .filter(t => t.status !== 'done')
+        .slice(0, 10)
+        .map(t => ({
+          id: t.id,
+          title: t.summary,
+          group: 'TODAY' as const,
+          tagLabel: (t.role || 'TASK').toUpperCase(),
+          tagColor: 'green' as const,
+          timeEstimate: t.estimateMin ? `${t.estimateMin}m` : '45m',
+          completed: false,
+        }))
+    : ALL_ROOM_TASKS;
+
+  const [tasks, setTasks] = useState<RoomTask[]>(userRoomTasks);
 
   useEffect(() => {
-    setTasks(taskView === 'all' ? ALL_ROOM_TASKS : MY_TASKS);
-  }, [taskView]);
+    setTasks(taskView === 'all' ? allRoomTasks : userRoomTasks);
+  }, [taskView, flowTasks, isDemo]);
 
   const count = tasks.filter(t => !t.completed).length;
 
@@ -1026,10 +1108,29 @@ function ProjectSnapshot() {
 
 // ─── COMPONENT 8: TEAM PANEL ──────────────────────────────────────────────────
 function TeamPanel() {
+  const { isDemo, roomId, tasks: flowTasks } = React.useContext(RoomOverviewContext);
   const [teamView, setTeamView] = useState<'members' | 'workload' | 'skills'>('members');
   const [inviteText, setInviteText] = useState('');
   const [copied, setCopied] = useState(false);
   const [pendingInvites, setPendingInvites] = useState<string[]>([]);
+
+  const activeRoster = (!isDemo && roomId)
+    ? getRoomMembers(roomId).map((m) => {
+        const assigned = flowTasks.filter(t => t.assigneeId === m.id);
+        const done = assigned.filter(t => t.status === 'done');
+        return {
+          id: m.id,
+          firstName: m.displayName.split(' ')[0],
+          lastName: m.displayName.split(' ').slice(1).join(' ') || '',
+          initials: m.initials,
+          avatarColor: m.avatarColor,
+          role: m.roleTags?.[0] || 'Engineer',
+          status: 'working' as const,
+          tasksDone: done.length,
+          tasksExpected: Math.max(assigned.length, 1),
+        };
+      })
+    : ROSTER;
 
   const handleInvite = () => {
     if (!inviteText.trim()) return;
@@ -1099,7 +1200,7 @@ function TeamPanel() {
 
           {/* Member rows */}
           <div className="px-5 pb-2">
-            {ROSTER.map(member => (
+            {activeRoster.map(member => (
               <MemberRow key={member.id} member={member} />
             ))}
             {pendingInvites.map((email, i) => (
@@ -1147,14 +1248,14 @@ function TeamPanel() {
             ))}
           </div>
           <div className="relative z-10">
-            {ROSTER.map((member, i) => (
+            {activeRoster.map((member, i) => (
               <PairedBarRow
                 key={member.id}
                 label={member.firstName}
                 hue={hueMap[i % hueMap.length]}
                 doneValue={member.tasksDone}
                 expectedValue={member.tasksExpected}
-                maxValue={16}
+                maxValue={Math.max(16, ...activeRoster.map(m => m.tasksExpected))}
                 status={member.status}
               />
             ))}
@@ -1431,6 +1532,10 @@ function ProgressVsPlan() {
 
 // ─── ROOT PAGE ────────────────────────────────────────────────────────────────
 export function RoomOverviewPage() {
+  const { roomId, id } = useParams<{ roomId?: string; id?: string }>();
+  const activeRoomId = roomId || id || 'r-1';
+  const [showSuccessBanner, setShowSuccessBanner] = useState(true);
+
   const outletContext = useOutletContext<{ setRightRail: (node: React.ReactNode) => void } | null>();
 
   React.useLayoutEffect(() => {
@@ -1439,42 +1544,77 @@ export function RoomOverviewPage() {
     }
   }, [outletContext]);
 
+  const { data: room } = useQuery({
+    queryKey: ['room', activeRoomId],
+    queryFn: () => roomService.getRoom(activeRoomId),
+  });
+
+  // If stage is before build, render the Planning variant
+  if (room && room.stage !== 'build') {
+    return <PlanningOverview roomId={activeRoomId} />;
+  }
+
+  const isDemo = activeRoomId === 'r-1';
+  const flowTasks = isDemo ? [] : getTasks(activeRoomId);
+  const flowPhases = isDemo ? [] : getPhases(activeRoomId);
+
   return (
-    <div
-      className="px-6 pb-8 max-w-[1280px] mx-auto"
-      style={{ paddingTop: 16 }}
-    >
-      {/* Page Header */}
-      <FadeUp delay={0}>
-        <div className="mb-4">
-          <PageHeader />
-        </div>
-      </FadeUp>
+    <RoomOverviewContext.Provider value={{ roomId: activeRoomId, isDemo, tasks: flowTasks, phases: flowPhases, room }}>
+      <div
+        className="px-6 pb-8 max-w-[1280px] mx-auto"
+        style={{ paddingTop: 16 }}
+      >
+        {/* Build Phase Live Success Row */}
+        {room?.stageDone?.plan && showSuccessBanner && (
+          <div className="mb-4 flex items-center justify-between rounded-2xl bg-emerald-500/10 border border-emerald-500/20 px-4 py-2.5 text-xs text-emerald-800 dark:text-emerald-300">
+            <div className="flex items-center gap-2">
+              <Check className="size-4 text-emerald-600 shrink-0" />
+              <span>Build phase is live. Your plan created 9 docs and 38 tasks.</span>
+              <Link to={`/app/room/${activeRoomId}/board`} className="font-semibold underline ml-1 hover:opacity-80">
+                View board &rarr;
+              </Link>
+            </div>
+            <button
+              onClick={() => setShowSuccessBanner(false)}
+              className="text-muted-foreground hover:text-foreground cursor-pointer p-1"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        )}
 
-      {/* Status Band */}
-      <FadeUp delay={50}>
-        <div className="mb-4">
-          <StatusBand />
-        </div>
-      </FadeUp>
+        {/* Page Header */}
+        <FadeUp delay={0}>
+          <div className="mb-4">
+            <PageHeader />
+          </div>
+        </FadeUp>
 
-      {/* Two-column layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
-        {/* LEFT STACK — 7 cols */}
-        <div className="xl:col-span-7 flex flex-col gap-4">
-          <FadeUp delay={100}><NeedsAttention /></FadeUp>
-          <FadeUp delay={150}><CheckpointsCard /></FadeUp>
-          <FadeUp delay={200}><MyTasksCard /></FadeUp>
-          <FadeUp delay={250}><RecentActivity /></FadeUp>
-        </div>
+        {/* Status Band */}
+        <FadeUp delay={50}>
+          <div className="mb-4">
+            <StatusBand />
+          </div>
+        </FadeUp>
 
-        {/* RIGHT STACK — 5 cols */}
-        <div className="xl:col-span-5 flex flex-col gap-4">
-          <FadeUp delay={100}><ProjectSnapshot /></FadeUp>
-          <FadeUp delay={150}><TeamPanel /></FadeUp>
-          <FadeUp delay={200}><ProgressVsPlan /></FadeUp>
+        {/* Two-column layout */}
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+          {/* LEFT STACK — 7 cols */}
+          <div className="xl:col-span-7 flex flex-col gap-4">
+            <FadeUp delay={100}><NeedsAttention /></FadeUp>
+            <FadeUp delay={150}><CheckpointsCard /></FadeUp>
+            <FadeUp delay={200}><MyTasksCard /></FadeUp>
+            <FadeUp delay={250}><RecentActivity /></FadeUp>
+          </div>
+
+          {/* RIGHT STACK — 5 cols */}
+          <div className="xl:col-span-5 flex flex-col gap-4">
+            <FadeUp delay={100}><ProjectSnapshot /></FadeUp>
+            <FadeUp delay={150}><TeamPanel /></FadeUp>
+            <FadeUp delay={200}><ProgressVsPlan /></FadeUp>
+          </div>
         </div>
       </div>
-    </div>
+    </RoomOverviewContext.Provider>
   );
 }

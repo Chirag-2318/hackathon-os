@@ -7,10 +7,11 @@
  *         Crowdedness meter, Notes). Footer note verbatim. Row CRUD.
  *         No aggregated-choice column (deferred). Horizontal scroll <768px.
  */
-import { useState, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchCrowdCheck, addCrowdRow, updateCrowdRow, deleteCrowdRow } from './api/crowd-api';
+import { crowdService, roomService, getCurrentRole } from '@/services';
 import { useIsOnline } from '@/shared/hooks/use-is-online';
 import { Banner } from '@/components/primitives/banner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -22,7 +23,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { MoreHorizontal, Plus, RefreshCw } from 'lucide-react';
+import { MoreHorizontal, Plus, RefreshCw, AlertCircle, ChevronRight } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { Crowdedness, CrowdRow } from './api/types';
 
@@ -183,13 +185,30 @@ function NumberCell({ value, onCommit, disabled }: NumberCellProps) {
 export function CrowdCheckPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const id = roomId ?? 'unknown';
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isOnline = useIsOnline();
+  const isLeader = getCurrentRole() === 'leader';
+
+  const { data: room } = useQuery({
+    queryKey: ['room', id],
+    queryFn: () => roomService.getRoom(id),
+  });
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['crowd-check', id],
     queryFn: () => fetchCrowdCheck(id),
   });
+
+  useEffect(() => {
+    if (id && id !== 'unknown' && room?.stageDone?.ideate && (!data?.rows || data.rows.length === 0)) {
+      crowdService.prefillFromApprovedIdeas(id).then((newRows) => {
+        if (newRows.length > 0) {
+          queryClient.invalidateQueries({ queryKey: ['crowd-check', id] });
+        }
+      });
+    }
+  }, [id, room?.stageDone?.ideate, data?.rows?.length, queryClient]);
 
   const addMutation = useMutation({
     mutationFn: () => addCrowdRow(id),
@@ -252,6 +271,21 @@ export function CrowdCheckPage() {
         <Banner variant="warning">
           Offline — table is read-only while offline.
         </Banner>
+      )}
+
+      {room && !room.stageDone?.ideate && (
+        <div className="flex items-center justify-between px-4 py-2.5 rounded-card bg-amber-500/10 border border-amber-500/20 text-ink">
+          <div className="flex items-center gap-2 text-caption font-medium text-amber-700 dark:text-amber-400">
+            <AlertCircle className="size-4 shrink-0" />
+            <span>Finish ideation first to pull in approved ideas into your crowd check.</span>
+          </div>
+          <Link
+            to={`/app/room/${id}/ideate`}
+            className="text-caption font-semibold text-lav-600 hover:text-lav-700 underline underline-offset-2 flex items-center gap-1"
+          >
+            Go to Ideate <ChevronRight className="size-3.5" />
+          </Link>
+        </div>
       )}
 
       <div>
@@ -375,6 +409,54 @@ export function CrowdCheckPage() {
       <p className="text-caption text-ink-muted">
         Popularity is not quality. Choose knowingly.
       </p>
+
+      {/* Sticky footer bar */}
+      <div className="sticky bottom-0 -mx-6 -mb-12 mt-6 px-6 py-4 bg-surface/95 backdrop-blur border-t border-border flex items-center justify-between z-10">
+        <div className="text-caption text-ink-muted">
+          Crowdedness is a heuristic, not a measurement.
+        </div>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              await crowdService.skipToPlan(id);
+              queryClient.invalidateQueries({ queryKey: ['room', id] });
+              navigate(`/app/room/${id}/plan`);
+            }}
+          >
+            Skip
+          </Button>
+
+          {isLeader ? (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={async () => {
+                await crowdService.continueToPlan(id);
+                queryClient.invalidateQueries({ queryKey: ['room', id] });
+                toast.success('Moved to Plan stage');
+                navigate(`/app/room/${id}/plan`);
+              }}
+            >
+              Continue to Plan
+              <ChevronRight className="size-4 ml-1" />
+            </Button>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button variant="default" size="sm" disabled>
+                    Continue to Plan
+                    <ChevronRight className="size-4 ml-1" />
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>Only the leader can do this</TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

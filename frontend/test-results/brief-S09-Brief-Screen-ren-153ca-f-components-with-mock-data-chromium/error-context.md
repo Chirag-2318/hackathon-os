@@ -29,37 +29,55 @@ Call log:
 - complementary "Primary navigation":
   - text: Hackathon OS
   - button "Collapse sidebar" [expanded]: Collapse
-  - navigation "Primary":
-    - link "Home":
-      - /url: /app/home
-    - link "My rooms 2":
-      - /url: /app/rooms
-    - link "Playbooks":
-      - /url: /app/playbooks
-    - link "Tool directory":
-      - /url: /app/tools
-    - link "Portfolio":
-      - /url: /app/portfolio
-    - link "Settings":
-      - /url: /app/settings
-  - link "Go Pro — unlock AI planning and auto-scheduling":
-    - /url: /app/settings/billing
-    - paragraph: Go Pro
-    - paragraph: AI planning and auto-scheduling.
-  - button "Copy email": aarav@example.com
-  - paragraph: 09:38:40 PM IST
+  - link "All rooms":
+    - /url: /app/rooms
+  - button "Switch room":
+    - text: CB Campus Build Sprint 2026
+    - paragraph: Polish · 09:05
+  - button "Invite teammates"
+  - link "Overview":
+    - /url: /app/room/r-1/overview
+  - link "Team":
+    - /url: /app/room/r-1/team
+  - link "Speed mode Crunch time active":
+    - /url: /speed-mode/r-1
+    - text: Speed mode
+  - button "Plan 3" [expanded]
+  - link "Brief":
+    - /url: /app/room/r-1/brief
+  - link "Ideate":
+    - /url: /app/room/r-1/ideate
+  - link "Plan":
+    - /url: /app/room/r-1/plan
+  - button "Build 3"
+  - button "Tech 3"
+  - button "Present Current phase 5": Present 5
+  - button "Review 2"
+  - paragraph: 05:05:47 PM IST
 - main:
-  - navigation "Breadcrumb": Workspace Overview
+  - navigation "Breadcrumb":
+    - link "My rooms":
+      - /url: /app/rooms
+    - link "Campus Build Sprint 2026":
+      - /url: /app/room/r-1/overview
+    - text: Plan Brief
   - button "Search tasks, docs, rules (Ctrl K)": Search tasks, docs, rules Ctrl K
-  - button "Notifications": "3"
-  - button "User menu": AM
+  - button "Notifications"
+  - button "User profile menu": AM
   - heading "Command palette" [level=2]
-  - paragraph: Search tasks, docs, rules, or run actions
-  - heading "Brief" [level=1]
-  - paragraph: Every rule, deadline, and criterion in one confirmed place.
-  - heading "Paste the event page text" [level=3]
-  - paragraph: We'll extract the rules and deadlines automatically.
-  - button "Enter manually"
+  - paragraph: Search tasks, docs, rules, or jump to any page
+  - heading "Hackathon Brief" [level=1]
+  - text: NOT ADDED
+  - paragraph: Every rule, rubric weight, and deadline in one verified source of truth.
+  - button "Link"
+  - button "Upload PDF"
+  - button "Write it"
+  - text: Hackathon announcement URL
+  - textbox "https://devpost.com/software/example or https://sih.gov.in"
+  - button "Fetch" [disabled]
+  - text: "Auto-parse is a Pro feature. Free: use the AI chat option."
+  - button "Use an AI chat instead →"
+- region "Notifications alt+T"
 ```
 
 # Test source

@@ -1,119 +1,143 @@
-import * as React from 'react';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Lock, FileText, ArrowRight } from 'lucide-react';
+import { Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
+import { getCurrentRole } from '@/services/mockStore';
 
-const PLAN_FILES = [
-  'PRD.md',
-  'PROBLEM.md',
-  'TECH_STACK.md',
-  'PHASES.md',
-  'MVP.md',
-  'CUT_LIST.md',
-  'RISKS.md',
-  'DEMO_SCRIPT.md',
-  'DECISIONS.md'
-];
+export interface PlanLockedViewProps {
+  roomId: string;
+  docsCount?: number;
+  tasksCount?: number;
+  phasesCount?: number;
+  onEnterBuild: () => Promise<void>;
+  isEnteringBuild?: boolean;
+}
 
-export function PlanLockedView({ roomId }: { roomId: string }) {
-  const [locked, setLocked] = useState(false);
-  const navigate = useNavigate();
+export function PlanLockedView({
+  roomId,
+  docsCount = 9,
+  tasksCount = 38,
+  phasesCount = 5,
+  onEnterBuild,
+  isEnteringBuild = false,
+}: PlanLockedViewProps) {
+  const isLeader = getCurrentRole() === 'leader';
 
-  // M06 Lock Animation
-  // "The nine plan-file rows appear one by one (60 ms stagger, max 8 shown then the ninth with the rest)"
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.06,
-        delayChildren: 0.1
-      }
-    }
-  };
+  // Sequence state: index of the current active/completed building row
+  // 0: Row 0 spinning
+  // 1: Row 0 done, Row 1 spinning
+  // 2: Row 1 done, Row 2 spinning
+  // 3: Row 2 done, Row 3 spinning
+  // 4: All rows done, show success block
+  const [sequenceStep, setSequenceStep] = useState(0);
 
-  const itemVariants = {
-    hidden: { opacity: 0, y: 10 },
-    show: { opacity: 1, y: 0 }
-  };
+  useEffect(() => {
+    const timers = [
+      setTimeout(() => setSequenceStep(1), 400),
+      setTimeout(() => setSequenceStep(2), 800),
+      setTimeout(() => setSequenceStep(3), 1250),
+      setTimeout(() => setSequenceStep(4), 1750),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  const buildRows = [
+    { label: `Writing ${docsCount} documents` },
+    { label: `Creating ${phasesCount} phases` },
+    { label: `Creating ${tasksCount} tasks on the board` },
+    { label: `Assigning tasks by role` },
+  ];
 
   return (
-    <div className="flex flex-col items-center justify-center py-12 max-w-2xl mx-auto w-full">
-      <h2 className="text-h2 text-ink mb-2">Review your plan</h2>
-      <p className="text-body text-ink-muted mb-8 text-center">
-        The following files have been generated and are ready to be saved to your docs vault.
-      </p>
-
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="show"
-        className="w-full bg-surface-raised border border-border rounded-xl p-6 shadow-sm mb-8"
-      >
-        <div className="grid grid-cols-2 gap-4">
-          {PLAN_FILES.map((file, i) => (
-            <motion.div
-              key={file}
-              variants={itemVariants}
-              className="flex items-center gap-3 bg-surface p-3 rounded-lg border border-border"
-            >
-              <div className="flex size-6 items-center justify-center rounded-full bg-success-fill/20 text-success-text">
-                {/* Check draws in */}
-                <motion.div
-                  initial={{ pathLength: 0 }}
-                  animate={{ pathLength: 1 }}
-                  transition={{ duration: 0.3, delay: 0.1 + i * 0.06 }}
-                >
-                  <Check className="size-3" strokeWidth={3} />
-                </motion.div>
-              </div>
-              <FileText className="size-4 text-ink-muted" />
-              <span className="text-sm font-medium text-ink">{file}</span>
-            </motion.div>
-          ))}
+    <motion.div
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.24 }}
+      className="w-full max-w-xl mx-auto my-auto"
+    >
+      <div className="rounded-[24px] bg-card border border-border shadow-xs p-8 flex flex-col gap-6">
+        <div>
+          <h2 className="text-lg font-bold text-foreground">Building your workspace</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Transforming validated plan specifications into active sprint assets.
+          </p>
         </div>
-      </motion.div>
 
-      <AnimatePresence mode="wait">
-        {!locked ? (
-          <motion.div
-            key="lock-button"
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
-          >
-            <Button
-              variant="default"
-              size="lg"
-              className="w-48 justify-center"
-              onClick={() => setLocked(true)}
+        {/* 4 Staggered Construction Rows */}
+        <div className="flex flex-col gap-3 py-2">
+          {buildRows.map((row, idx) => {
+            const isVisible = sequenceStep >= idx;
+            const isDone = sequenceStep > idx;
+
+            if (!isVisible) return null;
+
+            return (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className="flex items-center gap-3 text-sm py-1"
+              >
+                <div className="size-6 rounded-full flex items-center justify-center shrink-0">
+                  {isDone ? (
+                    <div className="size-6 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                      <Check className="size-3.5 stroke-[3]" />
+                    </div>
+                  ) : (
+                    <Loader2 className="size-4 animate-spin text-blue-600" />
+                  )}
+                </div>
+                <span className={isDone ? 'font-medium text-foreground' : 'text-muted-foreground'}>
+                  {row.label}
+                </span>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        {/* Success Block (Appears after all 4 rows finish) */}
+        <AnimatePresence>
+          {sequenceStep >= 4 && (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="pt-6 border-t border-border/60 flex flex-col items-center text-center gap-4"
             >
-              Lock plan
-            </Button>
-          </motion.div>
-        ) : (
-          <motion.div
-            key="success-seal"
-            initial={{ scale: 0.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: 'spring', bounce: 0.3, duration: 0.5 }}
-            className="flex flex-col items-center gap-6"
-          >
-            <div className="flex items-center gap-3 text-success-text font-bold text-2xl bg-success-fill/10 px-6 py-3 rounded-full border border-success-fill/30">
-              <Lock className="size-6" />
-              Plan Locked
-            </div>
-            <Button
-              variant="secondary"
-              onClick={() => navigate(`/app/room/${roomId}/docs`)}
-              className="flex items-center gap-2"
-            >
-              Go to Docs Vault <ArrowRight className="size-4" />
-            </Button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+              <div className="size-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 flex items-center justify-center">
+                <Check className="size-6 stroke-[3]" />
+              </div>
+
+              <div>
+                <h3 className="text-base font-bold text-foreground">Plan complete</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Your workspace is ready.</p>
+              </div>
+
+              {isLeader ? (
+                <Button
+                  onClick={onEnterBuild}
+                  disabled={isEnteringBuild}
+                  className="h-10 px-6 rounded-xl bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 font-semibold text-xs shadow-xs animate-pulse"
+                >
+                  {isEnteringBuild ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="size-3.5 animate-spin" /> Unlocking build phase...
+                    </span>
+                  ) : (
+                    'Enter build phase →'
+                  )}
+                </Button>
+              ) : (
+                <div className="px-4 py-2 rounded-xl bg-muted text-xs text-muted-foreground font-medium">
+                  Waiting for the leader to unlock build phase
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.div>
   );
 }

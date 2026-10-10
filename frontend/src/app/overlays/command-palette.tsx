@@ -1,6 +1,9 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useKeyboardShortcut } from '@/shared/hooks/use-keyboard-shortcut';
 import { useOverlay } from '@/app/providers/overlay-store';
+import { isModuleHidden } from '@/config/featureFlags';
+import { getTasks } from '@/services/mockStore';
+import { IssueTypeIcon, StatusLozenge } from '@/features/build/ui';
 import {
   Command,
   CommandDialog,
@@ -152,13 +155,15 @@ export function CommandPaletteOverlay() {
                   <TeamIcon size={18} className="text-ink-2" />
                   <span>Team roster & charter</span>
                 </CommandItem>
-                <CommandItem
-                  onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/prep`))}
-                  className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
-                >
-                  <PrepIcon size={18} className="text-ink-2" />
-                  <span>Pre-hackathon prep</span>
-                </CommandItem>
+                {!isModuleHidden('prep') && (
+                  <CommandItem
+                    onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/prep`))}
+                    className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
+                  >
+                    <PrepIcon size={18} className="text-ink-2" />
+                    <span>Pre-hackathon prep</span>
+                  </CommandItem>
+                )}
                 <CommandItem
                   onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/brief`))}
                   className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
@@ -173,13 +178,15 @@ export function CommandPaletteOverlay() {
                   <IdeateIcon size={18} className="text-ink-2" />
                   <span>Ideate & voting</span>
                 </CommandItem>
-                <CommandItem
-                  onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/crowd-check`))}
-                  className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
-                >
-                  <CrowdCheckIcon size={18} className="text-ink-2" />
-                  <span>Crowd check</span>
-                </CommandItem>
+                {!isModuleHidden('crowd-check') && (
+                  <CommandItem
+                    onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/crowd-check`))}
+                    className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
+                  >
+                    <CrowdCheckIcon size={18} className="text-ink-2" />
+                    <span>Crowd check</span>
+                  </CommandItem>
+                )}
                 <CommandItem
                   onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/plan`))}
                   className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
@@ -194,13 +201,15 @@ export function CommandPaletteOverlay() {
                   <BoardIcon size={18} className="text-ink-2" />
                   <span>Board (Kanban)</span>
                 </CommandItem>
-                <CommandItem
-                  onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/schedule`))}
-                  className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
-                >
-                  <ScheduleIcon size={18} className="text-ink-2" />
-                  <span>Schedule & checkpoints</span>
-                </CommandItem>
+                {!isModuleHidden('schedule') && (
+                  <CommandItem
+                    onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/schedule`))}
+                    className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
+                  >
+                    <ScheduleIcon size={18} className="text-ink-2" />
+                    <span>Schedule & checkpoints</span>
+                  </CommandItem>
+                )}
                 <CommandItem
                   onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/mvp`))}
                   className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
@@ -287,6 +296,34 @@ export function CommandPaletteOverlay() {
                 </CommandItem>
               </CommandGroup>
               <CommandSeparator className="my-1.5" />
+
+              {/* Tasks Group (search by key & summary) */}
+              {(() => {
+                const roomTasks = getTasks(roomId);
+                if (!roomTasks || roomTasks.length === 0) return null;
+                return (
+                  <>
+                    <CommandGroup heading="Tasks">
+                      {roomTasks.slice(0, 20).map((task) => (
+                        <CommandItem
+                          key={task.id}
+                          value={`${task.key} ${task.summary}`}
+                          onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/board?task=${task.key}`))}
+                          className="h-10 px-3 rounded-[var(--r-control)] flex items-center justify-between gap-3 cursor-pointer text-sm font-medium"
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <IssueTypeIcon type="task" isDone={task.status === 'done'} />
+                            <span className="font-mono text-xs text-muted-foreground shrink-0">{task.key}</span>
+                            <span className="truncate">{task.summary}</span>
+                          </div>
+                          <StatusLozenge status={task.status} />
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                    <CommandSeparator className="my-1.5" />
+                  </>
+                );
+              })()}
             </>
           )}
 

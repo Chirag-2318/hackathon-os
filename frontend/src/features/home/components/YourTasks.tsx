@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { TagChip, TimeChip, InlineHighlight, TrayCard, Checkbox } from './HomeDesignSystem';
 import { mockYourTasks, type Task } from '../homeMock';
+import { getRooms, getTasks, CURRENT_USER_ID } from '@/services/mockStore';
+import { boardService } from '@/services/boardService';
 
 function HeroTask({ task, onComplete }: { task: Task; onComplete: () => void }) {
   const [started, setStarted] = useState(false);
@@ -131,14 +133,37 @@ function CompactTaskRow({ task, onComplete }: { task: Task; onComplete: () => vo
 }
 
 export function YourTasks() {
-  const [tasks, setTasks] = useState(mockYourTasks);
-  const [tasksLeft, setTasksLeft] = useState(18);
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    const rooms = getRooms();
+    const activeRoom = Object.values(rooms).find(r => r.stage === 'build');
+    if (activeRoom) {
+      const allTasks = getTasks(activeRoom.id);
+      const userTasks = allTasks.filter(t => t.assigneeId === CURRENT_USER_ID && t.status !== 'done');
+      if (userTasks.length > 0) {
+        return userTasks.slice(0, 4).map((t, idx) => ({
+          id: t.id,
+          title: t.summary,
+          tagLabel: t.role || 'Sprint',
+          tagColor: (idx === 0 ? 'amber' : 'neutral') as any,
+          timeEstimate: t.estimateMin ? `${t.estimateMin}m` : '45m',
+          isHero: idx === 0,
+        }));
+      }
+    }
+    return mockYourTasks;
+  });
+  const [tasksLeft, setTasksLeft] = useState(() => tasks.length);
   const [progress, setProgress] = useState(25);
 
   const handleComplete = (taskId: string) => {
     setTasks(prev => prev.filter(t => t.id !== taskId));
     setTasksLeft(prev => Math.max(0, prev - 1));
     setProgress(prev => Math.min(100, prev + 2)); // Mock progress bump
+    const rooms = getRooms();
+    const activeRoom = Object.values(rooms).find(r => r.stage === 'build');
+    if (activeRoom) {
+      boardService.updateTaskStatus(activeRoom.id, taskId, 'done');
+    }
   };
 
   const heroTask = tasks[0];

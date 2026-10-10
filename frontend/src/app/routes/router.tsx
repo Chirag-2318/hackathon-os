@@ -10,6 +10,8 @@ import {
   createBrowserRouter,
   RouterProvider,
   Outlet,
+  Navigate,
+  useParams,
 } from 'react-router-dom';
 import { ProtectedRoute } from '@/app/ProtectedRoute';
 import { ResponsiveShell } from '@/app/layout/responsive-shell';
@@ -22,8 +24,17 @@ import { PlaybookBrowsePage } from '@/features/playbooks/playbook-browse-page';
 import { PlaybookDetailPage } from '@/features/playbooks/playbook-detail-page';
 import { SituationPickerPage } from '@/features/onboarding/situation-picker-page';
 import { CreateRoomWizard } from '@/features/onboarding/create-room-wizard';
+import { isModuleHidden } from '@/config/featureFlags';
 
 import { useState, type ReactNode } from 'react';
+
+function HiddenModuleRoute({ moduleId, element }: { moduleId: string; element: React.ReactElement }) {
+  const { roomId } = useParams<{ roomId: string }>();
+  if (isModuleHidden(moduleId)) {
+    return <Navigate to={`/app/room/${roomId}/overview`} replace />;
+  }
+  return element;
+}
 
 /** Layout route for non-room app pages (like Home) */
 function HomeShellLayout() {
@@ -36,15 +47,18 @@ function HomeShellLayout() {
   );
 }
 
+import { RoomErrorBoundary } from '@/shared/ui/RoomErrorBoundary';
+import { DevFlowPage } from '@/features/dev/dev-flow-page';
+
 /** Layout route for room pages */
 function RoomShellLayout() {
   const [rightRail, setRightRail] = useState<ReactNode>(null);
-  // We can read roomId from params here if needed, but pageName="Overview" is fine for now
-  // or we can determine it from the matched route in the future.
   return (
     <ResponsiveShell showPhaseTrack={true} pageName="Overview" rightRail={rightRail}>
       <GlobalOverlays />
-      <Outlet context={{ setRightRail }} />
+      <RoomErrorBoundary>
+        <Outlet context={{ setRightRail }} />
+      </RoomErrorBoundary>
     </ResponsiveShell>
   );
 }
@@ -195,13 +209,13 @@ const router = createBrowserRouter([
       { path: 'overview', element: <RoomOverviewPage /> },
       { path: 'brief', element: <BriefPage /> },
       { path: 'team', element: <TeamPage /> },
-      { path: 'prep', element: <PrepPage /> },
-      { path: 'crowd-check', element: <CrowdCheckPage /> },
+      { path: 'prep', element: <HiddenModuleRoute moduleId="prep" element={<PrepPage />} /> },
+      { path: 'crowd-check', element: <HiddenModuleRoute moduleId="crowd-check" element={<CrowdCheckPage />} /> },
       { path: 'ideate', element: <IdeatePage /> },
       { path: 'plan', element: <PlanPage /> },
       { path: 'docs', element: <DocsPage /> },
       { path: 'board', element: <BoardPage /> },
-      { path: 'schedule', element: <SchedulePage /> },
+      { path: 'schedule', element: <HiddenModuleRoute moduleId="schedule" element={<SchedulePage />} /> },
       { path: 'mvp', element: <MvpPage /> },
       { path: 'github', element: <GithubPage /> },
       { path: 'apis', element: <ApiPage /> },
@@ -236,6 +250,8 @@ const router = createBrowserRouter([
   },
   // Dev-only preview route for icons
   { path: '/dev/icons', element: <DevIconsPreviewPage /> },
+  // Dev-only flow test panel
+  { path: '/dev/flow', element: <DevFlowPage /> },
   // S32 System pages
   { path: '/403', element: <ForbiddenPage /> },
   { path: '/500', element: <ServerErrorPage /> },
