@@ -30,13 +30,23 @@ Auth fixtures for MSW were also correctly added to prevent 401 redirects and ens
 
 ### Phase Checklist
 - [x] R3-0 Audit and baseline
-- [ ] R3-1 Foundations
+- [x] R3-1 Foundations
 - [ ] R3-2 Shell glue
 - [ ] R3-3 Playbooks list
 - [ ] R3-4 Playbook dialog and Use flow
 - [ ] R3-5 Tool directory
 - [ ] R3-6 Responsive and accessibility
 - [ ] R3-7 Verify and report
+
+### R3-1 Foundations Notes
+- Added CSS tokens to `src/index.css`: `--r-tag: 6px`, category background and foreground tints (`--cat-recording-*`, `--cat-video-*`, `--cat-diagrams-*`, `--cat-design-*`, `--cat-api-*`, `--cat-deployment-*`, `--cat-default-*`), registered in `@theme inline`, and typography role `.text-dialog-title` (20/28 600 -0.01em).
+- Created helpers in `src/shared/lib/format.ts`: `formatCheckedDate`, `daysSince`, `formatHours`, `phaseHours`.
+- Created tool category icon mapping in `src/features/tools/tool-categories.ts` with Lucide icons (`Clapperboard`, `Film`, `Workflow`, `Palette`, `Braces`, `Rocket`, `Wrench`), token class mappings, and ideation F6 heuristic phase hints.
+- Created tool logos resolver in `src/features/tools/tool-logos.ts` and placeholder folder `src/assets/tool-logos/.gitkeep`.
+- Created playbook icons mapping in `src/features/playbooks/playbook-icons.ts`.
+- Created shared UI building blocks in `src/shared/ui/`: `PageContainer`, `PageHeading`, `Lozenge`, `FilterSearch`, `FilterSelect`, `ClearFiltersButton`, `EmptyState`, `ErrorRow`, `SegmentedTimeline`, and barrel export `src/shared/ui/index.ts`.
+- Verified `tsc --noEmit`, ESLint on new files, and baseline regression spec (all 4 passed without updating snapshots).
+
 
 ### R3-0 Audit Notes
 **(a) File map of the two pages and their routes:**

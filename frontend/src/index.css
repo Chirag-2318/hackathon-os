@@ -43,6 +43,16 @@
   --r-card:    16px;
   --r-tile:    10px;
   --r-pill:    9999px;
+  --r-tag:     6px;                       /* lozenge radius */
+
+  /* Category tints (Section 3) */
+  --cat-recording-bg:  #FDE8E8;  --cat-recording-fg:  #C93B3B;
+  --cat-video-bg:      #EDE9FE;  --cat-video-fg:      #6D4FD8;
+  --cat-diagrams-bg:   #D9F3F4;  --cat-diagrams-fg:   #0E7C86;
+  --cat-design-bg:     #FDE9DA;  --cat-design-fg:     #B4531A;
+  --cat-api-bg:        #DCEBFE;  --cat-api-fg:        #2457C5;
+  --cat-deployment-bg: #E4E7EC;  --cat-deployment-fg: #3F4A5A;
+  --cat-default-bg:    var(--active);  --cat-default-fg: var(--ink-2);
 
   /* §5.4 Motion */
   --ease:        cubic-bezier(0.22, 1, 0.36, 1);
@@ -253,6 +263,22 @@
   --color-brand-to:     var(--brand-to);
   --color-scrollbar-thumb: var(--scrollbar-thumb);
 
+  /* Category colors */
+  --color-cat-recording-bg:  var(--cat-recording-bg);
+  --color-cat-recording-fg:  var(--cat-recording-fg);
+  --color-cat-video-bg:      var(--cat-video-bg);
+  --color-cat-video-fg:      var(--cat-video-fg);
+  --color-cat-diagrams-bg:   var(--cat-diagrams-bg);
+  --color-cat-diagrams-fg:   var(--cat-diagrams-fg);
+  --color-cat-design-bg:     var(--cat-design-bg);
+  --color-cat-design-fg:     var(--cat-design-fg);
+  --color-cat-api-bg:        var(--cat-api-bg);
+  --color-cat-api-fg:        var(--cat-api-fg);
+  --color-cat-deployment-bg: var(--cat-deployment-bg);
+  --color-cat-deployment-fg: var(--cat-deployment-fg);
+  --color-cat-default-bg:    var(--cat-default-bg);
+  --color-cat-default-fg:    var(--cat-default-fg);
+
   /* Colors — legacy aliases for existing components */
   --color-canvas:        var(--canvas);
   --color-surface-raised: var(--surface-raised);
@@ -341,6 +367,7 @@
   --radius-card:    var(--r-card);
   --radius-tile:    var(--r-tile);
   --radius-pill:    var(--r-pill);
+  --radius-tag:     var(--r-tag);
   --radius-chip:    var(--r-control);
   --radius-panel:   var(--r-card);
   --radius-pop:     8px;
@@ -406,6 +433,13 @@
     line-height: 2.571rem; /* 36px */
     font-weight: 700;
     letter-spacing: -0.02em;
+  }
+
+  .text-dialog-title {
+    font-size: 1.25rem;    /* 20px */
+    line-height: 1.75rem;  /* 28px */
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
 
   h2, .text-h2 {
