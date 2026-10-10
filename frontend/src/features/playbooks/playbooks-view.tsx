@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { SearchX, LayoutTemplate } from 'lucide-react';
 import { usePlaybooks } from './hooks/use-playbooks';
 import { PlaybookCard } from './components/playbook-card';
+import { PlaybookDialog } from './components/playbook-dialog';
 import {
   PageContainer,
   PageHeading,
@@ -70,9 +71,24 @@ export function PlaybooksView() {
     });
   }, [playbooks, search, filterType, filterSize]);
 
+  const selectedPlaybookId = searchParams.get('playbook');
+  const selectedPlaybook = useMemo(() => {
+    if (!playbooks || !selectedPlaybookId) return null;
+    return (
+      playbooks.find((p) => p.id === selectedPlaybookId || p.slug === selectedPlaybookId) ??
+      null
+    );
+  }, [playbooks, selectedPlaybookId]);
+
   const handleOpenPlaybook = (id: string) => {
     const next = new URLSearchParams(searchParams);
     next.set('playbook', id);
+    setSearchParams(next);
+  };
+
+  const handleClosePlaybook = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('playbook');
     setSearchParams(next);
   };
 
@@ -195,6 +211,12 @@ export function PlaybooksView() {
             </div>
           )}
       </PageContainer>
+
+      <PlaybookDialog
+        playbook={selectedPlaybook}
+        isOpen={Boolean(selectedPlaybookId)}
+        onClose={handleClosePlaybook}
+      />
     </div>
   );
 }

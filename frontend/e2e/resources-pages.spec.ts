@@ -125,4 +125,72 @@ test.describe('Playbooks Page (Round 3)', () => {
     await page.getByTestId('pb-empty-clear').click();
     await expect(cards).toHaveCount(totalCount);
   });
+
+  test('Clicking a playbook card opens the detail dialog and sets ?playbook=<id>', async ({ page }) => {
+    await page.goto('/app/playbooks');
+    await page.waitForLoadState('networkidle');
+
+    const firstCard = page.locator('[data-testid^="pb-card-"]').first();
+    await expect(firstCard).toBeVisible();
+    await firstCard.click();
+
+    await expect(page).toHaveURL(/.*[?&]playbook=[^&]+/);
+    const dialog = page.getByTestId('pb-dialog');
+    await expect(dialog).toBeVisible();
+
+    // Close button dismisses dialog and clears param
+    const closeBtn = page.getByTestId('pb-dialog-close');
+    await expect(closeBtn).toBeVisible();
+    await closeBtn.click();
+    await expect(dialog).toBeHidden();
+    expect(page.url()).not.toContain('playbook=');
+  });
+
+  test('Back button closes dialog and reload with param opens it directly', async ({ page }) => {
+    await page.goto('/app/playbooks');
+    await page.waitForLoadState('networkidle');
+
+    const firstCard = page.locator('[data-testid^="pb-card-"]').first();
+    await expect(firstCard).toBeVisible();
+    await firstCard.click();
+
+    const dialog = page.getByTestId('pb-dialog');
+    await expect(dialog).toBeVisible();
+
+    // Browser back button
+    await page.goBack();
+    await expect(dialog).toBeHidden();
+    expect(page.url()).not.toContain('playbook=');
+
+    // Direct navigation with param
+    await page.goto('/app/playbooks?playbook=pb-sih');
+    await page.waitForLoadState('networkidle');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('SIH-style hackathon');
+  });
+
+  test('Use this playbook button closes playbook dialog and opens Create Room dialog with template preselected', async ({ page }) => {
+    await page.goto('/app/playbooks?playbook=pb-devpost');
+    await page.waitForLoadState('networkidle');
+
+    const pbDialog = page.getByTestId('pb-dialog');
+    await expect(pbDialog).toBeVisible();
+
+    const useBtn = page.getByTestId('pb-use');
+    await expect(useBtn).toBeVisible();
+    await useBtn.click();
+
+    // Playbook dialog should close
+    await expect(pbDialog).toBeHidden();
+
+    // Create room dialog should open
+    const createRoomHeading = page.getByRole('heading', { name: 'Create a room' });
+    await expect(createRoomHeading).toBeVisible();
+
+    // Devpost template radio should be checked
+    const devpostRadio = page.locator('[role="radio"][aria-checked="true"]');
+    await expect(devpostRadio).toBeVisible();
+    await expect(devpostRadio).toContainText('Devpost');
+  });
 });
+

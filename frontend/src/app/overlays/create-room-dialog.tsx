@@ -39,7 +39,7 @@ function toLocalDatetimeInput(d: Date): string {
 }
 
 export function CreateRoomDialogOverlay() {
-  const { isOpen, close } = useOverlay('create-room-dialog');
+  const { isOpen, close, data } = useOverlay<{ defaultTemplateId?: string }>('create-room-dialog');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const setContext = useSidebarStore((s) => s.setContext);
@@ -53,6 +53,12 @@ export function CreateRoomDialogOverlay() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorInfo, setErrorInfo] = useState<{ message: string; request?: any; response?: any } | null>(null);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && data?.defaultTemplateId) {
+      setSelectedTemplateId(data.defaultTemplateId);
+    }
+  }, [isOpen, data?.defaultTemplateId]);
 
   // Template list query
   const { data: templates = EVENT_TEMPLATES } = useQuery({
