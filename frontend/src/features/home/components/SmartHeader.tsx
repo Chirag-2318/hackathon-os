@@ -28,7 +28,7 @@ export function SmartHeader() {
     <div className="flex items-start justify-between w-full mb-8" style={{ fontFamily: 'var(--font-inter)' }}>
       {/* Left side */}
       <div className="flex-1">
-        <p className="text-[14px] text-[var(--color-home-text-secondary)] font-[500] mb-2">
+        <p className="text-[14px] text-[var(--color-home-text-secondary)] font-[500] mb-2" data-testid="home-greeting">
           {greeting}, {mockUser.firstName}
         </p>
         <h1 
@@ -61,6 +61,7 @@ export function SmartHeader() {
       <div 
         className="flex items-center gap-1.5 h-8 px-3 rounded-full border border-[var(--color-home-hairline)] bg-white text-[13px] leading-[16px] font-[500] text-[var(--color-home-text-secondary)] shrink-0 shadow-sm"
         style={{ transform: 'translate(12px, -12px)' }}
+        data-testid="home-date-pill"
       >
         <Calendar size={16} className="shrink-0" strokeWidth={1.75} />
         <span>{today}</span>

@@ -342,6 +342,7 @@ export function CreateRoomDialogOverlay() {
                 type="button"
                 onClick={() => setShowDatePicker(!showDatePicker)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/70 hover:bg-muted text-xs font-semibold text-foreground transition-colors cursor-pointer"
+                data-testid="create-room-date-btn"
               >
                 <span>{formatDateString(eventStartDate)}</span>
                 <ChevronDown className={cn('size-3.5 text-muted-foreground transition-transform', showDatePicker && 'rotate-180')} />

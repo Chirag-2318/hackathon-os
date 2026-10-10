@@ -26,10 +26,76 @@ Auth fixtures for MSW were also correctly added to prevent 401 redirects and ens
 
 ## Current Phase: Complete
 
-## Round 3 (Home Panel Redesign)
-- [x] Checkpoint 1: Tokens, Mock Data, 7 Signature Components
-- [x] Checkpoint 2: SmartHeader, HackathonClock, Deadlines
-- [x] Checkpoint 3: YourTasks, TeamWorkload
-- [x] Checkpoint 4: OtherRooms, FirstTimeState, Layout Composition, Skeletons
+## Round 3: Playbooks & Tool Directory Redesign
 
-## Current Phase: Complete
+### Phase Checklist
+- [x] R3-0 Audit and baseline
+- [ ] R3-1 Foundations
+- [ ] R3-2 Shell glue
+- [ ] R3-3 Playbooks list
+- [ ] R3-4 Playbook dialog and Use flow
+- [ ] R3-5 Tool directory
+- [ ] R3-6 Responsive and accessibility
+- [ ] R3-7 Verify and report
+
+### R3-0 Audit Notes
+**(a) File map of the two pages and their routes:**
+- In-app routes:
+  - Playbooks: route `/app/playbooks` -> rendered in `src/app/routes/router.tsx` inside `HomeShellLayout`. Currently renders `PlaybookBrowsePage` (`src/features/playbooks/playbook-browse-page.tsx`). Detail route `/app/playbooks/:slug` -> renders `PlaybookDetailPage` (`src/features/playbooks/playbook-detail-page.tsx`).
+  - Tools: route `/app/tools` -> rendered in `src/app/routes/router.tsx` inside `HomeShellLayout`. Currently renders `ToolDirectoryPage` (`src/features/prep/tool-directory-page.tsx`).
+- Public routes:
+  - Playbooks: route `/playbooks` -> renders `PlaybookBrowsePage` (`src/features/playbooks/playbook-browse-page.tsx`) wrapped in `LandingHeader` and `LandingFooter`.
+  - Playbook detail: route `/playbooks/:slug` -> renders `PlaybookDetailPage` (`src/features/playbooks/playbook-detail-page.tsx`).
+  - Public tools route: None (only `/app/tools` exists; tool directory was an in-app tab under `/app/tools`).
+
+**(b) REAL field names for playbooks and tools and mapping from placeholders:**
+- **Tools** (`src/features/prep/api/types.ts` `Tool`, `toolsFixture` in `src/features/prep/api/mocks/fixtures.ts`):
+  - `id`: `id` ('t1', 't2', etc.)
+  - `name`: `name` ('Recordly', 'Excalidraw', 'RepoClip', 'Scalar', 'Figma', 'Railway')
+  - `category`: `category` ('Recording' | 'Video' | 'Diagrams' | 'Design' | 'API' | 'Deployment')
+  - `description` (placeholder): `oneLineUse`
+  - `cost`: `cost` ('Free' | 'Freemium' | 'Paid')
+  - `license`: `license` ('Open source' | 'Proprietary')
+  - `checkedAt` (placeholder): `lastChecked` (ISO date string, e.g. "2026-09-20")
+  - `verified`: `verified` (boolean)
+  - `url`: `url`
+- **Playbooks** (`src/api/client.ts` `PlaybookDetail`, `playbookFixtures` in `src/mocks/fixtures.ts`):
+  - `id`: `id` ('pb-sih', 'pb-devpost', 'pb-mlh', 'pb-sprint', 'pb-corporate', 'pb-solo')
+  - `slug`: `slug`
+  - `name`/`title`: `title`
+  - `eventType`/`type` (placeholder): `eventType` (string caption, e.g. "36-hour team", "48-hour online", "4-hour sprint", "1-week internal", "Weekend solo")
+  - `teamSize`: `teamSize` (number | null)
+  - `teamSizeLabel`: `teamSizeLabel` (e.g. "Team of 6", "1-4 members", "1 member")
+  - `phaseCount`: `phaseCount` (number, e.g. 7, 5, 4, 3)
+  - `phases`: `phases` (string, e.g. "7 phases")
+  - `illustrationKey`: `illustrationKey`
+  - `defaultRubric`: `defaultRubric` (string[] -> starter rules / rubric defaults)
+  - `checklistPreview`: `checklistPreview` (string[] -> deliverables list)
+
+**(c) Which playbook fields exist for phases, shares, checkpoints, deliverables, duration, description:**
+- `phases`: Only `phaseCount: number` and string `phases: string` (e.g. "7 phases") exist on `PlaybookDetail`. Individual phase objects with weights/shares and exit checkpoints do NOT exist in the API / fixture data.
+- `shares`: No phase weight/share data exists. Per Section 6.2 and Rule 8, card Row 2 mini timeline is omitted when shares data is absent.
+- `checkpoints`: No per-phase checkpoint field exists. Count of checkpoints is omitted in Details panel if missing.
+- `deliverables`: `checklistPreview: string[]` exists and is rendered as Deliverables with check icon.
+- `duration`: Numeric total duration in hours is NOT present on `PlaybookDetail` (only textual `eventType`, e.g. "36-hour team"); duration formatting is omitted where data does not exist.
+- `description`: No description field exists on `PlaybookDetail` (only `title` and `eventType`); per Section 6.3, the About section is skipped when description data does not exist.
+- `rules`/`rubric`: `defaultRubric: string[]` exists and is rendered as Starter rules.
+
+**(d) Where the leaked navbar comes from and whether public routes exist:**
+- The leaked navbar comes from `LandingHeader` inside `PlaybookBrowsePage` (`src/features/playbooks/playbook-browse-page.tsx`), which was directly mounted at both `/playbooks` (public route) and `/app/playbooks` (in-app route).
+- Public routes DO exist: `/playbooks` and `/playbooks/:slug`. They must keep `LandingHeader` and `LandingFooter` intact.
+- The solution: Extract pure content component `PlaybooksView` (without marketing header/footer) and render it in `PageContainer` for `/app/playbooks`, while `/playbooks` continues to wrap `PlaybooksView` with `LandingHeader` and `LandingFooter`.
+
+**(e) How Create Room dialog is opened and where its state lives:**
+- Create Room dialog is `CreateRoomDialogOverlay` in `src/app/overlays/create-room-dialog.tsx`, mounted in `GlobalOverlays`.
+- Open state lives in Zustand `useOverlayStore` (`src/app/providers/overlay-store.ts`), accessed via `useOverlay('create-room-dialog')`.
+- `useOverlay.open(payload)` already supports passing data to `overlayData['create-room-dialog']`.
+- We will support `{ defaultTemplateId?: string }` payload so when opened via "Use this playbook", `selectedTemplateId` defaults to the chosen playbook id without affecting My rooms ("New room" calls `open()` without payload).
+
+**(f) Which existing tests touch these pages:**
+- `e2e/playbooks.spec.ts`: Tests the public `/playbooks` route (heading "Playbook Templates", cards, filters, and detail navigation).
+- `e2e/situation.spec.ts`: Checks navigation from onboarding situation picker to `/playbooks`.
+- `e2e/landing.spec.ts`: Checks landing page playbooks preview section.
+- `e2e/shell-geometry.spec.ts`: Checks sidebar navigation item `nav-row-playbooks` and `nav-row-tools`.
+- No existing tests touch `/app/playbooks` or `/app/tools` directly (they will be covered by the new `e2e/resources-pages.spec.ts`).
+
