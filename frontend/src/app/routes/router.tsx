@@ -12,6 +12,7 @@ import {
   Outlet,
   Navigate,
   useParams,
+  useLocation,
 } from 'react-router-dom';
 import { ProtectedRoute } from '@/app/ProtectedRoute';
 import { ResponsiveShell } from '@/app/layout/responsive-shell';
@@ -24,6 +25,8 @@ import { PlaybookBrowsePage } from '@/features/playbooks/playbook-browse-page';
 import { PlaybookDetailPage } from '@/features/playbooks/playbook-detail-page';
 import { SituationPickerPage } from '@/features/onboarding/situation-picker-page';
 import { CreateRoomWizard } from '@/features/onboarding/create-room-wizard';
+import { PlaybooksView } from '@/features/playbooks/playbooks-view';
+import { ToolDirectoryView } from '@/features/tools/tool-directory-view';
 import { isModuleHidden } from '@/config/featureFlags';
 
 import { useState, type ReactNode } from 'react';
@@ -38,9 +41,21 @@ function HiddenModuleRoute({ moduleId, element }: { moduleId: string; element: R
 
 /** Layout route for non-room app pages (like Home) */
 function HomeShellLayout() {
+  const location = useLocation();
+  const pageName = (() => {
+    const path = location.pathname;
+    if (path.startsWith('/app/playbooks')) return 'Playbooks';
+    if (path.startsWith('/app/tools')) return 'Tool directory';
+    if (path.startsWith('/app/rooms')) return 'My rooms';
+    if (path.startsWith('/app/settings')) return 'Settings';
+    if (path.startsWith('/app/portfolio')) return 'Portfolio';
+    if (path.startsWith('/app/notifications')) return 'Notifications';
+    return 'Home';
+  })();
+
   // HomePage owns its own 2-column grid + right rail — no outlet context needed
   return (
-    <ResponsiveShell showPhaseTrack={false} pageName="Home">
+    <ResponsiveShell showPhaseTrack={false} pageName={pageName}>
       <GlobalOverlays />
       <Outlet />
     </ResponsiveShell>
@@ -175,9 +190,9 @@ const router = createBrowserRouter([
       { path: 'situation', element: <SituationPickerPage /> },
       { path: 'create-room', element: <CreateRoomWizard /> },
       { path: 'rooms', element: <MyRoomsPage /> },
-      { path: 'playbooks', element: <PlaybookBrowsePage /> },
+      { path: 'playbooks', element: <PlaybooksView /> },
       { path: 'playbooks/:slug', element: <PlaybookDetailPage /> },
-      { path: 'tools', element: <ToolDirectoryPage /> },
+      { path: 'tools', element: <ToolDirectoryView /> },
       { path: 'portfolio', element: <PlaceholderPage title="Portfolio" /> },
       {
         path: 'settings',

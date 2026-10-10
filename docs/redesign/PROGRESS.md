@@ -31,12 +31,29 @@ Auth fixtures for MSW were also correctly added to prevent 401 redirects and ens
 ### Phase Checklist
 - [x] R3-0 Audit and baseline
 - [x] R3-1 Foundations
-- [ ] R3-2 Shell glue
+- [x] R3-2 Shell glue
 - [ ] R3-3 Playbooks list
 - [ ] R3-4 Playbook dialog and Use flow
 - [ ] R3-5 Tool directory
 - [ ] R3-6 Responsive and accessibility
 - [ ] R3-7 Verify and report
+
+### R3-2 Shell Glue Notes
+- **Files split / created for in-app views:**
+  - `src/features/playbooks/playbooks-view.tsx`: Extracted in-app Playbooks view wrapped in `PageContainer`, without `LandingHeader` or `LandingFooter` (resolving leaked navbar W1).
+  - `src/features/tools/tool-directory-view.tsx`: Extracted in-app Tool Directory view wrapped in `PageContainer`, without tabs ("Tool directory | Playbooks") or the old left all-caps sidebar (resolving T1, T2, T3).
+- **Route files and public wrappers left untouched:**
+  - Public routes `/playbooks` and `/playbooks/:slug` still render `PlaybookBrowsePage` (`src/features/playbooks/playbook-browse-page.tsx`) and `PlaybookDetailPage` (`src/features/playbooks/playbook-detail-page.tsx`) with `LandingHeader` and `LandingFooter` intact (verified passing via `playbooks.spec.ts`).
+  - `src/features/prep/tool-directory-page.tsx` was left untouched for any potential tabbed/prep usages.
+- **Header breadcrumb label (W2):**
+  - Updated `HomeShellLayout` in `src/app/routes/router.tsx` to dynamically compute `pageName` from `location.pathname`:
+    - `/app/playbooks` -> 'Playbooks' (renders "Workspace / Playbooks")
+    - `/app/tools` -> 'Tool directory' (renders "Workspace / Tool directory")
+    - `/app/rooms` -> 'My rooms'
+    - `/app/home` and `/app` -> 'Home' (renders "Workspace / Home")
+  - All room routes remain under `RoomShellLayout` with their existing breadcrumbs intact.
+- Verified `tsc --noEmit`, `regression-baseline.spec.ts` (all 4 passed), and `playbooks.spec.ts` (all 2 passed).
+
 
 ### R3-1 Foundations Notes
 - Added CSS tokens to `src/index.css`: `--r-tag: 6px`, category background and foreground tints (`--cat-recording-*`, `--cat-video-*`, `--cat-diagrams-*`, `--cat-design-*`, `--cat-api-*`, `--cat-deployment-*`, `--cat-default-*`), registered in `@theme inline`, and typography role `.text-dialog-title` (20/28 600 -0.01em).
