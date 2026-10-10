@@ -137,4 +137,68 @@ Auth fixtures for MSW were also correctly added to prevent 401 redirects and ens
 - [x] **Phase R3-6: Responsive & Accessibility** (No horizontal overflow at 390, 1024, 1280, 1534, 1920; keyboard nav; error and retry states; E2E tests 14, 15, 16 passing) — Commit `f6a20ba`
 - [x] **Phase R3-7: Final Verification & Report** (TypeScript checks passed, Vite build passed, all 15 Round 3 E2E tests passed, all 4 baseline regression tests passed, 0 hex/rgb color tokens, screenshots captured in `docs/redesign/round3/`, final report generated)
 
+---
 
+## Round 4 — Create Room dialog redesign
+
+### Files changed / added
+
+| File | Status |
+| :--- | :--- |
+| `frontend/src/app/overlays/create-room-dialog.tsx` | **Rewritten** — new layout, token-based styling, aria, Cmd+Enter |
+| `frontend/src/app/overlays/create-room/cr-name-field.tsx` | **Added** — room name + inline Suggest |
+| `frontend/src/app/overlays/create-room/cr-template-card.tsx` | **Added** — single template radio tile |
+| `frontend/src/app/overlays/create-room/cr-schedule-field.tsx` | **Added** — start/end datetime inputs + timezone caption + mode lozenge |
+| `frontend/src/app/overlays/create-room/cr-more-section.tsx` | **Added** — collapsible More details (description + project description) |
+
+### Placeholder → real field mapping
+
+| Spec placeholder | Real field (form state / API payload) | Notes |
+| :--- | :--- | :--- |
+| `name` | `name` (state `name`, trimmed) | Max 60 chars, required |
+| `templateId` | `templateId` (`selectedTemplateId`) | Drives icon, summary line, end auto-fill |
+| `startsAt` | `eventStart` (ISO from `startValue`) | Optional; native `datetime-local` |
+| `endsAt` | `eventEnd` (ISO from `endValue`) | Optional; auto-filled from start + duration |
+| `timezone` | `timezone` (IANA zone via `Intl`) | Sent when start is provided |
+| `description` | `description` | Inside More details, optional |
+| `projectDescription` | `projectDescription` | Inside More details, labeled "What are you building?" |
+| `eventUrl` | **NOT rendered** — field does not exist in API or form | Skipped per Rule 4 |
+
+### Optional blocks NOT rendered (field/API absent)
+
+- **Event link** (`eventUrl`): field does not exist in `createRoom` payload or `EventTemplate`; block entirely omitted.
+- **SegmentedTimeline** in summary: `EventTemplate` has no `phaseCount` or `phases` weight array (those exist only on `PlaybookDetail`); timeline bar skipped; only the text summary line is shown.
+- **Phase count in summary**: `EventTemplate.phaseCount` does not exist; summary shows only duration (e.g. "36h. Phases and checkpoints are pre-filled from this template.").
+- **Timezone field in payload**: timezone IS sent when start is provided (already in the original code and API accepts it).
+
+### Copy added (not in original)
+
+| Location | Text |
+| :--- | :--- |
+| Header subtitle | "Set up your team's workspace. You can change everything later." |
+| Summary line template | "Phases and checkpoints are pre-filled from this template." |
+| Prep mode lozenge | "Prep mode" (when event start is in the future) |
+| Speed mode lozenge | "Speed mode" (when now is between start and end) |
+
+### Selectors that changed
+
+| Old selector / label | New selector / label | Reason |
+| :--- | :--- | :--- |
+| `data-testid="create-room-date-btn"` | **Removed** — collapsible date button is gone; start/end are now always-visible `datetime-local` inputs with `data-testid="cr-start"` and `data-testid="cr-end"` | Spec §2.3 shows inline schedule, not a collapsible chip |
+| Room name input had no testid | `data-testid="cr-name"` | Added per spec §5 |
+| Suggest button had no testid | `data-testid="cr-suggest"` | Added per spec §5 |
+| Template grid had no testid | `data-testid="cr-template-group"` | Added per spec §5 |
+| Template tiles had no testid | `data-testid="cr-template-<id>"` | Added per spec §5 |
+| Error block had red-tinted bg | `data-testid="cr-error"`, white card bg with `--danger` text only | Spec §5 and §3 |
+| Submit button matched by text "Create room" | `data-testid="cr-submit"` | Added per spec §5 |
+| Cancel button matched by text "Cancel" | `data-testid="cr-cancel"` | Added per spec §5 |
+| Dialog matched by `role="dialog"` | also `data-testid="cr-dialog"` | Added per spec §5 |
+| Title `<h2>` matched by text | also `data-testid="cr-title"` | Added per spec §5 |
+| `create-room-date-btn` in `regression-baseline.spec.ts` mask | **Now stale** — mask line should be removed or updated to mask `cr-start` / `cr-end` | Noted for maintainer; I did NOT run or update tests per spec |
+
+### Open issues for maintainer
+
+1. `regression-baseline.spec.ts` line 62 masks `[data-testid="create-room-date-btn"]` which no longer exists. Replace with `[data-testid="cr-start"]`.
+2. The baseline snapshot `create-room-dialog-baseline.png` will differ; run `--update-snapshots` after reviewing.
+3. `EventTemplate.icon` is an emoji string; it is **intentionally ignored** in `CrTemplateCard` — the Lucide icon is derived from template `id + name` via `getPlaybookIcon`. Verify the icon mapping looks right for each template in the browser.
+4. `SegmentedTimeline` is not rendered in the summary because `EventTemplate` has no phase weight data. If phase data is later added to the template API, wire `SegmentedTimeline size="sm"` above the summary line.

@@ -1,66 +1,109 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { roomService, EVENT_TEMPLATES } from '@/services';
 import type { EventTemplate } from '@/services/types';
 import { useOverlay } from '@/app/providers/overlay-store';
 import { useSidebarStore } from '@/app/layout/use-sidebar-store';
-import {
-  Dialog,
-  DialogContent,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { X, Sparkles, Loader2, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Loader2, X, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+import { CrNameField } from './create-room/cr-name-field';
+import { CrTemplateCard } from './create-room/cr-template-card';
+import { CrScheduleField } from './create-room/cr-schedule-field';
+import { CrMoreSection } from './create-room/cr-more-section';
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getNextSaturday9AM(): Date {
   const d = new Date();
-  const day = d.getDay();
-  const daysUntilSat = (6 - day + 7) % 7 || 7;
+  const daysUntilSat = (6 - d.getDay() + 7) % 7 || 7;
   d.setDate(d.getDate() + daysUntilSat);
   d.setHours(9, 0, 0, 0);
   return d;
 }
 
-function formatDateString(d: Date): string {
-  const datePart = d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
-  const timePart = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  return `${datePart}, ${timePart}`;
+function toInputValue(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function toLocalDatetimeInput(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const year = d.getFullYear();
-  const month = pad(d.getMonth() + 1);
-  const day = pad(d.getDate());
-  const hours = pad(d.getHours());
-  const minutes = pad(d.getMinutes());
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
+function parseDateInput(s: string): Date | null {
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
 }
+
+type ModeHint = 'prep' | 'speed' | null;
+
+function getModeHint(start: Date | null, end: Date | null): ModeHint {
+  if (!start) return null;
+  const now = Date.now();
+  if (start.getTime() > now) return 'prep';
+  if (end && now >= start.getTime() && now <= end.getTime()) return 'speed';
+  return null;
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export function CreateRoomDialogOverlay() {
   const { isOpen, close, data } = useOverlay<{ defaultTemplateId?: string }>('create-room-dialog');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const setContext = useSidebarStore((s) => s.setContext);
+  const titleId = useId();
 
+  // ── Form state ───────────────────────────────────────────────────────────────
   const [name, setName] = useState('');
+  const [nameTouched, setNameTouched] = useState(false);
   const [description, setDescription] = useState('');
   const [projectDescription, setProjectDescription] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('pb-sih');
-  const [eventStartDate, setEventStartDate] = useState<Date>(getNextSaturday9AM());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [errorInfo, setErrorInfo] = useState<{ message: string; request?: any; response?: any } | null>(null);
-  const [showErrorDetails, setShowErrorDetails] = useState(false);
 
+  const defaultStart = getNextSaturday9AM();
+  const [startValue, setStartValue] = useState(toInputValue(defaultStart));
+  const [endValue, setEndValue] = useState(
+    toInputValue(new Date(defaultStart.getTime() + 36 * 60 * 60 * 1000))
+  );
+  const [endManuallyEdited, setEndManuallyEdited] = useState(false);
+  const [endTouched, setEndTouched] = useState(false);
+
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSuccess, setIsSuccess] = useState(false);
+
+  // Auto-open More if fields populated
+  useEffect(() => {
+    if (description || projectDescription) setMoreOpen(true);
+  }, [description, projectDescription]);
+
+  // Apply defaultTemplateId from Playbooks
   useEffect(() => {
     if (isOpen && data?.defaultTemplateId) {
       setSelectedTemplateId(data.defaultTemplateId);
     }
   }, [isOpen, data?.defaultTemplateId]);
 
-  // Template list query
+  // Reset on close
+  useEffect(() => {
+    if (!isOpen) {
+      setName('');
+      setNameTouched(false);
+      setDescription('');
+      setProjectDescription('');
+      setSelectedTemplateId('pb-sih');
+      const s = getNextSaturday9AM();
+      setStartValue(toInputValue(s));
+      setEndValue(toInputValue(new Date(s.getTime() + 36 * 60 * 60 * 1000)));
+      setEndManuallyEdited(false);
+      setEndTouched(false);
+      setMoreOpen(false);
+      setSubmitError(null);
+      setIsSuccess(false);
+    }
+  }, [isOpen]);
+
+  // Template list
   const { data: templates = EVENT_TEMPLATES } = useQuery({
     queryKey: ['event-templates'],
     queryFn: () => roomService.getEventTemplates(),
@@ -68,380 +111,330 @@ export function CreateRoomDialogOverlay() {
     initialData: EVENT_TEMPLATES,
   });
 
-  const selectedTemplate = templates.find((t) => t.id === selectedTemplateId) || templates[0];
-  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const selectedTemplate = templates.find((t) => t.id === selectedTemplateId) ?? templates[0];
 
-  // Suggest mutation
+  // Auto-fill end from start + template duration
+  const handleStartChange = useCallback((val: string) => {
+    setStartValue(val);
+    if (!endManuallyEdited && selectedTemplate) {
+      const d = parseDateInput(val);
+      if (d) {
+        const end = new Date(d.getTime() + selectedTemplate.durationHours * 60 * 60 * 1000);
+        setEndValue(toInputValue(end));
+      }
+    }
+  }, [endManuallyEdited, selectedTemplate]);
+
+  const handleEndChange = useCallback((val: string) => {
+    setEndValue(val);
+    setEndManuallyEdited(true);
+  }, []);
+
+  // When template changes, also update end if not manually edited
+  useEffect(() => {
+    if (!endManuallyEdited && selectedTemplate && startValue) {
+      const d = parseDateInput(startValue);
+      if (d) {
+        const end = new Date(d.getTime() + selectedTemplate.durationHours * 60 * 60 * 1000);
+        setEndValue(toInputValue(end));
+      }
+    }
+  }, [selectedTemplateId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Mode hint
+  const startDate = parseDateInput(startValue);
+  const endDate = parseDateInput(endValue);
+  const modeHint: ModeHint = getModeHint(startDate, endDate);
+
+  // End validation
+  const endError = (() => {
+    if (!startDate || !endDate) return null;
+    return endDate <= startDate ? 'End must be after the start.' : null;
+  })();
+
+  // Suggest name
   const suggestMutation = useMutation({
     mutationFn: () => roomService.suggestName(),
-    onSuccess: (data) => {
-      setName(data.suggestion);
-      if (errorInfo) setErrorInfo(null);
+    onSuccess: (res) => {
+      setName(res.suggestion);
+      setSubmitError(null);
     },
   });
 
-  // Create room mutation
+  // Create room
   const createMutation = useMutation({
     mutationFn: async (payload: {
       name: string;
       description?: string;
       projectDescription?: string;
       templateId: string;
-      eventStart: string;
-      eventEnd: string;
-      timezone: string;
-    }) => {
-      return roomService.createRoom(payload);
-    },
+      eventStart?: string;
+      eventEnd?: string;
+      timezone?: string;
+    }) => roomService.createRoom(payload),
     onSuccess: (newRoom) => {
       setIsSuccess(true);
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       queryClient.invalidateQueries({ queryKey: ['home'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
-
       setTimeout(() => {
         close();
-        setIsSuccess(false);
-        setName('');
-        setDescription('');
-        setProjectDescription('');
-        setErrorInfo(null);
         setContext('room');
         navigate(`/app/room/${newRoom.id}/overview`);
       }, 180);
     },
     onError: (err: any) => {
-      setErrorInfo({
-        message: err?.message || 'Failed to create room. Please try again.',
-        request: {
-          name,
-          description,
-          projectDescription,
-          templateId: selectedTemplateId,
-          eventStart: eventStartDate.toISOString(),
-          timezone: userTimezone,
-        },
-        response: {
-          error: String(err),
-        },
-      });
+      setSubmitError(err?.message ?? 'Failed to create room. Please try again.');
     },
   });
 
-  const handleClose = () => {
-    if (createMutation.isPending) return;
-    setErrorInfo(null);
-    setShowDatePicker(false);
-    setIsSuccess(false);
-    close();
-  };
+  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-  const isFormValid = name.trim().length >= 3 && name.trim().length <= 60 && !!selectedTemplateId;
+  const nameError = name.trim().length > 0 && name.trim().length < 3
+    ? 'Name must be at least 3 characters.'
+    : name.trim().length > 60
+    ? 'Name must be 60 characters or fewer.'
+    : null;
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const isFormValid =
+    name.trim().length >= 3 &&
+    name.trim().length <= 60 &&
+    !!selectedTemplateId &&
+    !endError;
+
+  const handleSubmit = useCallback((e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    setNameTouched(true);
+    setEndTouched(true);
     if (!isFormValid) return;
-    setErrorInfo(null);
-
-    const end = new Date(eventStartDate);
-    end.setHours(end.getHours() + (selectedTemplate?.durationHours || 36));
+    setSubmitError(null);
 
     createMutation.mutate({
       name: name.trim(),
       description: description.trim() || undefined,
       projectDescription: projectDescription.trim() || undefined,
       templateId: selectedTemplateId,
-      eventStart: eventStartDate.toISOString(),
-      eventEnd: end.toISOString(),
+      eventStart: startDate?.toISOString(),
+      eventEnd: endDate?.toISOString(),
       timezone: userTimezone,
     });
+  }, [isFormValid, name, description, projectDescription, selectedTemplateId, startDate, endDate, userTimezone, createMutation]);
+
+  const handleClose = () => {
+    if (createMutation.isPending) return;
+    close();
   };
 
-  // Keyboard navigation for template tiles
-  const handleTemplateKeyDown = (e: React.KeyboardEvent, index: number) => {
-    if (['ArrowRight', 'ArrowDown'].includes(e.key)) {
+  // Cmd/Ctrl+Enter to submit
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
-      const nextIdx = (index + 1) % templates.length;
-      setSelectedTemplateId(templates[nextIdx].id);
-    } else if (['ArrowLeft', 'ArrowUp'].includes(e.key)) {
-      e.preventDefault();
-      const prevIdx = (index - 1 + templates.length) % templates.length;
-      setSelectedTemplateId(templates[prevIdx].id);
+      handleSubmit();
     }
   };
 
+  // Template keyboard navigation
+  const handleTemplateKeyDown = (e: React.KeyboardEvent, index: number) => {
+    if (['ArrowRight', 'ArrowDown'].includes(e.key)) {
+      e.preventDefault();
+      setSelectedTemplateId(templates[(index + 1) % templates.length].id);
+    } else if (['ArrowLeft', 'ArrowUp'].includes(e.key)) {
+      e.preventDefault();
+      setSelectedTemplateId(templates[(index - 1 + templates.length) % templates.length].id);
+    }
+  };
+
+  // Summary line
+  const summaryParts: string[] = [];
+  if (selectedTemplate?.durationHours) {
+    const h = selectedTemplate.durationHours;
+    summaryParts.push(h >= 168 ? '1 week' : `${h}h`);
+  }
+  const phaseCount = (selectedTemplate as any)?.phaseCount;
+  if (phaseCount) summaryParts.push(`${phaseCount} phases`);
+
   return (
-    <Dialog open={isOpen} onOpenChange={(openState) => { if (!openState) handleClose(); }}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
       <DialogContent
+        showCloseButton={false}
+        data-testid="cr-dialog"
+        aria-labelledby={titleId}
         className={cn(
-          'w-full max-w-[560px] rounded-[24px] bg-card border border-border p-0 shadow-2xl overflow-hidden font-sans',
-          'transition-all duration-200 ease-out'
+          'w-[min(560px,calc(100vw-32px))] max-h-[min(720px,calc(100dvh-48px))]',
+          'sm:max-w-none',
+          'rounded-[var(--r-card)] bg-card border border-border',
+          'p-0 shadow-none ring-0',
+          'flex flex-col overflow-hidden',
+          'transition-all duration-150 ease-[var(--ease)]',
+          'data-open:animate-in data-open:fade-in-0 data-open:zoom-in-[0.98]',
+          'data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-[0.98]',
         )}
+        onKeyDown={handleKeyDown}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border/70">
-          <h2 className="text-lg font-bold text-foreground tracking-tight">Create a room</h2>
+        {/* ── Header ── */}
+        <div className="px-6 py-4 border-b border-border flex items-start justify-between gap-4 shrink-0">
+          <div>
+            <h2
+              id={titleId}
+              data-testid="cr-title"
+              className="text-[20px] font-semibold text-ink leading-7 tracking-[-0.01em]"
+            >
+              Create a room
+            </h2>
+            <p className="text-[13px] text-ink-2 leading-5 mt-0.5">
+              Set up your team's workspace. You can change everything later.
+            </p>
+          </div>
           <button
             type="button"
             onClick={handleClose}
-            className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+            aria-label="Close"
+            className={cn(
+              'size-8 rounded-[var(--r-control)] flex items-center justify-center shrink-0',
+              'text-ink-2 hover:bg-hover hover:text-ink',
+              'transition-colors duration-150 cursor-pointer',
+              'focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2',
+              'mt-0.5'
+            )}
           >
-            <X className="size-4" />
+            <X className="size-4 stroke-[1.75]" />
           </button>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="px-6 py-4 flex flex-col gap-4 max-h-[75vh] overflow-y-auto">
-          {/* 1. Room Name */}
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <label htmlFor="room-name" className="text-[12px] font-medium text-muted-foreground">
-                Room name <span className="text-red-500">*</span>
-              </label>
-              <span className="text-[11px] text-muted-foreground font-mono">
-                {name.length}/60
-              </span>
-            </div>
-            <div className="relative flex items-center">
-              <input
-                id="room-name"
-                type="text"
-                maxLength={60}
-                placeholder="e.g. Campus Build Sprint 2026"
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  if (errorInfo) setErrorInfo(null);
-                }}
-                className={cn(
-                  'w-full h-10 px-3.5 pr-20 rounded-[14px] bg-[#F3F3F3] dark:bg-muted/70 text-sm text-foreground placeholder:text-muted-foreground/60',
-                  'outline-none focus:ring-2 focus:ring-blue-500 transition-all border border-transparent'
-                )}
-              />
-              <button
-                type="button"
-                onClick={() => suggestMutation.mutate()}
-                disabled={suggestMutation.isPending}
-                className="absolute right-2 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center gap-1 cursor-pointer disabled:opacity-50"
-              >
-                {suggestMutation.isPending ? (
-                  <Loader2 className="size-3 animate-spin" />
-                ) : (
-                  <Sparkles className="size-3" />
-                )}
-                Suggest
-              </button>
-            </div>
-          </div>
+        {/* ── Body ── */}
+        <form
+          onSubmit={handleSubmit}
+          className="flex-1 min-h-0 overflow-y-auto px-6 py-5 flex flex-col gap-5 panel-scroll"
+        >
+          {/* 1. Room name */}
+          <CrNameField
+            value={name}
+            onChange={setName}
+            onClearError={() => setSubmitError(null)}
+            isSuggesting={suggestMutation.isPending}
+            onSuggest={() => suggestMutation.mutate()}
+            error={nameError ?? undefined}
+            touched={nameTouched}
+            onBlur={() => setNameTouched(true)}
+          />
 
-          {/* 2. Room Description */}
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <label htmlFor="room-desc" className="text-[12px] font-medium text-muted-foreground">
-                Room description
-              </label>
-              <span className="text-[11px] text-muted-foreground font-mono">
-                {description.length}/200
-              </span>
-            </div>
-            <textarea
-              id="room-desc"
-              rows={2}
-              maxLength={200}
-              placeholder="A brief note about your team workspace or event setup..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className={cn(
-                'w-full p-3 rounded-[14px] bg-[#F3F3F3] dark:bg-muted/70 text-sm text-foreground placeholder:text-muted-foreground/60',
-                'outline-none focus:ring-2 focus:ring-blue-500 resize-none transition-all border border-transparent'
-              )}
-            />
-          </div>
-
-          {/* 3. Project Description */}
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <label htmlFor="project-desc" className="text-[12px] font-medium text-muted-foreground">
-                Project description
-              </label>
-              <span className="text-[11px] text-muted-foreground font-mono">
-                {projectDescription.length}/500
-              </span>
-            </div>
-            <textarea
-              id="project-desc"
-              rows={3}
-              maxLength={500}
-              placeholder="What are you building? One or two sentences. You can refine it in the brief."
-              value={projectDescription}
-              onChange={(e) => setProjectDescription(e.target.value)}
-              className={cn(
-                'w-full p-3 rounded-[14px] bg-[#F3F3F3] dark:bg-muted/70 text-sm text-foreground placeholder:text-muted-foreground/60',
-                'outline-none focus:ring-2 focus:ring-blue-500 resize-none transition-all border border-transparent'
-              )}
-            />
-            <p className="text-[11px] text-muted-foreground">
-              What are you building? One or two sentences. You can refine it in the brief.
-            </p>
-          </div>
-
-          {/* 4. Event Template (2x3 grid) */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[12px] font-medium text-muted-foreground">
-              Event template <span className="text-red-500">*</span>
+          {/* 2. Event template */}
+          <div className="flex flex-col gap-2">
+            <label className="text-[13px] font-medium text-ink leading-5">
+              Event template
             </label>
+
             <div
               role="radiogroup"
               aria-label="Event template"
-              className="grid grid-cols-2 gap-2.5"
+              data-testid="cr-template-group"
+              className="grid grid-cols-1 sm:grid-cols-2 gap-2"
             >
-              {templates.map((tpl, idx) => {
-                const isSelected = selectedTemplateId === tpl.id;
-                return (
-                  <div
-                    key={tpl.id}
-                    role="radio"
-                    aria-checked={isSelected}
-                    tabIndex={isSelected ? 0 : -1}
-                    onClick={() => setSelectedTemplateId(tpl.id)}
-                    onKeyDown={(e) => handleTemplateKeyDown(e, idx)}
-                    className={cn(
-                      'relative flex items-start gap-2.5 p-3 rounded-[16px] border text-left cursor-pointer transition-all duration-150',
-                      'hover:-translate-y-0.5 hover:shadow-xs outline-none',
-                      isSelected
-                        ? 'border-neutral-900 dark:border-neutral-100 bg-neutral-900/[0.03] dark:bg-white/[0.05] ring-1 ring-neutral-900 dark:ring-neutral-100'
-                        : 'border-border bg-card hover:border-neutral-400'
-                    )}
-                  >
-                    <div className="size-8 rounded-xl bg-muted/80 flex items-center justify-center text-lg shrink-0">
-                      {tpl.icon || '🏆'}
-                    </div>
-                    <div className="flex-1 min-w-0 pr-4">
-                      <div className="text-[13px] font-semibold text-foreground leading-tight truncate">
-                        {tpl.name}
-                      </div>
-                      <div className="text-[12px] text-muted-foreground leading-tight mt-1 truncate">
-                        {tpl.meta || `${tpl.durationHours}h · ${tpl.teamSize} members`}
-                      </div>
-                    </div>
-                    {isSelected && (
-                      <div className="absolute bottom-2 right-2 size-4 rounded-full bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 flex items-center justify-center">
-                        <Check className="size-2.5 stroke-[3]" />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            {selectedTemplate && (
-              <p className="text-[12px] text-muted-foreground mt-1">
-                {selectedTemplate.prefills || `Pre-fills: ${selectedTemplate.durationHours >= 168 ? '1-week' : `${selectedTemplate.durationHours}h`} clock and phase plan`}
-              </p>
-            )}
-          </div>
-
-          {/* 5. Event Starts Collapsible Row */}
-          <div className="flex flex-col gap-2 pt-1 border-t border-border/50">
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-medium text-muted-foreground">Event starts</span>
-              <button
-                type="button"
-                onClick={() => setShowDatePicker(!showDatePicker)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/70 hover:bg-muted text-xs font-semibold text-foreground transition-colors cursor-pointer"
-                data-testid="create-room-date-btn"
-              >
-                <span>{formatDateString(eventStartDate)}</span>
-                <ChevronDown className={cn('size-3.5 text-muted-foreground transition-transform', showDatePicker && 'rotate-180')} />
-              </button>
-            </div>
-
-            {showDatePicker && (
-              <div className="flex flex-col gap-2 p-3 rounded-2xl bg-muted/40 border border-border mt-1">
-                <input
-                  type="datetime-local"
-                  value={toLocalDatetimeInput(eventStartDate)}
-                  onChange={(e) => {
-                    const parsed = new Date(e.target.value);
-                    if (!isNaN(parsed.getTime())) {
-                      setEventStartDate(parsed);
-                    }
-                  }}
-                  className="h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground outline-none focus:ring-2 focus:ring-blue-500"
+              {templates.map((tpl, idx) => (
+                <CrTemplateCard
+                  key={tpl.id}
+                  template={tpl}
+                  isSelected={selectedTemplateId === tpl.id}
+                  index={idx}
+                  totalCount={templates.length}
+                  onSelect={setSelectedTemplateId}
+                  onKeyDown={handleTemplateKeyDown}
                 />
-                <span className="text-[11px] text-muted-foreground">
-                  Timezone: <strong className="text-foreground">{userTimezone}</strong>
+              ))}
+            </div>
+
+            {/* Selection summary */}
+            {selectedTemplate && (
+              <div
+                data-testid="cr-summary"
+                className="flex items-start gap-1.5 text-[13px] text-ink-2 leading-5 mt-1"
+              >
+                <Layers className="size-3.5 shrink-0 mt-0.5 stroke-[1.75]" />
+                <span>
+                  {summaryParts.length > 0
+                    ? `${summaryParts.join(' · ')}. `
+                    : ''}
+                  Phases and checkpoints are pre-filled from this template.
                 </span>
               </div>
             )}
           </div>
 
-          {/* Error Message inside dialog */}
-          {errorInfo && (
-            <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-400">
-              <div className="flex items-center justify-between">
-                <span>{errorInfo.message}</span>
-                <button
-                  type="button"
-                  onClick={() => handleSubmit()}
-                  className="font-semibold underline ml-2 cursor-pointer hover:opacity-80"
-                >
-                  Retry
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowErrorDetails(!showErrorDetails)}
-                className="flex items-center gap-1 text-[11px] text-red-700/80 dark:text-red-300/80 mt-1 cursor-pointer"
-              >
-                {showErrorDetails ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
-                Details
-              </button>
-              {showErrorDetails && (
-                <pre className="mt-2 text-[10px] bg-red-950/10 p-2 rounded-lg font-mono overflow-x-auto whitespace-pre-wrap">
-                  {JSON.stringify({ request: errorInfo.request, response: errorInfo.response }, null, 2)}
-                </pre>
-              )}
+          {/* 3. Event schedule */}
+          <CrScheduleField
+            startValue={startValue}
+            endValue={endValue}
+            onStartChange={handleStartChange}
+            onEndChange={handleEndChange}
+            onStartBlur={() => {}}
+            onEndBlur={() => setEndTouched(true)}
+            endError={endError ?? undefined}
+            endTouched={endTouched}
+            modeHint={modeHint}
+          />
+
+          {/* 4. More details */}
+          <CrMoreSection
+            description={description}
+            projectDescription={projectDescription}
+            onDescriptionChange={setDescription}
+            onProjectDescriptionChange={setProjectDescription}
+            isOpen={moreOpen}
+            onToggle={() => setMoreOpen((o) => !o)}
+          />
+
+          {/* Submit error */}
+          {submitError && (
+            <div
+              data-testid="cr-error"
+              className="rounded-xl border border-border bg-card p-3 text-[13px] text-danger leading-5"
+            >
+              {submitError}
             </div>
           )}
         </form>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border/70 bg-card">
-          <Button
+        {/* ── Footer ── */}
+        <div className="px-6 py-4 border-t border-border flex items-center justify-end gap-2 bg-card shrink-0">
+          <button
             type="button"
-            variant="ghost"
+            data-testid="cr-cancel"
             onClick={handleClose}
-            disabled={createMutation.isPending}
-            className="text-xs font-medium h-9 text-muted-foreground hover:text-foreground"
+            className={cn(
+              'h-9 px-4 rounded-[var(--r-control)] text-[14px] font-medium text-ink',
+              'hover:bg-hover transition-colors duration-150 cursor-pointer',
+              'focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2',
+              'sm:flex-none flex-1'
+            )}
           >
             Cancel
-          </Button>
+          </button>
 
-          <Button
+          <button
             type="button"
+            data-testid="cr-submit"
             onClick={() => handleSubmit()}
-            disabled={!isFormValid || createMutation.isPending}
+            disabled={createMutation.isPending}
             className={cn(
-              'h-9 px-5 rounded-[12px] text-xs font-semibold transition-all duration-200',
-              isSuccess
-                ? 'bg-emerald-600 text-white'
-                : 'bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900'
+              'h-9 px-5 rounded-[var(--r-control)] text-[14px] font-medium transition-colors duration-150',
+              'focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2',
+              'sm:flex-none flex-1',
+              createMutation.isPending || !isFormValid
+                ? 'bg-active text-ink-3 cursor-not-allowed'
+                : isSuccess
+                ? 'bg-ink text-white cursor-default'
+                : 'bg-ink text-white hover:bg-ink/90 cursor-pointer'
             )}
           >
             {createMutation.isPending ? (
-              <span className="flex items-center gap-2">
-                <Loader2 className="size-3.5 animate-spin" />
-                Creating...
-              </span>
-            ) : isSuccess ? (
-              <span className="flex items-center gap-1.5">
-                <Check className="size-3.5" />
-                Created!
+              <span className="flex items-center justify-center gap-1.5">
+                <Loader2 className="size-4 animate-spin" />
+                Creating…
               </span>
             ) : (
               'Create room'
             )}
-          </Button>
+          </button>
         </div>
       </DialogContent>
     </Dialog>
