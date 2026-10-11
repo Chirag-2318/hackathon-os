@@ -7,16 +7,16 @@ import { Chip } from '@/components/primitives/chip';
 
 export function StressTestStage({ data }: { data: IdeateResponse }) {
   const [selectedIdeaId, setSelectedIdeaId] = React.useState<string>(data.ideas[0]?.id);
-  const selectedIdea = data.ideas.find(i => i.id === selectedIdeaId);
-  const stressTest = data.stressTests.find(s => s.ideaId === selectedIdeaId);
+  const selectedIdea = data.ideas.find((i: any) => i.id === selectedIdeaId);
+  const stressTest = data.stressTests.find((s: any) => s.ideaId === selectedIdeaId);
 
   return (
     <div className="flex h-full gap-6">
       {/* Left List */}
       <div className="w-1/3 flex flex-col gap-3 overflow-auto pr-2">
         <h2 className="text-xl font-bold mb-2">Stress Test</h2>
-        {data.ideas.map(idea => {
-          const st = data.stressTests.find(s => s.ideaId === idea.id);
+        {data.ideas.map((idea: any) => {
+          const st = data.stressTests.find((s: any) => s.ideaId === idea.id);
           const badgeColor = st?.overallBadge === 'Pass' ? 'bg-success-fill text-success-text' : 
                              st?.overallBadge === 'Fail' ? 'bg-red-100 text-red-700' : 
                              'bg-yellow-100 text-yellow-700';
@@ -60,7 +60,7 @@ export function StressTestStage({ data }: { data: IdeateResponse }) {
           </div>
           
           <div className="flex-1 overflow-auto space-y-4">
-            {stressTest.questions.map((q, idx) => (
+            {stressTest.questions.map((q: any, idx: number) => (
               <div 
                 key={idx}
                 className={cn(

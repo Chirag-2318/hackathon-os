@@ -8,8 +8,8 @@ import { DarkCallout } from '@/components/primitives/dark-callout';
 
 export function DecideStage({ data, onContinue }: { data: IdeateResponse, onContinue: () => void }) {
   // Use lockedIdeaId if available, or just mock picking the first idea
-  const chosenIdea = data.ideas.find(i => i.id === data.lockedIdeaId) || data.ideas[0];
-  const parkedIdeas = data.ideas.filter(i => i.id !== chosenIdea.id);
+  const chosenIdea = data.ideas.find((i: any) => i.id === data.lockedIdeaId) || data.ideas[0];
+  const parkedIdeas = data.ideas.filter((i: any) => i.id !== chosenIdea.id);
   
   const [isLocked, setIsLocked] = React.useState(false);
   const [isAnimating, setIsAnimating] = React.useState(false);
@@ -86,7 +86,7 @@ export function DecideStage({ data, onContinue }: { data: IdeateResponse, onCont
           </div>
 
           {/* Parked Ideas */}
-          {!isLocked && parkedIdeas.map((idea, index) => (
+          {!isLocked && parkedIdeas.map((idea: any, index: number) => (
             <div 
               key={idea.id}
               className={cn(

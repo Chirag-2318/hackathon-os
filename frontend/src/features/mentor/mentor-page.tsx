@@ -19,24 +19,22 @@ import { EmptyState } from '@/components/primitives/empty-state';
 import { COPY } from '@/shared/constants/copy';
 import { useIsOnline } from '@/shared/hooks/use-is-online';
 import { BookOpen, Map, LayoutDashboard, HelpCircle, RefreshCw, Lock } from 'lucide-react';
-import { cn } from 'cn';
+import { apiFetch } from '@/api/client';
+import { cn } from '@/lib/utils';
 import type { MentorContextResponse, MentorNavItem } from './api/types';
 
 // ── API ──────────────────────────────────────────────────────────
 
 async function fetchMentorContext(token: string): Promise<MentorContextResponse> {
-  const res = await fetch(`/api/v1/mentor/${token}/context`);
-  if (!res.ok) throw new Error('Failed to load mentor context');
-  return res.json() as Promise<MentorContextResponse>;
+  return apiFetch<MentorContextResponse>(`/api/v1/mentor/${token}/context`);
 }
 
 async function submitAsk(token: string, question: string): Promise<void> {
-  const res = await fetch(`/api/v1/mentor/${token}/ask`, {
+  return apiFetch<void>(`/api/v1/mentor/${token}/ask`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ question }),
   });
-  if (!res.ok) throw new Error('Submit failed');
 }
 
 // ── Nav items ────────────────────────────────────────────────────

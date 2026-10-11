@@ -11,7 +11,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchCrowdCheck, addCrowdRow, updateCrowdRow, deleteCrowdRow } from './api/crowd-api';
-import { crowdService, roomService, getCurrentRole } from '@/services';
+import { crowdService, roomService } from '@/services';
 import { useIsOnline } from '@/shared/hooks/use-is-online';
 import { Banner } from '@/components/primitives/banner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -188,12 +188,12 @@ export function CrowdCheckPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isOnline = useIsOnline();
-  const isLeader = getCurrentRole() === 'leader';
-
   const { data: room } = useQuery({
     queryKey: ['room', id],
     queryFn: () => roomService.getRoom(id),
   });
+
+  const isLeader = room ? (room as any).currentUserRole === 'leader' : true;
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['crowd-check', id],

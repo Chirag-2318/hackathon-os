@@ -35,7 +35,7 @@ export function MvpPage() {
       if (mounted) {
         setState(mvpData);
         setTasks(boardData.tasks || []);
-        setMembers(roomData?.members || []);
+        setMembers((roomData as any)?.members || boardData.members || []);
         setLoading(false);
       }
     });

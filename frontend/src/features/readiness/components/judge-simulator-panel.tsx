@@ -17,12 +17,14 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PromptBridgePanel } from '@/features/plan/components/prompt-bridge-panel';
 import { validateSimulatorAnswer } from '../api/readiness-api';
+import { useState } from 'react';
 import type { SimulatorData, ValidateResult } from '../api/types';
+import type { ValidationResult } from '@/services/planService';
 import { RefreshCw } from 'lucide-react';
 
-const SIMULATOR_PROMPT = `You are simulating a judge at the Campus Build Sprint 2026 hackathon.
-Team: Team Kaveri (Aarav Mehta, Ishita Rao, Kabir Nair, Meera Iyer, Rohan Das, Tanvi Kulkarni)
-Project: MessMeter — a tool that tells mess managers how many meals to cook tomorrow, for college hostels.
+const SIMULATOR_PROMPT = `You are simulating a judge at a hackathon.
+Team: Project Team
+Project: Hackathon prototype
 
 Rubric:
 - Innovation 25 pts
@@ -111,9 +113,16 @@ export function JudgeSimulatorPanel({
   onRetry,
 }: JudgeSimulatorPanelProps) {
   const hasResults = simulator.scores.length > 0 || simulator.likelyQuestions.length > 0;
+  const [simAnswer, setSimAnswer] = useState('');
 
-  const handleValidate = async (content: string): Promise<ValidateResult> => {
-    return validateSimulatorAnswer(roomId, content);
+  const handleValidate = async (content: string): Promise<ValidationResult> => {
+    const res = await validateSimulatorAnswer(roomId, content);
+    return {
+      valid: res.success ?? true,
+      errors: res.missingItems,
+      issues: res.missingItems,
+      repairPrompt: res.repairPrompt,
+    };
   };
 
   if (isError) {
@@ -156,9 +165,12 @@ export function JudgeSimulatorPanel({
             This prompt contains your idea and rubric text. It goes to the AI service you paste it into.
           </p>
           <PromptBridgePanel
+            stepIndex={0}
             stepId="sim"
             stepName="Simulator"
             promptText={SIMULATOR_PROMPT}
+            answer={simAnswer}
+            onAnswerChange={setSimAnswer}
             onValidate={handleValidate}
             onSuccess={() => {
               // Scores will appear after successful validation via refetch

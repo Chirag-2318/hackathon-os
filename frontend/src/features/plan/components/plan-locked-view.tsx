@@ -2,26 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { getCurrentRole } from '@/services/mockStore';
-
 export interface PlanLockedViewProps {
   roomId: string;
   docsCount?: number;
   tasksCount?: number;
   phasesCount?: number;
-  onEnterBuild: () => Promise<void>;
+  onEnterBuild?: () => Promise<void>;
   isEnteringBuild?: boolean;
+  isLeader?: boolean;
 }
 
 export function PlanLockedView({
-  roomId,
+  roomId: _roomId,
   docsCount = 9,
   tasksCount = 38,
   phasesCount = 5,
   onEnterBuild,
   isEnteringBuild = false,
+  isLeader = true,
 }: PlanLockedViewProps) {
-  const isLeader = getCurrentRole() === 'leader';
 
   // Sequence state: index of the current active/completed building row
   // 0: Row 0 spinning

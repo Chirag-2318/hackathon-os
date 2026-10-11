@@ -188,9 +188,9 @@ export function BoardListView({
                         {assignee ? (
                           <div
                             className="size-6 rounded-full bg-blue-100 text-blue-800 text-[10px] font-bold flex items-center justify-center"
-                            title={assignee.name}
+                            title={assignee.name || 'Assignee'}
                           >
-                            {assignee.name.slice(0, 2).toUpperCase()}
+                            {(assignee.name || 'TM').slice(0, 2).toUpperCase()}
                           </div>
                         ) : (
                           <div className="size-6 rounded-full border border-dashed border-muted-foreground/60 flex items-center justify-center text-muted-foreground/60 text-[10px]">

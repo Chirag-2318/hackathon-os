@@ -1,5 +1,5 @@
 /**
- * RoomOverviewPage — fully redesigned for Campus Build Sprint 2026.
+ * RoomOverviewPage — Hackathon OS room overview dashboard.
  * Route: /app/room/:id/overview
  *
  * Follows the spec:
@@ -11,25 +11,125 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useOutletContext, useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { roomService } from '@/services';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { roomService, checkpointService } from '@/services';
+import { useRoomOverview } from './hooks/use-room-overview';
+import { apiFetch } from '@/api/client';
 import { PlanningOverview } from './components/PlanningOverview';
 import { cn } from '@/lib/utils';
 import {
   Check, ChevronDown, ChevronRight, Flag, Link2, AlertCircle,
-  Users, BarChart2, Layers, Clock, Zap, X, Circle,
+  Users, BarChart2, Layers, Clock, Zap, X, Circle, Download,
 } from 'lucide-react';
 import { TagChip, TimeChip, InlineHighlight, Checkbox, PairedBarRow, type ChartHue } from '../home/components/HomeDesignSystem';
-import {
-  PHASES, CURRENT_PHASE, CURRENT_PHASE_IDX, PHASE_PROGRESS_PCT, ELAPSED_HOURS,
-  CHECKPOINTS, CHECKPOINTS_PASSED, CHECKPOINTS_TOTAL,
-  ROSTER, ACTIVITY, PROJECT, SKILLS_COVERAGE, MY_TASKS,
-  TASKS_SUMMARY, MILESTONES, PLANNED_WAYPOINTS, ACTUAL_WAYPOINTS,
-  NOW_HOUR, NOW_ACTUAL_PCT, NOW_PLANNED_PCT, INVITE_LINK,
-  type RoomMember, type Checkpoint, type RoomTask,
-} from './roomMock';
-import { getTasks, getPhases, getRoom, getRoomMembers, CURRENT_USER_ID } from '@/services/mockStore';
 import type { Task, BoardPhase } from '@/services/types';
+
+export interface RoomMember {
+  id: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  initials?: string;
+  avatarColor?: string;
+  role?: string;
+  status?: string;
+  tasksDone?: number;
+  tasksExpected?: number;
+  blockedOn?: string;
+  currentTask?: { key: string; summary: string };
+}
+
+export interface Checkpoint {
+  id: string;
+  label: string;
+  status: 'done' | 'current' | 'upcoming';
+  timeLabel?: string;
+  progress?: { done: number; total: number };
+  badge?: { label: string; tint: 'purple' | 'green' | 'amber' | 'blue' | 'neutral' };
+  actionText?: string;
+  actionHref?: string;
+}
+
+export interface RoomTask {
+  id: string;
+  title: string;
+  group: 'TODAY' | 'THEN' | 'NOW' | 'LATER';
+  tagLabel: string;
+  tagColor: 'green' | 'amber' | 'neutral' | 'blue' | 'purple' | 'red';
+  timeEstimate: string;
+  completed: boolean;
+  blocked?: boolean;
+  subtasks?: { done: number; total: number };
+}
+
+const DEFAULT_PHASES = [
+  { label: 'Plan', widthPct: 25 },
+  { label: 'Build', widthPct: 35 },
+  { label: 'Freeze', widthPct: 10 },
+  { label: 'Polish', widthPct: 15 },
+  { label: 'Submit', widthPct: 15 },
+];
+const PHASES = DEFAULT_PHASES;
+const CURRENT_PHASE = 'Build';
+const CURRENT_PHASE_IDX = 1;
+const PHASE_PROGRESS_PCT = 50;
+const ELAPSED_HOURS = 0;
+const CHECKPOINTS: Checkpoint[] = [];
+const CHECKPOINTS_PASSED = 0;
+const CHECKPOINTS_TOTAL = 0;
+const ROSTER: RoomMember[] = [];
+const ACTIVITY: any[] = [];
+const PROJECT = {
+  name: 'Hackathon Project',
+  identity: 'AI-assisted Hackathon Workspace',
+  chips: [
+    { label: 'Web', color: 'blue' as const },
+    { label: 'AI', color: 'purple' as const },
+  ],
+  rules: [
+    { label: 'Core Flow', description: 'Functional end-to-end prototype' },
+  ],
+  rubric: [
+    { label: 'Execution', weight: 40, color: '#141414' },
+    { label: 'Innovation', weight: 30, color: '#3B5BFF' },
+    { label: 'Design', weight: 30, color: '#22A55A' },
+  ],
+  mvpChecks: [
+    { label: 'Runs without crashing', pass: true },
+    { label: 'Stable core path', pass: true },
+    { label: 'Clear value', pass: true },
+    { label: 'Demo ready', pass: true },
+  ],
+};
+const SKILLS_COVERAGE = [
+  { area: 'Build', memberIds: [] as string[] },
+  { area: 'Design', memberIds: [] as string[] },
+  { area: 'AI', memberIds: [] as string[] },
+  { area: 'Domain', memberIds: [] as string[] },
+];
+const MY_TASKS: RoomTask[] = [];
+const ALL_ROOM_TASKS: RoomTask[] = [];
+const TASKS_SUMMARY = {
+  open: 0,
+  toDo: 0,
+  inProgress: 0,
+  blocked: 0,
+  delta: 0,
+  actualPct: 0,
+  plannedPct: 0,
+};
+const MILESTONES: any[] = [];
+const PLANNED_WAYPOINTS = [
+  { hour: 0, pct: 0 },
+  { hour: 48, pct: 100 },
+];
+const ACTUAL_WAYPOINTS = [
+  { hour: 0, pct: 0 },
+];
+const NOW_HOUR = 0;
+const NOW_ACTUAL_PCT = 0;
+const NOW_PLANNED_PCT = 0;
+const INVITE_LINK = '';
 
 interface RoomOverviewContextValue {
   roomId: string;
@@ -37,14 +137,16 @@ interface RoomOverviewContextValue {
   tasks: Task[];
   phases: BoardPhase[];
   room: any;
+  overview?: any;
 }
 
 const RoomOverviewContext = React.createContext<RoomOverviewContextValue>({
-  roomId: 'r-1',
+  roomId: '',
   isDemo: true,
   tasks: [],
   phases: [],
   room: null,
+  overview: null,
 });
 
 // ─── SHARED PRIMITIVES ────────────────────────────────────────────────────────
@@ -254,15 +356,22 @@ function FadeUp({ children, delay = 0, className }: {
 // ─── COMPONENT 1: PAGE HEADER ─────────────────────────────────────────────────
 function PageHeader() {
   const { isDemo, room, phases } = React.useContext(RoomOverviewContext);
-  const title = !isDemo && room ? room.name : 'Campus Build Sprint 2026';
+  const title = room?.name || 'Hackathon Workspace';
   const phaseLabel = !isDemo && phases.length > 0 ? phases[0].name.replace(/^Phase\s*\d+:\s*/i, '').toUpperCase() : 'POLISH PHASE';
+  const roomId = room?.id;
+
+  const handleExportZip = () => {
+    if (!roomId) return;
+    const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+    window.open(`${base}/api/v1/rooms/${roomId}/export.zip`, '_blank');
+  };
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <h1 className="text-[24px] font-[600] text-[#141414] tracking-[-0.02em] shrink-0">
-        {title}
-      </h1>
+    <div className="flex items-center justify-between gap-2 flex-wrap">
       <div className="flex items-center gap-2 flex-wrap">
+        <h1 className="text-[24px] font-[600] text-[#141414] tracking-[-0.02em] shrink-0">
+          {title}
+        </h1>
         <TagChip label="CAMPUS" color="green" />
         <TagChip label={phaseLabel} color="blue" />
         <div className="h-[28px] rounded-full flex items-center gap-1.5 px-3 bg-[#F0F0F0] text-[#7A7A7E] text-[12px] font-[600] uppercase tracking-[0.02em] shrink-0">
@@ -270,15 +379,34 @@ function PageHeader() {
           Hour {ELAPSED_HOURS} of 48
         </div>
       </div>
+      {roomId && (
+        <button
+          onClick={handleExportZip}
+          className="h-[32px] px-3 rounded-xl border border-[#E0E0E0] bg-white hover:bg-neutral-50 text-[12px] font-[600] text-[#141414] flex items-center gap-1.5 transition-colors cursor-pointer"
+        >
+          <Download className="w-3.5 h-3.5" />
+          <span>Export Room (.zip)</span>
+        </button>
+      )}
     </div>
   );
 }
 
 // ─── COMPONENT 2: STATUS BAND ─────────────────────────────────────────────────
 function StatusBand() {
-  const { isDemo, tasks, phases } = React.useContext(RoomOverviewContext);
+  const { isDemo, tasks, phases, overview } = React.useContext(RoomOverviewContext);
   const [mounted, setMounted] = useState(false);
   const [tickCounts, setTickCounts] = useState(0);
+
+  const clock = overview?.clock;
+  const vitals = overview?.vitals;
+
+  const currentHour = clock ? clock.currentHour : ELAPSED_HOURS;
+  const totalHours = clock ? clock.totalHours : 48;
+  const timeRemaining = clock?.formattedRemaining || (clock?.hoursLeft !== undefined ? `${clock.hoursLeft}h ${clock.minutesLeft || 0}m` : '—');
+
+  const totalCheckpoints = vitals?.checkpoints?.total ?? CHECKPOINTS_TOTAL;
+  const passedCheckpoints = vitals?.checkpoints?.passed ?? CHECKPOINTS_PASSED;
 
   useEffect(() => {
     setMounted(true);
@@ -287,12 +415,12 @@ function StatusBand() {
       const interval = setInterval(() => {
         i++;
         setTickCounts(i);
-        if (i >= CHECKPOINTS_TOTAL) clearInterval(interval);
+        if (i >= totalCheckpoints) clearInterval(interval);
       }, 40);
       return () => clearInterval(interval);
     }, 400);
     return () => clearTimeout(t);
-  }, []);
+  }, [totalCheckpoints]);
 
   const activePhases = (!isDemo && phases.length > 0)
     ? phases.map(p => ({
@@ -302,16 +430,14 @@ function StatusBand() {
     : PHASES;
 
   // Calculate elapsed width for phase bar
-  let elapsedWidth = 0;
-  for (let i = 0; i < CURRENT_PHASE_IDX; i++) elapsedWidth += (activePhases[i]?.widthPct || 20);
-  elapsedWidth += (activePhases[CURRENT_PHASE_IDX]?.widthPct || 20) * (PHASE_PROGRESS_PCT / 100);
+  let elapsedWidth = (currentHour / totalHours) * 100;
 
   // Stacked task bar widths
   const openTasks = (!isDemo && tasks.length > 0) ? tasks.filter(t => t.status !== 'done') : [];
-  const taskTotal = (!isDemo && tasks.length > 0) ? (openTasks.length || 1) : TASKS_SUMMARY.open;
-  const toDoCount = (!isDemo && tasks.length > 0) ? tasks.filter(t => t.status === 'todo').length : TASKS_SUMMARY.toDo;
-  const inProgressCount = (!isDemo && tasks.length > 0) ? tasks.filter(t => t.status === 'inprogress').length : TASKS_SUMMARY.inProgress;
-  const blockedCount = (!isDemo && tasks.length > 0) ? tasks.filter(t => t.flagged || t.status === 'blocked').length : TASKS_SUMMARY.blocked;
+  const taskTotal = vitals?.tasks ? (vitals.tasks.open || 1) : ((!isDemo && tasks.length > 0) ? (openTasks.length || 1) : TASKS_SUMMARY.open);
+  const toDoCount = vitals?.tasks ? vitals.tasks.todo : ((!isDemo && tasks.length > 0) ? tasks.filter(t => t.status === 'todo').length : TASKS_SUMMARY.toDo);
+  const inProgressCount = vitals?.tasks ? vitals.tasks.inProgress : ((!isDemo && tasks.length > 0) ? tasks.filter(t => t.status === 'inprogress').length : TASKS_SUMMARY.inProgress);
+  const blockedCount = vitals?.tasks ? vitals.tasks.blocked : ((!isDemo && tasks.length > 0) ? tasks.filter(t => Boolean(t.flagged || (t as any).blockedReason)).length : TASKS_SUMMARY.blocked);
 
   const toDoW = (toDoCount / taskTotal) * 100;
   const ipW = (inProgressCount / taskTotal) * 100;
@@ -323,10 +449,10 @@ function StatusBand() {
       <div className="px-5 py-4">
         {/* Above bar label row */}
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[13px] text-[#8A8A8E] font-[500]">Hour {ELAPSED_HOURS} of 48</span>
+          <span className="text-[13px] text-[#8A8A8E] font-[500]">Hour {currentHour} of {totalHours}</span>
           <div className="flex items-center gap-1.5">
             <span className="text-[13px] text-[#8A8A8E] font-[500]">Submit in</span>
-            <TimeChip timeRemaining="9h 05m" urgent />
+            <TimeChip timeRemaining={timeRemaining} urgent={currentHour > 36} />
           </div>
         </div>
 
@@ -422,7 +548,7 @@ function StatusBand() {
         <div className="px-5 py-3.5">
           <div className="text-[11px] text-[#8A8A8E] font-[500] uppercase tracking-[0.06em] mb-1">Checkpoints</div>
           <div className="text-[26px] font-[600] text-[#141414] tabular-nums leading-none mb-2">
-            {CHECKPOINTS_PASSED} / {CHECKPOINTS_TOTAL}
+            {passedCheckpoints} / {totalCheckpoints}
           </div>
           <div className="flex items-center gap-[3px]">
             {CHECKPOINTS.map((cp, i) => (
@@ -446,7 +572,7 @@ function StatusBand() {
         <div className="px-5 py-3.5">
           <div className="text-[11px] text-[#8A8A8E] font-[500] uppercase tracking-[0.06em] mb-1">Tasks open</div>
           <div className="text-[26px] font-[600] text-[#141414] tabular-nums leading-none mb-2">
-            {TASKS_SUMMARY.open}
+            {taskTotal}
           </div>
           {/* Stacked bar */}
           <div className="flex h-[6px] rounded-[3px] overflow-hidden gap-[2px] mb-1.5">
@@ -458,9 +584,9 @@ function StatusBand() {
               style={{ width: mounted ? `${blW}%` : '0%', transitionDelay: '200ms' }} />
           </div>
           <div className="flex items-center gap-2 text-[11px] text-[#8A8A8E]">
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#E8E8E8] inline-block" />{TASKS_SUMMARY.toDo}</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#2F9BEA] inline-block" />{TASKS_SUMMARY.inProgress}</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#E5484D] inline-block" />{TASKS_SUMMARY.blocked}</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#E8E8E8] inline-block" />{toDoCount}</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#2F9BEA] inline-block" />{inProgressCount}</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#E5484D] inline-block" />{blockedCount}</span>
           </div>
         </div>
 
@@ -469,14 +595,14 @@ function StatusBand() {
           <div className="text-[11px] text-[#8A8A8E] font-[500] uppercase tracking-[0.06em] mb-1">Vs plan</div>
           <div className="flex items-baseline gap-2 mb-2">
             <span className="text-[26px] font-[600] text-[#141414] tabular-nums leading-none">
-              {TASKS_SUMMARY.delta}%
+              {vitals?.vsPlan ? `${vitals.vsPlan.deltaPct >= 0 ? '+' : ''}${vitals.vsPlan.deltaPct}%` : `${TASKS_SUMMARY.delta}%`}
             </span>
             <div className="h-[20px] rounded-[6px] px-2 flex items-center bg-[#FFF1D6] text-[#B7791F] text-[10px] font-[700] uppercase tracking-[0.06em]">
-              BEHIND
+              {vitals?.vsPlan?.label || 'BEHIND'}
             </div>
           </div>
           <div className="text-[11px] text-[#8A8A8E]">
-            {TASKS_SUMMARY.actualPct}% done · {TASKS_SUMMARY.plannedPct}% planned
+            {vitals?.vsPlan ? `${vitals.vsPlan.actualPct}% done · ${vitals.vsPlan.plannedPct}% planned` : `${TASKS_SUMMARY.actualPct}% done · ${TASKS_SUMMARY.plannedPct}% planned`}
           </div>
         </div>
 
@@ -484,7 +610,7 @@ function StatusBand() {
         <div className="px-5 py-3.5">
           <div className="text-[11px] text-[#8A8A8E] font-[500] uppercase tracking-[0.06em] mb-1">Team active</div>
           <div className="text-[26px] font-[600] text-[#141414] tabular-nums leading-none mb-2">
-            4 / 6
+            {vitals?.team ? `${vitals.team.active} / ${vitals.team.total}` : '4 / 6'}
           </div>
           <AvatarStack memberIds={ROSTER.map(m => m.id)} max={4} />
         </div>
@@ -506,7 +632,7 @@ const ATTENTION_ITEMS = [
   {
     id: 'att1', tint: 'red' as const,
     title: '2 tasks blocked',
-    reason: 'API deploy (Ishita), Auth callback (Priya)',
+    reason: 'API deploy and Auth callback pending review',
     ownerIds: ['m2', 'm5'],
     linkText: 'View blocked',
     href: '#',
@@ -530,8 +656,53 @@ const ATTENTION_ITEMS = [
 ];
 
 function NeedsAttention() {
+  const { overview, roomId } = React.useContext(RoomOverviewContext);
   const [dismissed, setDismissed] = useState<string[]>([]);
-  const items = ATTENTION_ITEMS.filter(i => !dismissed.includes(i.id));
+  const { id: routeRoomId } = useParams<{ id: string }>();
+  const activeRoomId = roomId || routeRoomId || '';
+  const ghState = (overview as any)?.github;
+
+  const ghNeedsAttention = React.useMemo(() => {
+    if (!ghState) return null;
+    const hasRuleFailure = ghState.commits?.some(
+      (c: any) => new Date(c.at).getTime() < new Date('2026-10-07T07:00:00+05:30').getTime()
+    );
+    const hasMissingDemoSafe = !ghState.branches?.some((b: any) => b.role === 'demo-safe');
+    const hasPrConflicts = ghState.branches?.some((b: any) => b.pr?.conflicts);
+
+    if (hasRuleFailure || hasMissingDemoSafe || hasPrConflicts) {
+      return {
+        id: 'att-gh-repo',
+        tint: 'red' as const,
+        title: 'Repo needs attention',
+        reason: hasPrConflicts
+          ? 'PR merge conflicts detected on active branches'
+          : hasMissingDemoSafe
+          ? 'No demo-safe branch configured'
+          : 'Commits authored before official kickoff',
+        ownerIds: ['m1'],
+        linkText: 'Open GitHub',
+        href: `/app/room/${activeRoomId}/github`,
+      };
+    }
+    return null;
+  }, [ghState, activeRoomId]);
+
+  const serverAttentionItems = (overview?.attention && Array.isArray(overview.attention))
+    ? overview.attention.map((a: any) => ({
+        id: a.id,
+        tint: (a.priority === 'CRITICAL' ? 'red' : a.priority === 'WARNING' ? 'amber' : 'blue') as 'red' | 'amber' | 'blue',
+        title: a.title,
+        reason: a.reason,
+        ownerIds: a.ownerIds || [],
+        linkText: a.linkText || 'View',
+        href: a.href || `/app/room/${activeRoomId}/board`,
+      }))
+    : ATTENTION_ITEMS;
+
+  const baseItems = serverAttentionItems.length > 0 ? serverAttentionItems : ATTENTION_ITEMS;
+  const allItems = ghNeedsAttention ? [ghNeedsAttention, ...baseItems] : baseItems;
+  const items = allItems.filter((i: any) => !dismissed.includes(i.id));
 
   return (
     <SectionCard>
@@ -554,7 +725,7 @@ function NeedsAttention() {
         </div>
       ) : (
         <div>
-          {items.map((item, i) => (
+          {items.map((item: any, i: number) => (
             <div
               key={item.id}
               className="px-5 py-3 flex items-center gap-3 hover:bg-[#FAFAFA] transition-colors duration-150 group"
@@ -586,7 +757,15 @@ function NeedsAttention() {
 
 // ─── COMPONENT 4: CHECKPOINTS ─────────────────────────────────────────────────
 function CheckpointsCard() {
-  const { isDemo, phases: flowPhases } = React.useContext(RoomOverviewContext);
+  const { isDemo, phases: flowPhases, roomId, overview } = React.useContext(RoomOverviewContext);
+  const queryClient = useQueryClient();
+  const passMutation = useMutation({
+    mutationFn: (cpId: string) => checkpointService.passCheckpoint(roomId, cpId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['room-overview', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['checkpoints', roomId] });
+    },
+  });
   const [view, setView] = useState<'remaining' | 'all'>('remaining');
   const [doneExpanded, setDoneExpanded] = useState(false);
   const [railMounted, setRailMounted] = useState(false);
@@ -596,7 +775,15 @@ function CheckpointsCard() {
     return () => clearTimeout(t);
   }, []);
 
-  const activeCheckpoints = (!isDemo && flowPhases.length > 0)
+  const activeCheckpoints = (overview?.checkpoints && overview.checkpoints.length > 0)
+    ? overview.checkpoints.map((cp: any) => ({
+        id: cp.id,
+        label: cp.title,
+        status: (cp.status === 'passed' ? 'done' : cp.status === 'in_progress' ? 'current' : 'upcoming') as 'done' | 'current' | 'upcoming',
+        timeLabel: cp.timeEstimate || 'Phase exit',
+        progress: cp.meta?.progress ? { done: cp.meta.progress.current, total: cp.meta.progress.target } : undefined,
+      }))
+    : (!isDemo && flowPhases.length > 0)
     ? flowPhases.map((p, idx) => ({
         id: p.id,
         label: p.exitCheckpoint || p.name,
@@ -605,8 +792,8 @@ function CheckpointsCard() {
       }))
     : CHECKPOINTS;
 
-  const done = activeCheckpoints.filter(c => c.status === 'done');
-  const rest = activeCheckpoints.filter(c => c.status !== 'done');
+  const done = activeCheckpoints.filter((c: any) => c.status === 'done');
+  const rest = activeCheckpoints.filter((c: any) => c.status !== 'done');
   const passedCount = done.length;
   const totalCount = activeCheckpoints.length;
 
@@ -676,7 +863,7 @@ function CheckpointsCard() {
             />
           </svg>
 
-          {allForRail.map((cp, i) => {
+          {allForRail.map((cp: any, i: number) => {
             const isDone = cp.status === 'done';
             const isCurrent = cp.status === 'current';
             const isHidden = view === 'remaining' && !doneExpanded && isDone;
@@ -689,7 +876,11 @@ function CheckpointsCard() {
                   'hover:bg-[#FAFAFA] rounded-[8px] -mx-1 px-2 cursor-pointer group/cp'
                 )}
                 style={{ animationDelay: `${i * 30}ms` }}
-                onClick={() => {}} // placeholder
+                onClick={() => {
+                  if (!isDone) {
+                    passMutation.mutate(cp.id);
+                  }
+                }}
               >
                 {/* Status circle */}
                 <div className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center relative z-10"
@@ -744,54 +935,44 @@ function CheckpointsCard() {
 }
 
 // ─── COMPONENT 5: MY TASKS ────────────────────────────────────────────────────
-const ALL_ROOM_TASKS: RoomTask[] = [
-  ...MY_TASKS,
-  {
-    id: 't-all-1',
-    title: 'Review auth callback error handling',
-    group: 'NOW',
-    tagLabel: 'BACKEND',
-    tagColor: 'blue',
-    timeEstimate: 'in 1h',
-    completed: false,
-  },
-  {
-    id: 't-all-2',
-    title: 'Fix responsive navigation drawer for mobile',
-    group: 'TODAY',
-    tagLabel: 'FRONTEND',
-    tagColor: 'green',
-    timeEstimate: 'in 3h',
-    subtasks: { done: 1, total: 3 },
-    completed: false,
-  },
-  {
-    id: 't-all-3',
-    title: 'Generate pitch presentation deck template',
-    group: 'TODAY',
-    tagLabel: 'DESIGN',
-    tagColor: 'purple',
-    timeEstimate: 'in 4h',
-    completed: false,
-  },
-  {
-    id: 't-all-4',
-    title: 'Prepare final submission zip package',
-    group: 'LATER',
-    tagLabel: 'SUBMIT',
-    tagColor: 'red',
-    timeEstimate: 'in 7h',
-    completed: false,
-  },
-];
-
 function MyTasksCard() {
-  const { isDemo, tasks: flowTasks } = React.useContext(RoomOverviewContext);
+  const { isDemo, tasks: flowTasks, roomId, overview } = React.useContext(RoomOverviewContext);
+  const queryClient = useQueryClient();
   const [taskView, setTaskView] = useState<'mine' | 'all'>('mine');
 
-  const userRoomTasks: RoomTask[] = (!isDemo && flowTasks.length > 0)
+  const userRoomTasks: RoomTask[] = (overview?.myTasks)
+    ? [
+        ...(overview.myTasks.now || []).map((t: any) => ({
+          id: t.id,
+          title: t.summary,
+          group: 'NOW' as const,
+          tagLabel: (t.role || 'FRONTEND').toUpperCase(),
+          tagColor: 'blue' as const,
+          timeEstimate: t.estimateMin ? `${t.estimateMin}m` : '45m',
+          completed: false,
+        })),
+        ...(overview.myTasks.today || []).map((t: any) => ({
+          id: t.id,
+          title: t.summary,
+          group: 'TODAY' as const,
+          tagLabel: (t.role || 'FRONTEND').toUpperCase(),
+          tagColor: 'green' as const,
+          timeEstimate: t.estimateMin ? `${t.estimateMin}m` : '45m',
+          completed: false,
+        })),
+        ...(overview.myTasks.later || []).map((t: any) => ({
+          id: t.id,
+          title: t.summary,
+          group: 'LATER' as const,
+          tagLabel: (t.role || 'FRONTEND').toUpperCase(),
+          tagColor: 'purple' as const,
+          timeEstimate: t.estimateMin ? `${t.estimateMin}m` : '45m',
+          completed: false,
+        })),
+      ]
+    : (!isDemo && flowTasks.length > 0)
     ? flowTasks
-        .filter(t => t.assigneeId === CURRENT_USER_ID && t.status !== 'done')
+        .filter((t: any) => t.status !== 'done')
         .slice(0, 4)
         .map(t => ({
           id: t.id,
@@ -823,12 +1004,20 @@ function MyTasksCard() {
 
   useEffect(() => {
     setTasks(taskView === 'all' ? allRoomTasks : userRoomTasks);
-  }, [taskView, flowTasks, isDemo]);
+  }, [taskView, flowTasks, isDemo, overview]);
 
   const count = tasks.filter(t => !t.completed).length;
 
-  const handleComplete = (taskId: string) => {
+  const handleComplete = async (taskId: string) => {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: true } : t));
+    try {
+      await apiFetch(`/api/v1/rooms/${roomId}/tasks/${taskId}/move`, {
+        method: 'POST',
+        body: JSON.stringify({ toStatus: 'done' }),
+      });
+      queryClient.invalidateQueries({ queryKey: ['room-overview', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['board', roomId] });
+    } catch {}
     setTimeout(() => setTasks(prev => prev.filter(t => t.id !== taskId)), 320);
   };
 
@@ -997,9 +1186,28 @@ function RecentActivity() {
 
 // ─── COMPONENT 7: PROJECT SNAPSHOT ────────────────────────────────────────────
 function ProjectSnapshot() {
+  const { overview } = React.useContext(RoomOverviewContext);
   const [hovered, setHovered] = useState<number | null>(null);
 
-  const totalWeight = PROJECT.rubric.reduce((s, r) => s + r.weight, 0);
+  const projectName = overview?.project?.name || PROJECT.name;
+  const projectIdentity = overview?.project?.identity || PROJECT.identity;
+  const rubricItems = (overview?.project?.rubric && overview.project.rubric.length > 0)
+    ? overview.project.rubric.map((r: any, idx: number) => ({
+        label: r.criterion,
+        weight: r.weight,
+        color: ['#141414', '#3B5BFF', '#22A55A', '#E5484D', '#B7791F'][idx % 5],
+      }))
+    : PROJECT.rubric;
+  const totalWeight = rubricItems.reduce((s: number, r: any) => s + r.weight, 0);
+
+  const mvpChecks = overview?.project?.mvpHealth?.checks
+    ? [
+        { label: 'Runs without crashing', pass: overview.project.mvpHealth.checks.runs },
+        { label: 'Stable core path', pass: overview.project.mvpHealth.checks.stable },
+        { label: 'Clear 30s value', pass: overview.project.mvpHealth.checks.clear30 },
+        { label: '60s wow factor', pass: overview.project.mvpHealth.checks.wow60 },
+      ]
+    : PROJECT.mvpChecks;
 
   return (
     <SectionCard>
@@ -1014,8 +1222,8 @@ function ProjectSnapshot() {
       <div className="px-5 py-4 space-y-3">
         {/* 1. Name + identity */}
         <div>
-          <div className="text-[16px] font-[600] text-[#141414]">{PROJECT.name}</div>
-          <div className="text-[13px] text-[#8A8A8E] mt-0.5 leading-snug">{PROJECT.identity}</div>
+          <div className="text-[16px] font-[600] text-[#141414]">{projectName}</div>
+          <div className="text-[13px] text-[#8A8A8E] mt-0.5 leading-snug">{projectIdentity}</div>
         </div>
 
         {/* 2. Chips */}
@@ -1029,7 +1237,7 @@ function ProjectSnapshot() {
         <div>
           <div className="text-[11px] text-[#8A8A8E] font-[500] uppercase tracking-[0.06em] mb-1.5">Rubric</div>
           <div className="flex h-[8px] rounded-[4px] overflow-hidden gap-[2px]">
-            {PROJECT.rubric.map((seg, i) => (
+            {rubricItems.map((seg: any, i: number) => (
               <div
                 key={seg.label}
                 className="relative cursor-default group/seg"
@@ -1046,7 +1254,7 @@ function ProjectSnapshot() {
             ))}
           </div>
           <div className="flex mt-1.5">
-            {PROJECT.rubric.map(seg => (
+            {rubricItems.map((seg: any) => (
               <div
                 key={seg.label}
                 className="text-[10px] text-[#B4B4B8] text-center"
@@ -1063,7 +1271,7 @@ function ProjectSnapshot() {
           <div className="text-[11px] text-[#8A8A8E] font-[500] uppercase tracking-[0.06em] mb-1.5">MVP health</div>
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5">
-              {PROJECT.mvpChecks.map((chk, i) => (
+              {mvpChecks.map((chk: any, i: number) => (
                 <div
                   key={i}
                   className="w-5 h-5 rounded-full flex items-center justify-center cursor-default relative group/mvp"
@@ -1084,7 +1292,7 @@ function ProjectSnapshot() {
               ))}
             </div>
             <span className="text-[12px] text-[#8A8A8E]">
-              {PROJECT.mvpChecks.filter(c => c.pass).length} of {PROJECT.mvpChecks.length} checks
+              {mvpChecks.filter((c: any) => c.pass).length} of {mvpChecks.length} checks
             </span>
           </div>
         </div>
@@ -1108,29 +1316,42 @@ function ProjectSnapshot() {
 
 // ─── COMPONENT 8: TEAM PANEL ──────────────────────────────────────────────────
 function TeamPanel() {
-  const { isDemo, roomId, tasks: flowTasks } = React.useContext(RoomOverviewContext);
+  const { isDemo, roomId, tasks: flowTasks, overview } = React.useContext(RoomOverviewContext);
   const [teamView, setTeamView] = useState<'members' | 'workload' | 'skills'>('members');
   const [inviteText, setInviteText] = useState('');
   const [copied, setCopied] = useState(false);
   const [pendingInvites, setPendingInvites] = useState<string[]>([]);
 
-  const activeRoster = (!isDemo && roomId)
-    ? getRoomMembers(roomId).map((m) => {
-        const assigned = flowTasks.filter(t => t.assigneeId === m.id);
-        const done = assigned.filter(t => t.status === 'done');
+  const activeRoster = (overview?.team?.members && overview.team.members.length > 0)
+    ? overview.team.members.map((m: any) => {
+        const parts = (m.name || 'Member').split(' ');
+        const wl = overview.workload?.find((w: any) => w.userId === m.userId);
         return {
-          id: m.id,
-          firstName: m.displayName.split(' ')[0],
-          lastName: m.displayName.split(' ').slice(1).join(' ') || '',
-          initials: m.initials,
-          avatarColor: m.avatarColor,
-          role: m.roleTags?.[0] || 'Engineer',
-          status: 'working' as const,
-          tasksDone: done.length,
-          tasksExpected: Math.max(assigned.length, 1),
+          id: m.userId,
+          firstName: parts[0],
+          lastName: parts.slice(1).join(' ') || '',
+          initials: parts.map((p: string) => p[0]).join('').slice(0, 2).toUpperCase(),
+          avatarColor: m.avatarUrl || '#3B5BFF',
+          role: m.role || 'Contributor',
+          status: m.status || 'working',
+          tasksDone: wl ? wl.completedTasks : 0,
+          tasksExpected: wl ? Math.max(wl.openTasks + wl.completedTasks, 1) : 1,
         };
       })
-    : ROSTER;
+    : (overview?.team?.members || []).map((m: any) => {
+        const parts = (m.name || 'Team Member').split(' ');
+        return {
+          id: m.userId || m.id,
+          firstName: parts[0],
+          lastName: parts.slice(1).join(' ') || '',
+          initials: (m.name || 'TM').split(' ').map((p: string) => p[0]).join('').slice(0, 2).toUpperCase(),
+          avatarColor: m.avatarUrl || '#3B5BFF',
+          role: m.role || 'Contributor',
+          status: m.status || 'working',
+          tasksDone: 0,
+          tasksExpected: 1,
+        };
+      });
 
   const handleInvite = () => {
     if (!inviteText.trim()) return;
@@ -1200,7 +1421,7 @@ function TeamPanel() {
 
           {/* Member rows */}
           <div className="px-5 pb-2">
-            {activeRoster.map(member => (
+            {activeRoster.map((member: any) => (
               <MemberRow key={member.id} member={member} />
             ))}
             {pendingInvites.map((email, i) => (
@@ -1248,14 +1469,14 @@ function TeamPanel() {
             ))}
           </div>
           <div className="relative z-10">
-            {activeRoster.map((member, i) => (
+            {activeRoster.map((member: any, i: number) => (
               <PairedBarRow
                 key={member.id}
                 label={member.firstName}
                 hue={hueMap[i % hueMap.length]}
                 doneValue={member.tasksDone}
                 expectedValue={member.tasksExpected}
-                maxValue={Math.max(16, ...activeRoster.map(m => m.tasksExpected))}
+                maxValue={Math.max(16, ...activeRoster.map((m: any) => m.tasksExpected))}
                 status={member.status}
               />
             ))}
@@ -1303,9 +1524,12 @@ function TeamPanel() {
 }
 
 function MemberRow({ member }: { member: RoomMember }) {
+  const currentTaskStr = typeof member.currentTask === 'object' && member.currentTask !== null
+    ? ((member.currentTask as any).summary || (member.currentTask as any).key || 'Active')
+    : (member.currentTask || 'Idle');
   const taskText = member.status === 'blocked'
     ? `Blocked: ${member.blockedOn}`
-    : member.currentTask ?? 'Idle';
+    : currentTaskStr;
   const taskColor = member.status === 'blocked'
     ? '#E5484D'
     : member.status === 'idle'
@@ -1345,6 +1569,7 @@ function MemberRow({ member }: { member: RoomMember }) {
 
 // ─── COMPONENT 9: PROGRESS VS PLAN ────────────────────────────────────────────
 function ProgressVsPlan() {
+  const { overview } = React.useContext(RoomOverviewContext);
   const [mounted, setMounted] = useState(false);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
   const svgRef = useRef<SVGSVGElement>(null);
@@ -1359,32 +1584,45 @@ function ProgressVsPlan() {
   const chartW = W - PAD.left - PAD.right;
   const chartH = H - PAD.top - PAD.bottom;
 
-  const xScale = (h: number) => PAD.left + (h / 48) * chartW;
+  const totalHours = overview?.clock?.totalHours || 48;
+  const nowHour = overview?.clock?.currentHour ?? NOW_HOUR;
+  const nowActualPct = overview?.progress?.actualPct ?? NOW_ACTUAL_PCT;
+  const nowPlannedPct = overview?.progress?.plannedPct ?? NOW_PLANNED_PCT;
+
+  const plannedPts = (overview?.progress?.plannedWaypoints && overview.progress.plannedWaypoints.length > 0)
+    ? overview.progress.plannedWaypoints.map((p: any) => ({ h: p.hour, pct: p.pct }))
+    : PLANNED_WAYPOINTS;
+  const actualPts = (overview?.progress?.actualWaypoints && overview.progress.actualWaypoints.length > 0)
+    ? overview.progress.actualWaypoints.map((p: any) => ({ h: p.hour, pct: p.pct }))
+    : ACTUAL_WAYPOINTS;
+
+  const xScale = (h: number) => PAD.left + (h / totalHours) * chartW;
   const yScale = (pct: number) => H - PAD.bottom - (pct / 100) * chartH;
 
   const toPath = (pts: { h: number; pct: number }[]) =>
     pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xScale(p.h)} ${yScale(p.pct)}`).join(' ');
 
-  const plannedPath = toPath(PLANNED_WAYPOINTS);
-  const actualPath = toPath(ACTUAL_WAYPOINTS);
+  const plannedPath = toPath(plannedPts);
+  const actualPath = toPath(actualPts);
 
   // Area fill under actual line
-  const areaPath = actualPath + ` L ${xScale(NOW_HOUR)} ${yScale(0)} L ${xScale(0)} ${yScale(0)} Z`;
+  const areaPath = actualPath + ` L ${xScale(nowHour)} ${yScale(0)} L ${xScale(0)} ${yScale(0)} Z`;
 
   // Gap fill (amber) between planned and actual where actual < planned
-  const nowX = xScale(NOW_HOUR);
-  const nowActualY = yScale(NOW_ACTUAL_PCT);
-  const nowPlannedY = yScale(NOW_PLANNED_PCT);
+  const nowActualY = yScale(nowActualPct);
+  const nowPlannedY = yScale(nowPlannedPct);
 
   // Now line x
-  const nowLineX = xScale(NOW_HOUR);
+  const nowLineX = xScale(nowHour);
 
   // Phase boundary x positions for x-axis ticks
   const xTicks = [
-    { h: 0, label: 'Wed 7 AM' },
-    { h: 24, label: 'Thu 7 AM' },
-    { h: 48, label: 'Fri 7 AM' },
+    { h: 0, label: '0h' },
+    { h: Math.round(totalHours / 2), label: `${Math.round(totalHours / 2)}h` },
+    { h: totalHours, label: `${totalHours}h` },
   ];
+
+  const deltaLabel = overview?.vitals?.vsPlan?.label || (overview?.progress ? `${overview.progress.deltaPct >= 0 ? '+' : ''}${overview.progress.deltaPct}% vs plan` : '-5% vs plan');
 
   return (
     <SectionCard>
@@ -1392,7 +1630,7 @@ function ProgressVsPlan() {
         <div className="flex items-center gap-2">
           <span className="text-[15px] font-[600] text-[#141414]">Progress vs plan</span>
           <div className="h-[20px] rounded-[6px] px-2 flex items-center bg-[#FFF1D6] text-[#B7791F] text-[10px] font-[700] uppercase tracking-[0.06em]">
-            -5% vs plan
+            {deltaLabel}
           </div>
         </div>
         <div className="flex items-center gap-3 text-[11px] text-[#8A8A8E]">
@@ -1533,7 +1771,7 @@ function ProgressVsPlan() {
 // ─── ROOT PAGE ────────────────────────────────────────────────────────────────
 export function RoomOverviewPage() {
   const { roomId, id } = useParams<{ roomId?: string; id?: string }>();
-  const activeRoomId = roomId || id || 'r-1';
+  const activeRoomId = roomId || id || '';
   const [showSuccessBanner, setShowSuccessBanner] = useState(true);
 
   const outletContext = useOutletContext<{ setRightRail: (node: React.ReactNode) => void } | null>();
@@ -1549,17 +1787,19 @@ export function RoomOverviewPage() {
     queryFn: () => roomService.getRoom(activeRoomId),
   });
 
+  const { data: overview } = useRoomOverview(activeRoomId);
+
   // If stage is before build, render the Planning variant
-  if (room && room.stage !== 'build') {
+  const currentStage = overview?.variant === 'planning' ? 'ideate' : (room?.stage || 'build');
+  if (room && currentStage !== 'build') {
     return <PlanningOverview roomId={activeRoomId} />;
   }
 
-  const isDemo = activeRoomId === 'r-1';
-  const flowTasks = isDemo ? [] : getTasks(activeRoomId);
-  const flowPhases = isDemo ? [] : getPhases(activeRoomId);
+  const flowTasks = overview?.tasks || [];
+  const flowPhases = overview?.phases || [];
 
   return (
-    <RoomOverviewContext.Provider value={{ roomId: activeRoomId, isDemo, tasks: flowTasks, phases: flowPhases, room }}>
+    <RoomOverviewContext.Provider value={{ roomId: activeRoomId, isDemo: false, tasks: flowTasks, phases: flowPhases, room, overview }}>
       <div
         className="px-6 pb-8 max-w-[1280px] mx-auto"
         style={{ paddingTop: 16 }}

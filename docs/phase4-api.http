@@ -1,0 +1,361 @@
+### Phase 4: SHIP & PRESENT (Polish, Pitch, Demo, Submission, Readiness, Retro, Mentor)
+@baseUrl = http://localhost:8080/api/v1
+@roomId = 00000000-0000-0000-0000-000000000001
+@branchId = 00000000-0000-0000-0000-000000000002
+@slideId = 00000000-0000-0000-0000-000000000003
+@qaId = 00000000-0000-0000-0000-000000000004
+@rowId = 00000000-0000-0000-0000-000000000005
+@mentorToken = sample-mentor-token-uuid
+
+### ==============================================================================
+### 1. GITHUB HUB
+### ==============================================================================
+
+### 1.1 Get GitHub Hub Page
+GET {{baseUrl}}/rooms/{{roomId}}/github
+Content-Type: application/json
+
+### 1.2 Connect GitHub Repository (supports "demo/demo-repo" for fake client)
+POST {{baseUrl}}/rooms/{{roomId}}/github/connect
+Content-Type: application/json
+
+{
+  "repo": "demo/demo-repo"
+}
+
+### 1.3 Sync GitHub Repository
+POST {{baseUrl}}/rooms/{{roomId}}/github/sync
+Content-Type: application/json
+
+### 1.4 Update Branch Purpose and Role
+PATCH {{baseUrl}}/rooms/{{roomId}}/github/branches/{{branchId}}
+Content-Type: application/json
+
+{
+  "purpose": "Core authentication and JWT flow",
+  "role": "demo-safe"
+}
+
+### 1.5 Link Tasks to Branch
+PUT {{baseUrl}}/rooms/{{roomId}}/github/branches/{{branchId}}/tasks
+Content-Type: application/json
+
+{
+  "taskIds": ["00000000-0000-0000-0000-000000000010"]
+}
+
+### 1.6 Update Deployed Application Link
+PUT {{baseUrl}}/rooms/{{roomId}}/github/deployed-link
+Content-Type: application/json
+
+{
+  "url": "https://hackathon-os-demo.vercel.app"
+}
+
+### 1.7 Get Freeze Checklist
+GET {{baseUrl}}/rooms/{{roomId}}/github/freeze
+Content-Type: application/json
+
+### 1.8 Freeze Demo Branch
+POST {{baseUrl}}/rooms/{{roomId}}/github/freeze
+Content-Type: application/json
+
+{
+  "branch": "demo-safe",
+  "tag": "v1.0.0-demo",
+  "sha": "a1b2c3d4e5f6",
+  "message": "Demo-safe freeze for judge presentation"
+}
+
+### 1.9 Dismiss Attention Item
+POST {{baseUrl}}/rooms/{{roomId}}/github/attention/NO_LINKED_TASK/dismiss
+Content-Type: application/json
+
+### 1.10 List User Repositories
+GET {{baseUrl}}/github/my-repos
+Content-Type: application/json
+
+### 1.11 Disconnect GitHub Repository
+DELETE {{baseUrl}}/rooms/{{roomId}}/github/connect
+Content-Type: application/json
+
+
+### ==============================================================================
+### 2. PITCH STUDIO (Slides, Rehearsals, Q&A)
+### ==============================================================================
+
+### 2.1 Get Pitch Deck & Slides
+GET {{baseUrl}}/rooms/{{roomId}}/pitch/deck
+Content-Type: application/json
+
+### 2.2 Generate / Reset Pitch Deck
+POST {{baseUrl}}/rooms/{{roomId}}/pitch/deck/generate
+Content-Type: application/json
+
+### 2.3 Add Slide
+POST {{baseUrl}}/rooms/{{roomId}}/pitch/slides
+Content-Type: application/json
+
+{
+  "kind": "TECH",
+  "title": "Architecture & Scalability",
+  "question": "How did you build it?",
+  "content": "Spring Boot 4, PostgreSQL, React 19, and TailwindCSS with zero-config telemetry."
+}
+
+### 2.4 Update Slide Content and Pacing
+PATCH {{baseUrl}}/rooms/{{roomId}}/pitch/slides/{{slideId}}
+Content-Type: application/json
+
+{
+  "title": "Architecture & Resiliency",
+  "content": "Spring Boot 4, PostgreSQL, and Flyway with automated fallback circuit breakers.",
+  "durationSec": 35
+}
+
+### 2.5 Delete Slide
+DELETE {{baseUrl}}/rooms/{{roomId}}/pitch/slides/{{slideId}}
+Content-Type: application/json
+
+### 2.6 Reorder Slides
+PUT {{baseUrl}}/rooms/{{roomId}}/pitch/slides/reorder
+Content-Type: application/json
+
+{
+  "slideIds": [
+    "{{slideId}}"
+  ]
+}
+
+### 2.7 Get Judging Q&A Cards
+GET {{baseUrl}}/rooms/{{roomId}}/pitch/qa
+Content-Type: application/json
+
+### 2.8 AI Generate Q&A Cards
+POST {{baseUrl}}/rooms/{{roomId}}/pitch/qa/generate
+Content-Type: application/json
+
+### 2.9 Add Manual Q&A Card
+POST {{baseUrl}}/rooms/{{roomId}}/pitch/qa
+Content-Type: application/json
+
+{
+  "question": "What happens if the external API fails during demo?",
+  "answer": "We have an offline fallback cache with pre-warmed synthetic demo fixtures.",
+  "category": "TECH"
+}
+
+### 2.10 Update Q&A Card
+PATCH {{baseUrl}}/rooms/{{roomId}}/pitch/qa/{{qaId}}
+Content-Type: application/json
+
+{
+  "answer": "Updated answer with specific uptime and fallback details.",
+  "pinned": true
+}
+
+### 2.11 Delete Q&A Card
+DELETE {{baseUrl}}/rooms/{{roomId}}/pitch/qa/{{qaId}}
+Content-Type: application/json
+
+### 2.12 Get Rehearsal History & Statistics
+GET {{baseUrl}}/rooms/{{roomId}}/pitch/rehearse
+Content-Type: application/json
+
+### 2.13 Record a Rehearsal Run
+POST {{baseUrl}}/rooms/{{roomId}}/pitch/rehearse
+Content-Type: application/json
+
+{
+  "durationSec": 172,
+  "slideTimings": [
+    { "slideId": "{{slideId}}", "paceSec": 28 }
+  ],
+  "feedback": "Smooth flow. Opener was concise, demo transition was well under 30s."
+}
+
+
+### ==============================================================================
+### 3. DEMO & VIDEO STUDIO
+### ==============================================================================
+
+### 3.1 Get Demo & Video Studio Page Data
+GET {{baseUrl}}/rooms/{{roomId}}/demo
+Content-Type: application/json
+
+### 3.2 Update Demo Media Links
+PUT {{baseUrl}}/rooms/{{roomId}}/demo/media
+Content-Type: application/json
+
+{
+  "fallbackVideoUrl": "https://youtube.com/watch?v=sample-demo-run",
+  "backupRecordingUrl": "https://drive.google.com/sample-backup-recording"
+}
+
+### 3.3 Toggle Demo Insurance Checklist Item
+PATCH {{baseUrl}}/rooms/{{roomId}}/demo/insurance/00000000-0000-0000-0000-000000000010
+Content-Type: application/json
+
+{
+  "checked": true
+}
+
+
+### ==============================================================================
+### 4. SUBMISSION CENTER
+### ==============================================================================
+
+### 4.1 Get Submission Checklist & Draft
+GET {{baseUrl}}/rooms/{{roomId}}/submission
+Content-Type: application/json
+
+### 4.2 Toggle Checklist Item
+PATCH {{baseUrl}}/rooms/{{roomId}}/submission/checklist/00000000-0000-0000-0000-000000000020
+Content-Type: application/json
+
+{
+  "checked": true
+}
+
+### 4.3 Save Submission Draft
+PUT {{baseUrl}}/rooms/{{roomId}}/submission/draft
+Content-Type: application/json
+
+{
+  "whatItDoes": "Hackathon OS guides teams through rules, ideation, development, and pitching.",
+  "whyItMatters": "Teams lose up to 40% of their build time to coordination friction.",
+  "howBuilt": "Spring Boot, React, Vite, PostgreSQL, Flyway.",
+  "challenges": "Real-time state synchronization and deterministic freeze detection.",
+  "whatsNext": "Multi-room tournaments and judge scoring portals."
+}
+
+### 4.4 Verify Submission Links
+POST {{baseUrl}}/rooms/{{roomId}}/submission/verify-links
+Content-Type: application/json
+
+### 4.5 Submit Final Hackathon Project
+POST {{baseUrl}}/rooms/{{roomId}}/submission/submit
+Content-Type: application/json
+
+
+### ==============================================================================
+### 5. READINESS & JUDGE SIMULATOR
+### ==============================================================================
+
+### 5.1 Get Overall Room Readiness Breakdown
+GET {{baseUrl}}/rooms/{{roomId}}/readiness
+Content-Type: application/json
+
+### 5.2 Validate Simulated Judge Defense Answer
+POST {{baseUrl}}/rooms/{{roomId}}/readiness/simulate/validate
+Content-Type: application/json
+
+{
+  "answer": "We benchmarked our engine with 500 concurrent operations. Cache hits stayed at 94%, and latency averaged 12ms."
+}
+
+
+### ==============================================================================
+### 6. RETRO & PORTFOLIO
+### ==============================================================================
+
+### 6.1 Get Retrospective & Time Analysis
+GET {{baseUrl}}/rooms/{{roomId}}/retro
+Content-Type: application/json
+
+### 6.2 Update Retro Answers / Project Decision
+PATCH {{baseUrl}}/rooms/{{roomId}}/retro
+Content-Type: application/json
+
+{
+  "worked": "Trunk-based commits and strict feature freeze 2 hours before deadline.",
+  "didnt": "Attempting too many nice-to-have UI animations in early sprint.",
+  "change": "Set up automated test coverage before building the core flow.",
+  "decision": "continue"
+}
+
+### 6.3 Get Public Portfolio Entry
+GET {{baseUrl}}/rooms/{{roomId}}/portfolio
+Content-Type: application/json
+
+
+### ==============================================================================
+### 7. PRE-EVENT PREP & CROWD CHECK
+### ==============================================================================
+
+### 7.1 Get Prep Dashboard Data
+GET {{baseUrl}}/rooms/{{roomId}}/prep
+Content-Type: application/json
+
+### 7.2 Toggle Prep Checklist Item
+PATCH {{baseUrl}}/rooms/{{roomId}}/prep/checklist/00000000-0000-0000-0000-000000000030
+Content-Type: application/json
+
+{
+  "done": true
+}
+
+### 7.3 Get Track Crowd Check Rows
+GET {{baseUrl}}/rooms/{{roomId}}/crowd-check
+Content-Type: application/json
+
+### 7.4 Add Crowd Check Row
+POST {{baseUrl}}/rooms/{{roomId}}/crowd-check/rows
+Content-Type: application/json
+
+{
+  "option": "AI Document Assistant",
+  "likelyCompetingIdeas": "Resume builders, PDF summarizers",
+  "collegeOverlap": "High",
+  "crowdedness": "HIGH",
+  "notes": "Very common theme, hard to stand out unless execution is exceptional"
+}
+
+### 7.5 Update Crowd Check Row
+PATCH {{baseUrl}}/rooms/{{roomId}}/crowd-check/rows/{{rowId}}
+Content-Type: application/json
+
+{
+  "crowdedness": "MEDIUM",
+  "notes": "Niche focus on medical discharge summaries differentiates this idea"
+}
+
+### 7.6 Delete Crowd Check Row
+DELETE {{baseUrl}}/rooms/{{roomId}}/crowd-check/rows/{{rowId}}
+Content-Type: application/json
+
+
+### ==============================================================================
+### 8. MENTOR VIEW
+### ==============================================================================
+
+### 8.1 Get Read-Only Mentor Room Context
+GET {{baseUrl}}/mentor/{{mentorToken}}/context
+Content-Type: application/json
+
+### 8.2 Ask Question to Mentor
+POST {{baseUrl}}/mentor/{{mentorToken}}/ask
+Content-Type: application/json
+
+{
+  "question": "Should we prioritize adding mobile responsiveness or live webhooks for demo?"
+}
+
+
+### ==============================================================================
+### 9. DEV PROFILE ENDPOINTS (spring.profiles.active=dev)
+### ==============================================================================
+
+### 9.1 Seed Present Data (Slides, Q&A, Rehearsal, Media, Submission)
+POST {{baseUrl}}/dev/rooms/{{roomId}}/seed-present
+Content-Type: application/json
+
+### 9.2 Add Synthetic Commits to Branch
+POST {{baseUrl}}/dev/rooms/{{roomId}}/github/add-commits
+Content-Type: application/json
+
+{
+  "branch": "main",
+  "count": 3,
+  "beforeKickoff": false
+}

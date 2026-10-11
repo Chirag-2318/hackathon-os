@@ -1,0 +1,334 @@
+### Phase 3: The BUILD Phase API Requests
+@baseUrl = http://localhost:8080/api/v1
+@roomId = 00000000-0000-0000-0000-000000000001
+@taskId = 00000000-0000-0000-0000-000000000002
+@checkpointId = 00000000-0000-0000-0000-000000000003
+
+### 1. KANBAN BOARD & TASKS
+
+### 1.1 Get Kanban Board
+GET {{baseUrl}}/rooms/{{roomId}}/board
+Content-Type: application/json
+
+### 1.2 List Tasks
+GET {{baseUrl}}/rooms/{{roomId}}/tasks
+Content-Type: application/json
+
+### 1.3 Create Task
+POST {{baseUrl}}/rooms/{{roomId}}/tasks
+Content-Type: application/json
+
+{
+  "summary": "Implement JWT auth interceptor",
+  "description": "Intercept outgoing requests with Authorization header",
+  "priority": "HIGH",
+  "role": "Backend",
+  "estimateMin": 45,
+  "status": "TODO",
+  "labels": ["auth", "security"]
+}
+
+### 1.4 Get Task Details
+GET {{baseUrl}}/rooms/{{roomId}}/tasks/{{taskId}}
+Content-Type: application/json
+
+### 1.5 Update Task (with version check)
+PATCH {{baseUrl}}/rooms/{{roomId}}/tasks/{{taskId}}
+Content-Type: application/json
+
+{
+  "summary": "Implement JWT auth interceptor with refresh token",
+  "priority": "CRITICAL",
+  "estimateMin": 60,
+  "version": 1
+}
+
+### 1.6 Move Task
+POST {{baseUrl}}/rooms/{{roomId}}/tasks/{{taskId}}/move
+Content-Type: application/json
+
+{
+  "toStatus": "IN_PROGRESS",
+  "toIndex": 0
+}
+
+### 1.7 Flag Task
+POST {{baseUrl}}/rooms/{{roomId}}/tasks/{{taskId}}/flag
+Content-Type: application/json
+
+{
+  "flagged": true,
+  "reason": "OAuth provider client secret missing from dev vault"
+}
+
+### 1.8 Add Subtask
+POST {{baseUrl}}/rooms/{{roomId}}/tasks/{{taskId}}/subtasks
+Content-Type: application/json
+
+{
+  "title": "Configure Spring Security filter chain"
+}
+
+### 1.9 Add Acceptance Criterion
+POST {{baseUrl}}/rooms/{{roomId}}/tasks/{{taskId}}/acceptance
+Content-Type: application/json
+
+{
+  "text": "Returns 401 Unauthorized for expired tokens"
+}
+
+### 1.10 Add Comment
+POST {{baseUrl}}/rooms/{{roomId}}/tasks/{{taskId}}/comments
+Content-Type: application/json
+
+{
+  "text": "@Alice check if we also need CORS headers configured"
+}
+
+### 1.11 Update Task Dependencies
+PUT {{baseUrl}}/rooms/{{roomId}}/tasks/{{taskId}}/dependencies
+Content-Type: application/json
+
+{
+  "dependsOnTaskIds": [
+    "00000000-0000-0000-0000-000000000004"
+  ]
+}
+
+### 1.12 Delete Task
+DELETE {{baseUrl}}/rooms/{{roomId}}/tasks/{{taskId}}
+Content-Type: application/json
+
+
+### 2. ROOM OVERVIEW & VITALS
+
+### 2.1 Get Room Overview (Planning or Build Variant)
+GET {{baseUrl}}/rooms/{{roomId}}/overview
+Content-Type: application/json
+
+### 2.2 Get Progress Burnup
+GET {{baseUrl}}/rooms/{{roomId}}/progress
+Content-Type: application/json
+
+### 2.3 Get Team Workload
+GET {{baseUrl}}/rooms/{{roomId}}/workload?scope=phase
+Content-Type: application/json
+
+### 2.4 Get Navigation Badge Counters
+GET {{baseUrl}}/rooms/{{roomId}}/nav-badges
+Content-Type: application/json
+
+
+### 3. PRESENCE & HEARTBEAT
+
+### 3.1 Send Member Heartbeat
+POST {{baseUrl}}/rooms/{{roomId}}/heartbeat
+Content-Type: application/json
+
+{
+  "currentPath": "/app/room/{{roomId}}/board",
+  "currentTask": "PRD Review"
+}
+
+
+### 4. TEAM ROSTER & CHARTER
+
+### 4.1 Get Team Roster
+GET {{baseUrl}}/rooms/{{roomId}}/team
+Content-Type: application/json
+
+### 4.2 Update Team Charter
+PUT {{baseUrl}}/rooms/{{roomId}}/team/charter
+Content-Type: application/json
+
+{
+  "teamName": "ByteCrafters",
+  "track": "Open Innovation",
+  "rules": ["Daily standup at 9 AM", "Ship fast, iterate cleanly"]
+}
+
+
+### 5. CHECKPOINTS
+
+### 5.1 Get Checkpoints
+GET {{baseUrl}}/rooms/{{roomId}}/checkpoints
+Content-Type: application/json
+
+### 5.2 Pass Checkpoint Manually
+POST {{baseUrl}}/rooms/{{roomId}}/checkpoints/{{checkpointId}}/pass
+Content-Type: application/json
+
+{
+  "passed": true
+}
+
+### 5.3 Update Rehearsal Progress
+PATCH {{baseUrl}}/rooms/{{roomId}}/checkpoints/{{checkpointId}}/progress
+Content-Type: application/json
+
+{
+  "current": 2
+}
+
+
+### 6. MVP STUDIO
+
+### 6.1 Get MVP State
+GET {{baseUrl}}/rooms/{{roomId}}/mvp
+Content-Type: application/json
+
+### 6.2 Update Elevator Pitch
+PUT {{baseUrl}}/rooms/{{roomId}}/mvp/pitch
+Content-Type: application/json
+
+{
+  "pitch": "A real-time opinionated OS guiding hackathon teams from rules to pitch."
+}
+
+### 6.3 Update Core Flow
+PUT {{baseUrl}}/rooms/{{roomId}}/mvp/core-flow
+Content-Type: application/json
+
+{
+  "steps": [
+    "1. Paste hackathon rules & parse rubric",
+    "2. Brainstorm with silent voting rounds",
+    "3. Generate PRD and schedule tasks",
+    "4. Rehearse pitch with AI judge timer"
+  ]
+}
+
+### 6.4 Update Scope Ledger
+PUT {{baseUrl}}/rooms/{{roomId}}/mvp/ledger
+Content-Type: application/json
+
+{
+  "inScope": ["Auth", "Kanban Board", "Checkpoints"],
+  "outOfScope": ["Third-party Jira sync", "Billing module"]
+}
+
+### 6.5 Update MVP Health Checks
+PUT {{baseUrl}}/rooms/{{roomId}}/mvp/health
+Content-Type: application/json
+
+{
+  "runs": true,
+  "stable": true,
+  "clear30": true,
+  "wow60": false
+}
+
+### 6.6 Update Judge Prep
+PUT {{baseUrl}}/rooms/{{roomId}}/mvp/judge-prep
+Content-Type: application/json
+
+{
+  "answers": {
+    "q1": "We validated this with 50 student participants."
+  }
+}
+
+### 6.7 Update Cut List
+PUT {{baseUrl}}/rooms/{{roomId}}/mvp/cut-list
+Content-Type: application/json
+
+{
+  "cutItems": ["Multi-lingual speech recognition"]
+}
+
+
+### 7. DOCS VAULT
+
+### 7.1 List All Docs
+GET {{baseUrl}}/rooms/{{roomId}}/docs
+Content-Type: application/json
+
+### 7.2 Create New Doc
+POST {{baseUrl}}/rooms/{{roomId}}/docs
+Content-Type: application/json
+
+{
+  "name": "DEPLOYMENT.md",
+  "content": "# Deployment Architecture\n\nRun via Docker Compose on AWS ECS."
+}
+
+### 7.3 Update Doc (with optimistic baseVersion)
+PUT {{baseUrl}}/rooms/{{roomId}}/docs/DEPLOYMENT.md
+Content-Type: application/json
+
+{
+  "content": "# Deployment Architecture\n\nRun via Docker Compose on AWS ECS.\n\nHealth check at /actuator/health",
+  "baseVersion": 1
+}
+
+### 7.4 Get Historical Doc Version
+GET {{baseUrl}}/rooms/{{roomId}}/docs/DEPLOYMENT.md/versions/1
+Content-Type: application/json
+
+### 7.5 Restore Historical Doc Version
+POST {{baseUrl}}/rooms/{{roomId}}/docs/DEPLOYMENT.md/restore
+Content-Type: application/json
+
+{
+  "version": 1
+}
+
+### 7.6 Download Docs Vault as ZIP
+GET {{baseUrl}}/rooms/{{roomId}}/docs/download.zip
+
+
+### 8. GLOBAL HOME & SEARCH
+
+### 8.1 Get Global Home Dashboard
+GET {{baseUrl}}/home?roomId={{roomId}}
+Content-Type: application/json
+
+### 8.2 Global Unified Search
+GET {{baseUrl}}/search?q=auth&roomId={{roomId}}
+Content-Type: application/json
+
+
+### 9. SPEED MODE & CAPTURE
+
+### 9.1 Get Speed Mode Queue
+GET {{baseUrl}}/rooms/{{roomId}}/speed-mode
+Content-Type: application/json
+
+### 9.2 Quick Complete Next Task
+POST {{baseUrl}}/rooms/{{roomId}}/tasks/{{taskId}}/done
+Content-Type: application/json
+
+### 9.3 Quick Capture Scratchpad Thought
+POST {{baseUrl}}/rooms/{{roomId}}/capture
+Content-Type: application/json
+
+{
+  "text": "Don't forget to test offline PWA cache before demo video"
+}
+
+### 9.4 List Scratchpad Captures
+GET {{baseUrl}}/rooms/{{roomId}}/capture
+Content-Type: application/json
+
+### 9.5 Delete Scratchpad Capture
+DELETE {{baseUrl}}/rooms/{{roomId}}/capture/{{taskId}}
+Content-Type: application/json
+
+
+### 10. DEV TOOLS (Active with 'dev' profile)
+
+### 10.1 Set Simulated Event Clock
+POST {{baseUrl}}/dev/rooms/{{roomId}}/set-clock
+Content-Type: application/json
+
+{
+  "hourOfEvent": 39
+}
+
+### 10.2 Simulate Automated Progress
+POST {{baseUrl}}/dev/rooms/{{roomId}}/simulate-progress
+Content-Type: application/json
+
+{
+  "percent": 60
+}

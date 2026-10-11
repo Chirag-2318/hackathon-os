@@ -3,10 +3,14 @@ import type { IdeateResponse } from '@/api/client';
 import { Lock } from 'lucide-react';
 import { Chip } from '@/components/primitives/chip';
 
+import { useCurrentUser } from '@/features/auth/useCurrentUser';
+
 export function SoloStage({ data }: { data: IdeateResponse }) {
-  // In a real app we'd get the active user ID from auth context.
-  // For the demo we'll use 'm-1' (Aarav)
-  const myIdeas = data.ideas.filter(i => i.authorId === 'm-1');
+  const { data: user } = useCurrentUser();
+  const currentUserId = user?.id ? String(user.id) : undefined;
+  const myIdeas = currentUserId
+    ? data.ideas.filter((i: any) => String(i.authorId) === currentUserId)
+    : data.ideas;
 
   return (
     <div className="flex h-full gap-6">
@@ -16,7 +20,7 @@ export function SoloStage({ data }: { data: IdeateResponse }) {
           <Chip color="sky" className="flex items-center gap-1"><Lock className="size-3" /> Private until reveal</Chip>
         </div>
         <div className="flex-1 overflow-auto space-y-4 pr-2">
-          {myIdeas.map((idea) => (
+          {myIdeas.map((idea: any) => (
             <div 
               key={idea.id} 
               className="p-4 bg-surface-raised border border-primary ring-1 ring-primary/20 rounded-lg shadow-sm cursor-pointer transition-colors"
@@ -55,7 +59,7 @@ export function SoloStage({ data }: { data: IdeateResponse }) {
           <div>
             <label className="block text-sm font-medium mb-2">Role needs</label>
             <div className="flex flex-wrap gap-2">
-              {myIdeas[0]?.roleNeeds.map(role => (
+              {myIdeas[0]?.roleNeeds.map((role: any) => (
                 <Chip key={role} color="sky">{role}</Chip>
               ))}
               <button className="px-3 py-1 border border-border rounded-full text-xs font-medium hover:bg-surface-sunken transition-colors">

@@ -19,7 +19,7 @@ export interface BoardHeaderProps {
 
 export function BoardHeader({
   currentPhaseName = 'Sprint',
-  timeLeftText = '9h 05m left',
+  timeLeftText,
   viewMode,
   onViewModeChange,
   onCreateClick,
@@ -29,7 +29,7 @@ export function BoardHeader({
 }: BoardHeaderProps) {
   // Compute summary numbers
   const openCount = tasks.filter(t => t.status !== 'done').length;
-  const blockedCount = tasks.filter(t => t.flagged || t.status === 'blocked').length;
+  const blockedCount = tasks.filter(t => Boolean(t.flagged || (t as any).blockedReason)).length;
   const unassignedCount = tasks.filter(t => !t.assigneeId).length;
   const dueTodayCount = tasks.filter(t => {
     if (!t.dueAt) return false;
@@ -46,7 +46,7 @@ export function BoardHeader({
             Board
           </h1>
           <span className="h-7 px-3 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border/50 inline-flex items-center">
-            {currentPhaseName} · {timeLeftText}
+            {timeLeftText ? `${currentPhaseName} · ${timeLeftText}` : currentPhaseName}
           </span>
         </div>
 

@@ -84,9 +84,9 @@ export function BoardFilterBar({
               )}
             >
               {member.avatar ? (
-                <img src={member.avatar} alt={member.name} className="size-full rounded-full object-cover" />
+                <img src={member.avatar} alt={member.name || 'Member'} className="size-full rounded-full object-cover" />
               ) : (
-                member.name.slice(0, 2).toUpperCase()
+                (member.name || 'TM').slice(0, 2).toUpperCase()
               )}
             </button>
           );

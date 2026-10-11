@@ -3,7 +3,6 @@ import { cn } from '@/lib/utils';
 import { RotateCcw, Send, MessageSquare, History, List } from 'lucide-react';
 import type { DocFile, DocVersion, DocComment } from '@/services/types';
 import { formatDistanceToNow } from 'date-fns';
-import { CURRENT_USER_ID } from '@/services/mockStore';
 
 export interface HeadingItem {
   id: string;
@@ -179,7 +178,7 @@ export function DocsRightPane({
                 <div key={comm.id} className="p-2.5 rounded-xl bg-muted/30 border border-border/40 flex flex-col gap-1">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-foreground text-[11px]">
-                      {comm.authorId === CURRENT_USER_ID ? 'Aarav Mehta' : 'Team Member'}
+                      {(comm as any).authorName || 'Team Member'}
                     </span>
                     <span className="text-[10px] text-muted-foreground">
                       {formatDistanceToNow(new Date(comm.createdAt), { addSuffix: true })}

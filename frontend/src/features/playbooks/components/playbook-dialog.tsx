@@ -20,7 +20,7 @@ interface PlaybookDialogProps {
 export function PlaybookDialog({ playbook, isOpen, onClose }: PlaybookDialogProps) {
   const createRoomOverlay = useOverlay('create-room-dialog');
 
-  const icon = playbook ? getPlaybookIcon(playbook.id, playbook.illustrationKey) : null;
+  const icon = playbook ? getPlaybookIcon(playbook.id || playbook.eventType || '') : null;
 
   const handleUsePlaybook = () => {
     if (!playbook) return;
@@ -48,7 +48,7 @@ export function PlaybookDialog({ playbook, isOpen, onClose }: PlaybookDialogProp
         <div className="flex items-start justify-between p-6 pb-4 border-b border-border">
           <div className="flex items-center gap-3 min-w-0">
             <div className="size-8 rounded-[10px] bg-active flex items-center justify-center shrink-0">
-              {createElement(icon, {
+              {icon && createElement(icon, {
                 className: 'size-4 text-ink-2',
                 strokeWidth: 1.75,
               })}
@@ -89,7 +89,7 @@ export function PlaybookDialog({ playbook, isOpen, onClose }: PlaybookDialogProp
                     <Lozenge variant="neutral">{playbook.checklistPreview.length}</Lozenge>
                   </div>
                   <ul className="space-y-2">
-                    {playbook.checklistPreview.map((item, idx) => (
+                    {playbook.checklistPreview.map((item: string, idx: number) => (
                       <li
                         key={idx}
                         className="flex items-start gap-2.5 text-[13px] leading-[18px] text-ink"
@@ -113,7 +113,7 @@ export function PlaybookDialog({ playbook, isOpen, onClose }: PlaybookDialogProp
                     <Lozenge variant="neutral">{playbook.defaultRubric.length}</Lozenge>
                   </div>
                   <ul className="space-y-1.5 list-disc list-inside text-[13px] leading-[18px] text-ink marker:text-ink-2">
-                    {playbook.defaultRubric.map((rule, idx) => (
+                    {playbook.defaultRubric.map((rule: string, idx: number) => (
                       <li key={idx}>
                         <span className="text-ink">{rule}</span>
                       </li>

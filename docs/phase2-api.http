@@ -1,0 +1,199 @@
+### Phase 2: Planning Flow API Requests
+@baseUrl = http://localhost:8080/api/v1
+@roomId = 00000000-0000-0000-0000-000000000001
+@ideaId = 00000000-0000-0000-0000-000000000002
+
+### 1. BRIEF ENDPOINTS
+
+### 1.1 Get Brief
+GET {{baseUrl}}/rooms/{{roomId}}/brief
+Content-Type: application/json
+
+### 1.2 Save Brief (Manual or Draft)
+PUT {{baseUrl}}/rooms/{{roomId}}/brief
+Content-Type: application/json
+
+{
+  "source": "manual",
+  "sourceUrl": null,
+  "fileName": null,
+  "rawText": "Manual brief content",
+  "fields": {
+    "problemStatement": "Teams struggle to coordinate hackathon delivery in 36 hours.",
+    "targetAudience": "Hackathon participants and mentors",
+    "rubric": [
+      { "criterion": "Innovation", "weight": 30 },
+      { "criterion": "Technical Architecture", "weight": 40 },
+      { "criterion": "Demo Polish", "weight": 30 }
+    ],
+    "deadlines": {
+      "start": "2026-10-15T09:00:00Z",
+      "freeze": "2026-10-16T18:00:00Z",
+      "submission": "2026-10-16T21:00:00Z"
+    },
+    "eligibility": "University students and professionals",
+    "techRules": "Open source libraries allowed",
+    "aiPolicy": "AI coding tools encouraged with disclosure",
+    "deliverables": ["Live demo", "GitHub repository"],
+    "tracksAndPrizes": ["Open innovation ($5000)"],
+    "judgingFormat": "3 minute live pitch"
+  },
+  "confirmedFields": {},
+  "risks": ["Time crunch", "Scope creep"]
+}
+
+### 1.3 Update Confirmed Field
+PATCH {{baseUrl}}/rooms/{{roomId}}/brief/confirmed-fields
+Content-Type: application/json
+
+{
+  "fieldKey": "problemStatement",
+  "confirmed": true
+}
+
+### 1.4 Set Link Source (SSRF guarded)
+POST {{baseUrl}}/rooms/{{roomId}}/brief/source/link
+Content-Type: application/json
+
+{
+  "url": "https://example.com/hackathon"
+}
+
+### 1.5 Get Extraction Prompt
+GET {{baseUrl}}/rooms/{{roomId}}/brief/extraction-prompt
+
+### 1.6 Validate Extracted JSON
+POST {{baseUrl}}/rooms/{{roomId}}/brief/extract/validate
+Content-Type: application/json
+
+{
+  "jsonText": "{\"problemStatement\":\"Test\",\"targetAudience\":\"Students\",\"rubric\":[{\"criterion\":\"Execution\",\"weight\":100}],\"deadlines\":{\"start\":null,\"freeze\":null,\"submission\":null}}"
+}
+
+### 1.7 Auto Extract via AI
+POST {{baseUrl}}/rooms/{{roomId}}/brief/extract/auto
+
+### 1.8 Confirm Brief (Advances stage to ideate)
+POST {{baseUrl}}/rooms/{{roomId}}/brief/confirm
+Content-Type: application/json
+
+{
+  "applyDatesToRoom": true
+}
+
+### 1.9 Delete / Reset Brief
+DELETE {{baseUrl}}/rooms/{{roomId}}/brief
+
+
+### 2. IDEAS ENDPOINTS
+
+### 2.1 Get Ideate Overview
+GET {{baseUrl}}/rooms/{{roomId}}/ideate
+
+### 2.2 List Ideas
+GET {{baseUrl}}/rooms/{{roomId}}/ideas
+
+### 2.3 Post Idea
+POST {{baseUrl}}/rooms/{{roomId}}/ideas
+Content-Type: application/json
+
+{
+  "text": "A real-time opinionated OS guiding hackathon teams from rules to pitch with prompt chaining.",
+  "links": [
+    { "url": "https://github.com", "title": "GitHub" }
+  ],
+  "notes": ["Focus on sprint time limits"]
+}
+
+### 2.4 Update Idea (Author only, pending only)
+PATCH {{baseUrl}}/rooms/{{roomId}}/ideas/{{ideaId}}
+Content-Type: application/json
+
+{
+  "text": "Updated text for the hackathon idea proposition.",
+  "links": [],
+  "notes": []
+}
+
+### 2.5 Delete Idea (Author only, pending only)
+DELETE {{baseUrl}}/rooms/{{roomId}}/ideas/{{ideaId}}
+
+### 2.6 Approve Idea (Leader only)
+POST {{baseUrl}}/rooms/{{roomId}}/ideas/{{ideaId}}/approve
+
+### 2.7 Reject Idea (Leader only)
+POST {{baseUrl}}/rooms/{{roomId}}/ideas/{{ideaId}}/reject
+Content-Type: application/json
+
+{
+  "reason": "Scope too broad for a 36-hour sprint"
+}
+
+### 2.8 Restore Idea (Undo rejection)
+POST {{baseUrl}}/rooms/{{roomId}}/ideas/{{ideaId}}/restore
+
+### 2.9 Set Primary Pitch Idea (Single star rule)
+PUT {{baseUrl}}/rooms/{{roomId}}/ideas/{{ideaId}}/primary
+
+### 2.10 Clear Primary Idea
+DELETE {{baseUrl}}/rooms/{{roomId}}/ideas/{{ideaId}}/primary
+
+### 2.11 Mark Ideation Done (Requires at least 1 approved idea)
+POST {{baseUrl}}/rooms/{{roomId}}/ideation/done
+
+### 2.12 Reopen Ideation
+POST {{baseUrl}}/rooms/{{roomId}}/ideation/reopen
+
+### 2.13 Export Ideas Markdown
+GET {{baseUrl}}/rooms/{{roomId}}/ideas/export.md
+
+### 2.14 Dev Seed Sample Ideas
+POST {{baseUrl}}/dev/rooms/{{roomId}}/seed-ideas
+
+
+### 3. PLAN ENDPOINTS
+
+### 3.1 Get Plan State & Steps
+GET {{baseUrl}}/rooms/{{roomId}}/plan
+
+### 3.2 Save Step Draft (800ms autosave)
+PUT {{baseUrl}}/rooms/{{roomId}}/plan/steps/prd
+Content-Type: application/json
+
+{
+  "answer": "# PRD\n## Problem\nProblem description\n## Target user\nUsers\n## One-sentence identity\nIdentity\n## Core flow\n1. Step 1\n2. Step 2\n3. Step 3\n## Wow moment\nWow\n## Must-have features\nFeatures\n## Out of scope\nOut\n# MVP\n## The one end-to-end flow\nFlow\n## Real vs mocked\n| Part | Status |\n|---|---|\n| API | Real |\n## Cut list\n- Cut 1\n- Cut 2\n- Cut 3\n## Risks and fallbacks\nRisks",
+  "confirmClear": false
+}
+
+### 3.3 Validate Step (Enforces step order prd -> tech -> phases -> tasks -> demo)
+POST {{baseUrl}}/rooms/{{roomId}}/plan/validate
+Content-Type: application/json
+
+{
+  "stepKey": "prd",
+  "answer": "# PRD\n## Problem\nProblem description\n## Target user\nUsers\n## One-sentence identity\nIdentity\n## Core flow\n1. Step 1\n2. Step 2\n3. Step 3\n## Wow moment\nWow\n## Must-have features\nFeatures\n## Out of scope\nOut\n# MVP\n## The one end-to-end flow\nFlow\n## Real vs mocked\n| Part | Status |\n|---|---|\n| API | Real |\n## Cut list\n- Cut 1\n- Cut 2\n- Cut 3\n## Risks and fallbacks\nRisks"
+}
+
+### 3.4 AI Generate Step
+POST {{baseUrl}}/rooms/{{roomId}}/plan/steps/prd/generate
+
+### 3.5 Download Context Pack Markdown
+GET {{baseUrl}}/rooms/{{roomId}}/plan/context.md?step=prd
+
+### 3.6 Enter Build Phase (Stage advances to build, locks plan)
+POST {{baseUrl}}/rooms/{{roomId}}/stage/enter-build
+
+### 3.7 Unlock Build Early (Leader skip plan)
+POST {{baseUrl}}/rooms/{{roomId}}/stage/unlock-build
+
+
+### 4. MINIMAL READ ENDPOINTS (DOCS & BOARD)
+
+### 4.1 List Generated Documents
+GET {{baseUrl}}/rooms/{{roomId}}/docs
+
+### 4.2 Get Document Detail Content
+GET {{baseUrl}}/rooms/{{roomId}}/docs/PRD.md
+
+### 4.3 Get Board Kanban Columns and Members
+GET {{baseUrl}}/rooms/{{roomId}}/board

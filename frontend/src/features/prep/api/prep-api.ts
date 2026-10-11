@@ -2,12 +2,11 @@
  * Prep API client — S25
  * PRD 6a §4.1
  */
+import { apiFetch } from '@/api/client';
 import type { PrepResponse } from './types';
 
 export async function fetchPrep(roomId: string): Promise<PrepResponse> {
-  const res = await fetch(`/api/v1/rooms/${roomId}/prep`);
-  if (!res.ok) throw new Error(`fetchPrep: ${res.status}`);
-  return res.json() as Promise<PrepResponse>;
+  return apiFetch<PrepResponse>(`/api/v1/rooms/${roomId}/prep`);
 }
 
 export async function toggleChecklistItem(
@@ -15,11 +14,9 @@ export async function toggleChecklistItem(
   itemId: string,
   done: boolean,
 ): Promise<{ id: string; done: boolean }> {
-  const res = await fetch(`/api/v1/rooms/${roomId}/prep/checklist/${itemId}`, {
+  return apiFetch<{ id: string; done: boolean }>(`/api/v1/rooms/${roomId}/prep/checklist/${itemId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ done }),
   });
-  if (!res.ok) throw new Error(`toggleChecklistItem: ${res.status}`);
-  return res.json() as Promise<{ id: string; done: boolean }>;
 }

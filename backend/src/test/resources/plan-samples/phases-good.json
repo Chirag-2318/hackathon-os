@@ -1,0 +1,42 @@
+[
+  {
+    "id": "p1",
+    "name": "Setup & Architecture Spike",
+    "startPct": 0,
+    "endPct": 20,
+    "exitCheckpoint": "Docker DB up and baseline routes responding",
+    "goals": ["Initialize repos", "Run schema migrations"]
+  },
+  {
+    "id": "p2",
+    "name": "Core Flow Development",
+    "startPct": 20,
+    "endPct": 50,
+    "exitCheckpoint": "End to end intake pipeline operational",
+    "goals": ["Implement brief upload", "Wire ideation board"]
+  },
+  {
+    "id": "p3",
+    "name": "Full Integration & Feature Freeze",
+    "startPct": 50,
+    "endPct": 75,
+    "exitCheckpoint": "Zero new feature PRs merged",
+    "goals": ["Lock MVP scope", "Close open bug tickets"]
+  },
+  {
+    "id": "p4",
+    "name": "Polish & Pitch Deck",
+    "startPct": 75,
+    "endPct": 90,
+    "exitCheckpoint": "Slides exported to PDF",
+    "goals": ["Record backup demo video", "Format README"]
+  },
+  {
+    "id": "p5",
+    "name": "Live Rehearsal & Submission",
+    "startPct": 90,
+    "endPct": 100,
+    "exitCheckpoint": "Devpost submission link submitted",
+    "goals": ["Run 90-second timed pitch rehearsal", "Submit to portal"]
+  }
+]

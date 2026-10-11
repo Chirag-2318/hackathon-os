@@ -11,10 +11,11 @@ import { AlertTriangle, AtSign, Clock, MessageSquare, Check } from 'lucide-react
 import { cn } from '@/lib/utils';
 import type { Notification, NotificationsResponse } from '@/features/notifications/api/types';
 import {
-  fetchNotifications as fetchRoomNotifications,
-  markRead as markNotificationRead,
-  markAllRead as markAllNotificationsRead,
+  useUserNotifications,
+  useUnreadCount,
+  useMarkAllUserNotificationsRead,
 } from '@/features/notifications/api/notifications-api';
+import { isUuid } from '@/shared/lib/uuid';
 
 interface NotificationsPopoverProps {
   currentRoomId?: string;
@@ -35,67 +36,36 @@ export function NotificationsPopover({ currentRoomId, roomList = [] }: Notificat
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
-  const activeRoomId = currentRoomId || roomList[0]?.id || 'r-1';
-
-  // Fetch notifications for the active room (refetches every 60s)
-  const { data: notifData, refetch } = useQuery({
-    queryKey: ['notifications', activeRoomId],
-    queryFn: () => fetchRoomNotifications(activeRoomId),
-    refetchInterval: 60000,
-  });
-
-  const { mutate: markRead } = useMutation({
-    mutationFn: (notifId: string) => markNotificationRead(activeRoomId, notifId),
-    onSuccess: (_data, notifId) => {
-      queryClient.setQueryData<NotificationsResponse>(['notifications', activeRoomId], (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          notifications: old.notifications.map((n) => (n.id === notifId ? { ...n, read: true } : n)),
-        };
-      });
-    },
-  });
-
-  const { mutate: markAllRead } = useMutation({
-    mutationFn: () => markAllNotificationsRead(activeRoomId),
-    onSuccess: () => {
-      queryClient.setQueryData<NotificationsResponse>(['notifications', activeRoomId], (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          notifications: old.notifications.map((n) => ({ ...n, read: true })),
-        };
-      });
-    },
-  });
+  // User-wide notifications and unread count
+  const { data: allNotifications = [], refetch } = useUserNotifications();
+  const { data: unreadCountServer = 0 } = useUnreadCount();
+  const { mutate: markAllRead } = useMarkAllUserNotificationsRead();
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
     if (nextOpen) refetch();
   };
 
-  const allNotifications = notifData?.notifications ?? [];
-  const unreadCount = allNotifications.filter((n) => !n.read).length;
+  const localUnreadCount = allNotifications.filter((n) => !n.read).length;
+  const unreadCount = Math.max(unreadCountServer, localUnreadCount);
 
   const filteredNotifications =
     filter === 'unread' ? allNotifications.filter((n) => !n.read) : allNotifications;
 
   const handleRowClick = (item: Notification) => {
-    if (!item.read) {
-      markRead(item.id);
-    }
     setOpen(false);
 
-    // Target navigation based on notification content
-    if (item.type === 'blocker') {
-      navigate(`/app/room/${activeRoomId}/board`);
-    } else if (item.type === 'system') {
-      navigate(`/app/room/${activeRoomId}/overview`);
+    if (item.roomId && isUuid(item.roomId)) {
+      if (item.type === 'blocker') {
+        navigate(`/app/room/${item.roomId}/board`);
+      } else {
+        navigate(`/app/room/${item.roomId}/overview`);
+      }
+    } else if (item.link) {
+      navigate(item.link);
     } else {
-      navigate(`/app/room/${activeRoomId}/overview`);
+      navigate('/app/notifications');
     }
   };
 
@@ -183,10 +153,10 @@ export function NotificationsPopover({ currentRoomId, roomList = [] }: Notificat
           </div>
         </div>
 
-        {/* Room Header Label */}
+        {/* Header Label */}
         <div className="px-4 py-1.5 bg-surface/80 border-b border-border/50">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
-            {roomList.find((r) => r.id === activeRoomId)?.title ?? 'Active Room'}
+            All Notifications
           </span>
         </div>
 

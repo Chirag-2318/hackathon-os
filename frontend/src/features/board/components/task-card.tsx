@@ -68,7 +68,7 @@ export function TaskCard({ task, onClick, overlay }: TaskCardProps) {
       {/* Top Row */}
       <div className="flex items-center justify-between">
         <div className="flex flex-wrap gap-2">
-          {task.tags.map((tag) => (
+          {task.tags.map((tag: any) => (
             <Badge
               key={tag}
               variant="secondary"

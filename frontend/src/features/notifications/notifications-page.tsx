@@ -16,11 +16,11 @@ import { Banner } from '@/components/primitives/banner';
 import { EmptyState } from '@/components/primitives/empty-state';
 import { SegmentedControl, SegmentedControlItem } from '@/components/primitives/segmented-control';
 import { NotificationRow } from './components/notification-row';
-import { useNotifications, useMarkRead } from './api/notifications-api';
+import { useNotifications, useMarkRead, useUserNotifications } from './api/notifications-api';
 import { useIsOnline } from '@/shared/hooks/use-is-online';
 import { COPY } from '@/shared/constants/copy';
 import { Bell, RefreshCw } from 'lucide-react';
-import type { NotificationFilter } from './api/types';
+import type { NotificationFilter, Notification } from './api/types';
 
 const FILTERS: { label: string; value: NotificationFilter }[] = [
   { label: COPY.notifications.filterAll, value: 'all' },
@@ -32,20 +32,32 @@ const FILTERS: { label: string; value: NotificationFilter }[] = [
 const SKELETON_COUNT = 5;
 
 export function NotificationsPage() {
-  // OQ-3: roomId source depends on whether S29 is per-room or global.
   const { roomId } = useParams<{ roomId?: string }>();
-  const effectiveRoomId = roomId ?? 'r-1'; // fallback for dev
+  const isRoomScoped = Boolean(roomId);
 
   const [activeFilter, setActiveFilter] = useState<NotificationFilter>('all');
-  const { data, isLoading, isError, refetch } = useNotifications(effectiveRoomId);
-  const { mutate: markRead } = useMarkRead(effectiveRoomId);
+  const roomQuery = useNotifications(roomId ?? '');
+  const userQuery = useUserNotifications();
+  const { mutate: markRead } = useMarkRead(roomId ?? '');
   const isOnline = useIsOnline();
 
+  const isLoading = isRoomScoped ? roomQuery.isLoading : userQuery.isLoading;
+  const isError = isRoomScoped ? roomQuery.isError : userQuery.isError;
+  const refetch = isRoomScoped ? roomQuery.refetch : userQuery.refetch;
+
+  const rawList: Notification[] = useMemo(() => {
+    if (isRoomScoped) {
+      return roomQuery.data?.notifications ?? [];
+    }
+    return userQuery.data ?? [];
+  }, [isRoomScoped, roomQuery.data, userQuery.data]);
+
+  const hasData = isRoomScoped ? Boolean(roomQuery.data) : Boolean(userQuery.data);
+
   const filtered = useMemo(() => {
-    if (!data) return [];
-    if (activeFilter === 'all') return data.notifications;
-    return data.notifications.filter(n => n.type === activeFilter);
-  }, [data, activeFilter]);
+    if (activeFilter === 'all') return rawList;
+    return rawList.filter(n => n.type === activeFilter);
+  }, [rawList, activeFilter]);
 
   // ── Loading ────────────────────────────────────────────────────
   if (isLoading) {
@@ -92,8 +104,8 @@ export function NotificationsPage() {
       {!isOnline && (
         <Banner variant="warning" className="mb-4">
           {COPY.notifications.offlineBanner}
-          {data?.lastSyncedAt && (
-            <> Last synced: {new Date(data.lastSyncedAt).toLocaleTimeString()}.</>
+          {roomQuery.data?.lastSyncedAt && (
+            <> Last synced: {new Date(roomQuery.data.lastSyncedAt).toLocaleTimeString()}.</>
           )}
         </Banner>
       )}
@@ -102,7 +114,7 @@ export function NotificationsPage() {
       <FilterBar active={activeFilter} onSelect={setActiveFilter} />
 
       {/* Empty: first use (no data at all) */}
-      {data && data.notifications.length === 0 && (
+      {hasData && rawList.length === 0 && (
         <div className="mt-8">
           <EmptyState
             icon={<Bell />}
@@ -115,7 +127,7 @@ export function NotificationsPage() {
       )}
 
       {/* Empty: filter yields nothing but data exists */}
-      {data && data.notifications.length > 0 && filtered.length === 0 && (
+      {hasData && rawList.length > 0 && filtered.length === 0 && (
         <div className="mt-8">
           <EmptyState
             icon={<Bell />}

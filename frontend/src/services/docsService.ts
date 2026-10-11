@@ -1,55 +1,74 @@
 /**
- * docsService.ts — Docs vault files service.
+ * docsService.ts — Docs vault files service calling backend API directly.
  */
 import { apiFetch } from '@/api/client';
 import type { DocFile } from './types';
-import {
-  getDocs, setDocs,
-  mockDelay, genId,
-} from './mockStore';
-import { USE_MOCKS } from './roomService';
 
-import { buildDocsFromPlan } from './planService';
-import { SAMPLE_PLAN_ANSWERS } from '@/features/plan/utils/sample-plan-answers';
-import { getIdeas, DEMO_MEMBERS } from './mockStore';
+export interface DocHealth {
+  status: 'ok' | 'warning';
+  issues: string[];
+}
+
+export interface ExtendedDocFile extends DocFile {
+  health?: DocHealth;
+}
 
 export const docsService = {
-  async getDocs(roomId: string): Promise<DocFile[]> {
-    if (USE_MOCKS) {
-      await mockDelay(100, 250);
-      let docs = getDocs(roomId);
-      if (!docs || docs.length === 0 || docs[0]?.content?.includes('This is the Product Requirements Document.')) {
-        const samplePlan = {
-          roomId,
-          steps: {
-            prd: { answer: SAMPLE_PLAN_ANSWERS[0], validated: true, parsed: null, issues: [], warnings: [] },
-            tech: { answer: SAMPLE_PLAN_ANSWERS[1], validated: true, parsed: null, issues: [], warnings: [] },
-            phases: { answer: SAMPLE_PLAN_ANSWERS[2], validated: true, parsed: JSON.parse(SAMPLE_PLAN_ANSWERS[2]), issues: [], warnings: [] },
-            tasks: { answer: SAMPLE_PLAN_ANSWERS[3], validated: true, parsed: JSON.parse(SAMPLE_PLAN_ANSWERS[3]), issues: [], warnings: [] },
-            demo: { answer: SAMPLE_PLAN_ANSWERS[4], validated: true, parsed: null, issues: [], warnings: [] },
-          }
-        };
-        docs = buildDocsFromPlan(samplePlan, getIdeas(roomId), Object.values(DEMO_MEMBERS));
-        setDocs(roomId, docs);
-      }
-      return docs;
-    }
-    return apiFetch<any[]>(`/api/v1/rooms/${roomId}/docs`);
+  async getDocs(roomId: string): Promise<ExtendedDocFile[]> {
+    const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/docs`);
+    const items = res?.items || (Array.isArray(res) ? res : []);
+    return items.map((item: any) => ({
+      id: item.id || item.fileName,
+      name: item.fileName || item.name,
+      title: item.title || item.fileName,
+      content: item.content || '',
+      version: item.currentVersion ?? item.version ?? 1,
+      createdAt: item.updatedAt || new Date().toISOString(),
+      updatedAt: item.updatedAt,
+      health: item.health || { status: 'ok', issues: [] },
+    }));
+  },
+
+  async getDoc(roomId: string, fileName: string): Promise<any> {
+    return apiFetch<any>(`/api/v1/rooms/${roomId}/docs/${fileName}`);
+  },
+
+  async updateDoc(
+    roomId: string,
+    fileName: string,
+    data: { content: string; baseVersion?: number; versionLabel?: string }
+  ): Promise<any> {
+    return apiFetch<any>(`/api/v1/rooms/${roomId}/docs/${fileName}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        content: data.content,
+        baseVersion: data.baseVersion ?? null,
+        versionLabel: data.versionLabel || null,
+      }),
+    });
+  },
+
+  async restoreVersion(roomId: string, fileName: string, version: number): Promise<any> {
+    return apiFetch<any>(`/api/v1/rooms/${roomId}/docs/${fileName}/restore`, {
+      method: 'POST',
+      body: JSON.stringify({ version }),
+    });
+  },
+
+  async addComment(roomId: string, fileName: string, text: string): Promise<any> {
+    return apiFetch<any>(`/api/v1/rooms/${roomId}/docs/${fileName}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+  },
+
+  async deleteComment(roomId: string, commentId: string): Promise<void> {
+    await apiFetch(`/api/v1/rooms/${roomId}/docs/comments/${commentId}`, {
+      method: 'DELETE',
+    });
   },
 
   async addDoc(roomId: string, doc: Omit<DocFile, 'id' | 'createdAt'>): Promise<DocFile> {
-    if (USE_MOCKS) {
-      await mockDelay(100, 200);
-      const docs = getDocs(roomId);
-      const newDoc: DocFile = {
-        id: genId('doc'),
-        createdAt: new Date().toISOString(),
-        ...doc,
-      };
-      docs.push(newDoc);
-      setDocs(roomId, docs);
-      return newDoc;
-    }
     return apiFetch<any>(`/api/v1/rooms/${roomId}/docs`, {
       method: 'POST',
       body: JSON.stringify(doc),
@@ -57,14 +76,19 @@ export const docsService = {
   },
 
   async saveDocs(roomId: string, docs: DocFile[]): Promise<void> {
-    if (USE_MOCKS) {
-      await mockDelay(100, 200);
-      setDocs(roomId, docs);
-      return;
-    }
     return apiFetch<any>(`/api/v1/rooms/${roomId}/docs`, {
       method: 'PUT',
       body: JSON.stringify(docs),
     });
+  },
+
+  downloadAllZipUrl(roomId: string): string {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+    return `${baseUrl}/api/v1/rooms/${roomId}/docs/download.zip`;
+  },
+
+  downloadDocUrl(roomId: string, fileName: string): string {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+    return `${baseUrl}/api/v1/rooms/${roomId}/docs/${fileName}/download`;
   },
 };

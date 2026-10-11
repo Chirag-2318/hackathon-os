@@ -12,17 +12,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { KeyRound, Loader2, Check } from 'lucide-react';
 
+import { apiClient } from '@/lib/apiClient';
+
 async function submitJoinCode(code: string): Promise<{ success: boolean; roomId?: string; error?: string }> {
-  const res = await fetch('/api/v1/rooms/join', {
+  const data = await apiClient<{ roomId: string }>('/api/v1/rooms/join', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code }),
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body?.error ?? 'Invalid code');
-  }
-  return res.json();
+  return { success: true, roomId: data.roomId };
 }
 
 export function JoinCodeDialogOverlay() {
@@ -46,11 +43,11 @@ export function JoinCodeDialogOverlay() {
   const joinMutation = useMutation({
     mutationFn: submitJoinCode,
     onSuccess: (result) => {
-      if (result.success) {
+      if (result.success && result.roomId) {
         setSuccess(true);
         setTimeout(() => {
           close();
-          navigate(`/app/room/${result.roomId || 'r-1'}/overview`);
+          navigate(`/app/room/${result.roomId}/overview`);
         }, 800);
       } else {
         setError(result.error ?? 'Invalid room code');

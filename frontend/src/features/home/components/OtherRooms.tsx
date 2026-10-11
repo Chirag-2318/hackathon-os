@@ -1,19 +1,20 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { roomService } from '@/services/roomService';
-import { mockOtherRooms, mockCurrentEvent, type HackathonEvent } from '../homeMock';
 import { useOverlay } from '@/app/providers/overlay-store';
 import { Plus } from 'lucide-react';
+import { HomeContext } from '../home-page';
 
 function RoomCard({ room }: { room: any }) {
   const navigate = useNavigate();
-  const roomName = room.name || room.title;
-  const phase = room.stage ? (room.stage === 'build' ? 'Build' : 'Plan') : room.currentPhase || 'Plan';
+  const roomName = room.name || room.title || 'Untitled Room';
+  const phase = room.stage ? (room.stage === 'build' ? 'Build' : 'Plan') : room.phaseLabel || 'Plan';
   const progress = room.overallProgressPercent ?? (room.stage === 'build' ? 65 : 20);
 
   return (
     <button
+      type="button"
       onClick={() => navigate(`/app/room/${room.id}/overview`)}
       className="flex flex-col text-left p-5 bg-white border border-[var(--color-home-hairline)] rounded-[24px] transition-all duration-[var(--dur-micro)] hover:shadow-[var(--shadow-home-card)] hover:border-transparent min-w-[280px] cursor-pointer"
     >
@@ -25,7 +26,7 @@ function RoomCard({ room }: { room: any }) {
       </h3>
       <div className="flex items-center gap-3 w-full mt-auto">
         <div className="flex-1 h-[6px] rounded-full bg-[var(--color-home-tray)] overflow-hidden">
-          <div 
+          <div
             className="h-full bg-[var(--color-home-accent)] rounded-full"
             style={{ width: `${progress}%` }}
           />
@@ -40,17 +41,16 @@ function RoomCard({ room }: { room: any }) {
 
 export function OtherRooms() {
   const createRoomModal = useOverlay('create-room-dialog');
+  const { homeData } = useContext(HomeContext);
+
   const { data: realRooms = [] } = useQuery({
     queryKey: ['rooms'],
     queryFn: () => roomService.listRooms(),
+    initialData: homeData?.rooms || [],
   });
 
-  // Combine real rooms and mock other rooms, avoiding duplicates by id
-  const realIds = new Set(realRooms.map(r => r.id));
-  const fallbackRooms = mockOtherRooms.filter(r => !realIds.has(r.id) && r.id !== mockCurrentEvent.id);
-  const allRooms = [...realRooms.filter(r => r.id !== mockCurrentEvent.id), ...fallbackRooms];
-
-  if (allRooms.length === 0) return null;
+  const rooms = realRooms.length > 0 ? realRooms : (homeData?.rooms || []);
+  if (rooms.length === 0) return null;
 
   return (
     <div className="w-full flex flex-col font-[var(--font-inter)]">
@@ -69,12 +69,15 @@ export function OtherRooms() {
             <Plus className="size-4 hover:rotate-90 transition-transform duration-200" />
           </button>
         </div>
-        <Link to="/app/rooms" className="text-[15px] font-[500] text-[var(--color-home-accent)] hover:underline">
+        <Link
+          to="/app/rooms"
+          className="text-[15px] font-[500] text-[var(--color-home-accent)] hover:underline"
+        >
           View all
         </Link>
       </div>
       <div className="flex gap-4 overflow-x-auto pb-4 snap-x">
-        {allRooms.map((room) => (
+        {rooms.map((room: any) => (
           <div key={room.id} className="snap-start">
             <RoomCard room={room} />
           </div>

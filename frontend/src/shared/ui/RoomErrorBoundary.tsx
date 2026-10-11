@@ -49,6 +49,21 @@ export class RoomErrorBoundary extends Component<Props, State> {
 
             <div className="flex justify-end gap-2">
               <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  this.setState({ hasError: false, error: null });
+                  const match = window.location.pathname.match(/^(\/app\/room\/[^/]+)/);
+                  if (match) {
+                    window.location.href = `${match[1]}/overview`;
+                  } else {
+                    window.location.href = '/app/home';
+                  }
+                }}
+              >
+                Go to Overview
+              </Button>
+              <Button
                 variant="default"
                 size="sm"
                 onClick={this.handleRetry}

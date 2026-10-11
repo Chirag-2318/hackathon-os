@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
-  roomService, briefService, ideaService, crowdService, planService, prepService, getCurrentRole
+  roomService, briefService, ideaService, crowdService, planService, prepService
 } from '@/services';
 import type { Room, RoomStage, PrepItem, RoomMember, Brief } from '@/services/types';
 import { TagChip, TimeChip, Checkbox } from '@/features/home/components/HomeDesignSystem';
@@ -74,7 +74,13 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
     queryFn: () => roomService.getMembers(roomId),
   });
 
-  const currentRole = getCurrentRole();
+  const memberList: RoomMember[] = Array.isArray(members)
+    ? members
+    : Array.isArray((members as any)?.items)
+    ? (members as any).items
+    : [];
+
+  const currentRole = (room as any)?.currentUserRole || 'leader';
   const isLeader = currentRole === 'leader';
   const stage = room?.stage || 'brief';
   const stageDone = room?.stageDone || { brief: false, ideate: false, crowd: false, plan: false };
@@ -95,7 +101,11 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
   const prepTotalCount = prepItems.length;
 
   const validatedSteps = ['prd', 'tech', 'phases', 'tasks', 'demo'].filter(
-    k => planState?.steps[k as keyof typeof planState.steps]?.validated
+    k => planState?.steps?.[k as keyof typeof planState.steps]?.validated
+  );
+
+  const hasBrief = Boolean(
+    brief && (brief.hasSource || (brief.fields?.problemStatement && brief.fields.problemStatement.trim().length > 0))
   );
 
   const startsInfo = formatStartsIn(room?.eventStart || null);
@@ -110,7 +120,7 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
       label: 'Brief',
       path: `/app/room/${roomId}/brief`,
       isDone: stageDone.brief,
-      helper: stageDone.brief ? 'Confirmed' : brief ? 'Needs confirm' : 'Not added',
+      helper: stageDone.brief ? 'Confirmed' : hasBrief ? 'Needs confirm' : 'Not added',
     },
     {
       id: 'ideate',
@@ -317,7 +327,7 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 text-[11px] font-bold">
                   CONFIRMED
                 </span>
-              ) : brief ? (
+              ) : hasBrief ? (
                 <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-[11px] font-bold">
                   NEEDS CONFIRMATION
                 </span>
@@ -329,7 +339,7 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
             </div>
 
             <div className="p-6">
-              {!brief ? (
+              {!hasBrief ? (
                 <div className="flex flex-col items-center justify-center py-6 text-center">
                   <div className="size-10 rounded-2xl bg-muted flex items-center justify-center text-muted-foreground mb-3">
                     <FileText className="size-5" />
@@ -352,11 +362,11 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
                       Problem Statement
                     </span>
                     <p className="text-xs text-foreground mt-1 leading-relaxed line-clamp-3">
-                      {brief.fields.problemStatement}
+                      {brief?.fields?.problemStatement || 'No problem statement provided yet.'}
                     </p>
                   </div>
 
-                  {brief.fields.rubric && brief.fields.rubric.length > 0 && (
+                  {brief?.fields?.rubric && brief.fields.rubric.length > 0 && (
                     <div>
                       <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                         Rubric Weights
@@ -386,7 +396,12 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
 
                   <div className="pt-2 border-t border-border/50 flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">
-                      Eligibility: {brief.fields.eligibility.substring(0, 30)}...
+                      Eligibility:{' '}
+                      {brief?.fields?.eligibility
+                        ? brief.fields.eligibility.length > 30
+                          ? `${brief.fields.eligibility.substring(0, 30)}...`
+                          : brief.fields.eligibility
+                        : 'Not specified'}
                     </span>
                     <Link
                       to={`/app/room/${roomId}/brief`}
@@ -432,7 +447,7 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
               <div className="flex items-center justify-between pt-2 border-t border-border/50 text-xs">
                 <span className="text-muted-foreground">Team contributions:</span>
                 <div className="flex items-center gap-1.5">
-                  {members.map((m) => {
+                  {memberList.map((m) => {
                     const hasSubmitted = ideas.some(i => i.authorId === m.id);
                     return (
                       <div
@@ -473,7 +488,7 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
                       : 'border-transparent text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  Members ({members.length})
+                  Members ({memberList.length})
                 </button>
                 <button
                   type="button"
@@ -516,7 +531,7 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
               {/* Members List */}
               {teamTab === 'members' ? (
                 <div className="flex flex-col gap-2 max-h-56 overflow-y-auto">
-                  {members.map((m) => (
+                  {memberList.map((m) => (
                     <div
                       key={m.id}
                       className="flex items-center justify-between p-2 rounded-xl hover:bg-muted/40 transition-colors"

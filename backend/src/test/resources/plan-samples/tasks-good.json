@@ -1,0 +1,29 @@
+[
+  {
+    "id": "t1",
+    "title": "Set up PostgreSQL schema and Flyway migrations",
+    "phaseId": "p1",
+    "role": "Backend",
+    "estimateMin": 60,
+    "dependsOn": [],
+    "acceptance": "Database boots in docker. Tables verified via psql."
+  },
+  {
+    "id": "t2",
+    "title": "Build Tailwind theme and UI component layout",
+    "phaseId": "p1",
+    "role": "Frontend",
+    "estimateMin": 90,
+    "dependsOn": [],
+    "acceptance": "Responsive navbar and sidebar render cleanly."
+  },
+  {
+    "id": "t3",
+    "title": "Implement Brief intake endpoints and SSRF guard",
+    "phaseId": "p2",
+    "role": "Backend",
+    "estimateMin": 120,
+    "dependsOn": ["t1"],
+    "acceptance": "POST link and PDF upload return structured brief."
+  }
+]

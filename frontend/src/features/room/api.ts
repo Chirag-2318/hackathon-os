@@ -9,7 +9,7 @@ export interface RoomDto {
 
 export interface RoomMemberDto {
   id: string;
-  userId: number;
+  userId: string | number;
   roomId: string;
   role: string;
 }
@@ -34,7 +34,7 @@ export interface InviteView {
 }
 
 export interface RoomMemberResponse {
-  id: number;
+  id: string | number;
   displayName: string;
   avatarUrl: string;
   role: string;
@@ -55,13 +55,13 @@ export const roomApi = {
       method: 'POST',
       body: JSON.stringify({ role: 'MEMBER' }),
     }),
-  changeRole: (roomId: string, userId: number, role: string) =>
+  changeRole: (roomId: string, userId: string | number, role: string) =>
     apiFetch<RoomMemberResponse>(`/api/v1/rooms/${roomId}/members/${userId}/role`, {
       method: 'PATCH',
       body: JSON.stringify({ role }),
     }),
   joinRoom: (token: string) =>
-    apiFetch<RoomDto>(`/api/v1/invites/${token}/join`, {
+    apiFetch<{ roomId: string }>(`/api/v1/invites/${token}/join`, {
       method: 'POST',
     }),
 };

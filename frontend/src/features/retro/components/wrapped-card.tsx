@@ -201,7 +201,7 @@ export function WrappedCard({
               className="text-caption"
               style={{ color: CREAM, opacity: 0.6 }}
             >
-              Campus Build Sprint 2026
+              Hackathon Workspace
             </span>
           </div>
 

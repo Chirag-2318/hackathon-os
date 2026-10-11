@@ -2,7 +2,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useKeyboardShortcut } from '@/shared/hooks/use-keyboard-shortcut';
 import { useOverlay } from '@/app/providers/overlay-store';
 import { isModuleHidden } from '@/config/featureFlags';
-import { getTasks } from '@/services/mockStore';
 import { IssueTypeIcon, StatusLozenge } from '@/features/build/ui';
 import {
   Command,
@@ -47,6 +46,10 @@ import {
 } from '@/components/icons';
 import { Plus, KeyRound } from 'lucide-react';
 
+import * as React from 'react';
+import { apiFetch } from '@/api/client';
+import { FileText, BookOpen, Layers } from 'lucide-react';
+
 export function CommandPaletteOverlay() {
   const { isOpen, open, close, toggle } = useOverlay('command-palette');
   const createRoomModal = useOverlay('create-room-dialog');
@@ -56,9 +59,28 @@ export function CommandPaletteOverlay() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const [query, setQuery] = React.useState('');
+  const [searchResults, setSearchResults] = React.useState<any>(null);
+
   // Extract roomId if inside a room route
   const roomMatch = location.pathname.match(/\/app\/room\/([^/]+)/);
   const roomId = roomMatch ? roomMatch[1] : null;
+
+  React.useEffect(() => {
+    if (!query.trim()) {
+      setSearchResults(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await apiFetch<any>(`/api/v1/search?q=${encodeURIComponent(query)}&roomId=${roomId || ''}`);
+        setSearchResults(res);
+      } catch {
+        setSearchResults(null);
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [query, roomId]);
 
   // Ctrl+K to toggle
   useKeyboardShortcut({
@@ -76,15 +98,22 @@ export function CommandPaletteOverlay() {
     <CommandDialog
       open={isOpen}
       onOpenChange={(isOpenState) => {
-        if (!isOpenState) close();
-        else open();
+        if (!isOpenState) {
+          setQuery('');
+          setSearchResults(null);
+          close();
+        } else open();
       }}
       title="Command palette"
       description="Search tasks, docs, rules, or jump to any page"
       className="sm:max-w-[640px] rounded-[24px] overflow-hidden p-0 bg-card border border-border shadow-2xl font-[var(--font-inter)] z-50"
     >
       <Command className="rounded-[24px]">
-        <CommandInput placeholder="Search tasks, docs, rules, or type a page..." />
+        <CommandInput
+          value={query}
+          onValueChange={setQuery}
+          placeholder="Search tasks, docs, rules, or type a page..."
+        />
         <CommandList className="max-h-[380px] p-2">
           <CommandEmpty>No matching results found.</CommandEmpty>
 
@@ -297,33 +326,86 @@ export function CommandPaletteOverlay() {
               </CommandGroup>
               <CommandSeparator className="my-1.5" />
 
-              {/* Tasks Group (search by key & summary) */}
-              {(() => {
-                const roomTasks = getTasks(roomId);
-                if (!roomTasks || roomTasks.length === 0) return null;
-                return (
-                  <>
-                    <CommandGroup heading="Tasks">
-                      {roomTasks.slice(0, 20).map((task) => (
-                        <CommandItem
-                          key={task.id}
-                          value={`${task.key} ${task.summary}`}
-                          onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/board?task=${task.key}`))}
-                          className="h-10 px-3 rounded-[var(--r-control)] flex items-center justify-between gap-3 cursor-pointer text-sm font-medium"
-                        >
-                          <div className="flex items-center gap-2 truncate">
-                            <IssueTypeIcon type="task" isDone={task.status === 'done'} />
-                            <span className="font-mono text-xs text-muted-foreground shrink-0">{task.key}</span>
-                            <span className="truncate">{task.summary}</span>
-                          </div>
-                          <StatusLozenge status={task.status} />
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                    <CommandSeparator className="my-1.5" />
-                  </>
-                );
-              })()}
+              {/* Search results: Tasks, Docs, Rules, Rooms */}
+              {searchResults?.tasks && searchResults.tasks.length > 0 && (
+                <>
+                  <CommandGroup heading="Tasks">
+                    {searchResults.tasks.slice(0, 15).map((t: any) => (
+                      <CommandItem
+                        key={t.key}
+                        value={`${t.key} ${t.summary}`}
+                        onSelect={() => handleSelect(() => navigate(`/app/room/${t.roomId}/board?task=${t.key}`))}
+                        className="h-10 px-3 rounded-[var(--r-control)] flex items-center justify-between gap-3 cursor-pointer text-sm font-medium"
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <IssueTypeIcon type="task" isDone={t.status === 'done'} />
+                          <span className="font-mono text-xs text-muted-foreground shrink-0">{t.key}</span>
+                          <span className="truncate">{t.summary}</span>
+                        </div>
+                        <StatusLozenge status={t.status} />
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                  <CommandSeparator className="my-1.5" />
+                </>
+              )}
+
+              {searchResults?.docs && searchResults.docs.length > 0 && (
+                <>
+                  <CommandGroup heading="Docs">
+                    {searchResults.docs.slice(0, 10).map((d: any) => (
+                      <CommandItem
+                        key={d.fileName}
+                        value={`${d.title} ${d.fileName}`}
+                        onSelect={() => handleSelect(() => navigate(`/app/room/${d.roomId}/docs`))}
+                        className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
+                      >
+                        <FileText className="size-4 text-blue-500 shrink-0" />
+                        <span className="truncate">{d.title || d.fileName}</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                  <CommandSeparator className="my-1.5" />
+                </>
+              )}
+
+              {searchResults?.rules && searchResults.rules.length > 0 && (
+                <>
+                  <CommandGroup heading="Rules & Rubric">
+                    {searchResults.rules.slice(0, 5).map((r: any, idx: number) => (
+                      <CommandItem
+                        key={idx}
+                        value={`${r.field} ${r.snippet}`}
+                        onSelect={() => handleSelect(() => navigate(`/app/room/${r.roomId}/brief`))}
+                        className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
+                      >
+                        <BookOpen className="size-4 text-purple-500 shrink-0" />
+                        <span className="truncate"><strong className="capitalize">{r.field}:</strong> {r.snippet}</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                  <CommandSeparator className="my-1.5" />
+                </>
+              )}
+
+              {searchResults?.rooms && searchResults.rooms.length > 0 && (
+                <>
+                  <CommandGroup heading="Rooms">
+                    {searchResults.rooms.slice(0, 5).map((rm: any) => (
+                      <CommandItem
+                        key={rm.id}
+                        value={rm.name}
+                        onSelect={() => handleSelect(() => navigate(`/app/room/${rm.id}/overview`))}
+                        className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
+                      >
+                        <Layers className="size-4 text-emerald-500 shrink-0" />
+                        <span className="truncate">{rm.name}</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                  <CommandSeparator className="my-1.5" />
+                </>
+              )}
             </>
           )}
 

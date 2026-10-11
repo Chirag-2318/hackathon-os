@@ -6,29 +6,10 @@
  * Swap these stubs for the generated client once the OpenAPI spec ships.
  */
 import type { ReadinessResponse, ValidateResult } from './types';
-
-const API_BASE = '/api/v1';
-
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...init?.headers,
-    },
-    ...init,
-  });
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body?.message ?? `HTTP ${res.status}`);
-  }
-
-  return res.json() as Promise<T>;
-}
+import { apiFetch } from '@/api/client';
 
 export function fetchReadiness(roomId: string): Promise<ReadinessResponse> {
-  return apiFetch<ReadinessResponse>(`/rooms/${encodeURIComponent(roomId)}/readiness`);
+  return apiFetch<ReadinessResponse>(`/api/v1/rooms/${encodeURIComponent(roomId)}/readiness`);
 }
 
 export function validateSimulatorAnswer(
@@ -36,7 +17,7 @@ export function validateSimulatorAnswer(
   answer: string,
 ): Promise<ValidateResult> {
   return apiFetch<ValidateResult>(
-    `/rooms/${encodeURIComponent(roomId)}/readiness/simulate/validate`,
+    `/api/v1/rooms/${encodeURIComponent(roomId)}/readiness/simulate/validate`,
     {
       method: 'POST',
       body: JSON.stringify({ answer }),

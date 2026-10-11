@@ -23,6 +23,9 @@ export interface PromptBridgePanelProps {
   onSuccess: () => void;
   onDownloadIdeas?: () => void;
   onDownloadContext?: () => void;
+  onGenerate?: () => Promise<void>;
+  isGenerating?: boolean;
+  hasApiKey?: boolean;
 }
 
 export function PromptBridgePanel({
@@ -36,6 +39,9 @@ export function PromptBridgePanel({
   onSuccess,
   onDownloadIdeas,
   onDownloadContext,
+  onGenerate,
+  isGenerating,
+  hasApiKey,
 }: PromptBridgePanelProps) {
   const [copied, setCopied] = useState(false);
   const [repairCopied, setRepairCopied] = useState(false);
@@ -89,9 +95,9 @@ export function PromptBridgePanel({
     }
   };
 
-  const repairPrompt = validateResult && !validateResult.valid
-    ? planService.generateRepairPrompt(stepName, validateResult.issues, answer)
-    : '';
+  const repairPrompt = validateResult?.repairPrompt || (validateResult && !validateResult.valid
+    ? `Fix the issues: ${(validateResult.issues || validateResult.errors || []).join('; ')}`
+    : '');
 
   const handleCopyRepair = () => {
     if (!repairPrompt) return;
@@ -243,19 +249,34 @@ export function PromptBridgePanel({
             <h3 className="font-bold text-ink">Paste the answer</h3>
           </div>
 
-          {/* Quick-fill helper button for testing and evaluation (DEV only per spec) */}
-          {import.meta.env.DEV && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleQuickFill}
-              className="text-caption text-ink-muted hover:text-blue-600 h-7"
-              title="Fill verified sample answer (DEV only)"
-            >
-              <Sparkles className="size-3.5 mr-1" />
-              Fill sample answer
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {hasApiKey && onGenerate && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onGenerate}
+                disabled={isGenerating}
+                className="text-xs h-7 gap-1"
+              >
+                {isGenerating ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5 text-lav-600" />}
+                Generate with my API key
+              </Button>
+            )}
+
+            {/* Quick-fill helper button for testing and evaluation (DEV only per spec) */}
+            {import.meta.env.DEV && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleQuickFill}
+                className="text-caption text-ink-muted hover:text-blue-600 h-7"
+                title="Fill verified sample answer (DEV only)"
+              >
+                <Sparkles className="size-3.5 mr-1" />
+                Fill sample answer
+              </Button>
+            )}
+          </div>
         </div>
 
         <textarea
@@ -308,7 +329,7 @@ export function PromptBridgePanel({
                   <X className="size-4" /> Validation Failed
                 </div>
                 <ul className="list-disc list-inside text-xs text-rose-900 dark:text-rose-200 pl-1 space-y-1">
-                  {validateResult.issues.map((item, i) => (
+                  {(validateResult.issues ?? []).map((item, i) => (
                     <li key={i}>{item}</li>
                   ))}
                 </ul>

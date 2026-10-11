@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Build Phase and Acceptance Checklist Tests', () => {
-  const roomId = 'r-1';
+  const roomId = '00000000-0000-0000-0000-000000000001'; // test-fixture-id
 
   test('Checklist 1: Hidden modules (prep, crowd-check, schedule) are hidden and redirect to overview', async ({ page }) => {
     // Navigate to room overview

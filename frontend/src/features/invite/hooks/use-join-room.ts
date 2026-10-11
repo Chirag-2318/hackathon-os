@@ -7,6 +7,6 @@ import { roomApi } from '../../room/api';
 
 export function useJoinRoom(token: string) {
   return useMutation({
-    mutationFn: () => roomApi.joinRoom(token),
+    mutationFn: (_role?: string) => roomApi.joinRoom(token),
   });
 }

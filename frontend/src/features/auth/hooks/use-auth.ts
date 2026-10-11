@@ -9,13 +9,13 @@ import { useMutation } from '@tanstack/react-query';
 import { authWithGitHub, authWithGoogle, type AuthResult } from '@/api/client';
 
 export function useAuthGitHub() {
-  return useMutation<AuthResult, Error>({
+  return useMutation<void, Error>({
     mutationFn: authWithGitHub,
   });
 }
 
 export function useAuthGoogle() {
-  return useMutation<AuthResult, Error>({
+  return useMutation<void, Error>({
     mutationFn: authWithGoogle,
   });
 }

@@ -1,0 +1,193 @@
+package com.hackathonos.backend.pitch;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+public class PitchDtos {
+
+    public record FormatProfileDto(
+            String kind,
+            String label,
+            int targetSeconds,
+            int maxSlides,
+            boolean auto
+    ) {}
+
+    public record SlideDto(
+            UUID id,
+            int position,
+            int order,
+            String kind,
+            String title,
+            String question,
+            String guide,
+            String content,
+            int wordCount,
+            List<String> covers
+    ) {}
+
+    public record CriterionCoverageDto(
+            String criterion,
+            int weight,
+            int slideCount
+    ) {}
+
+    public record DeckCoverageSummaryDto(
+            List<CriterionCoverageDto> criteria,
+            List<String> gaps
+    ) {}
+
+    public record PitchDeckResponse(
+            FormatProfileDto format,
+            List<SlideDto> slides,
+            DeckCoverageSummaryDto coverageSummary,
+            Map<String, List<String>> coverage,
+            List<SlideLinter.LintIssue> lint,
+            Instant serverNow
+    ) {}
+
+    public record UpdateFormatRequest(String kind) {}
+    public record CreateSlideRequest(String kind, String title, String question, String content) {}
+    public record UpdateSlideRequest(String kind, String title, String question, String content) {}
+    public record ReorderSlidesRequest(List<UUID> slideIds) {}
+    public record UpdateCoverageRequest(List<String> criteria) {}
+    public record DraftSlideResponse(String content) {}
+
+    // Rehearse
+    public record SectionPaceDto(
+            String label,
+            int targetSec,
+            int actualSec
+    ) {}
+
+    public record RehearsalRunDto(
+            UUID id,
+            Instant runAt,
+            int durationSec,
+            int durationSeconds,
+            UserSummaryDto presenter,
+            UserSummaryDto operator,
+            List<SectionPaceDto> sectionPaces,
+            String notes
+    ) {}
+
+    public record UserSummaryDto(
+            UUID id,
+            String name,
+            String avatarUrl
+    ) {}
+
+    public record RoleAssignmentDto(
+            String role,
+            String memberId,
+            String name
+    ) {}
+
+    public record PitchRolesDto(
+            UserSummaryDto presenter,
+            UserSummaryDto operator
+    ) {}
+
+    public record DemoSectionOutlineDto(
+            String label,
+            int targetSec
+    ) {}
+
+    public record RehearseResponse(
+            List<RehearsalRunDto> runs,
+            long count,
+            int target,
+            RehearsalRunDto best,
+            PitchRolesDto roles,
+            List<RoleAssignmentDto> roleList,
+            int targetSeconds,
+            List<DemoSectionOutlineDto> sections
+    ) {}
+
+    public record CreateRunRequest(
+            Integer durationSec,
+            Integer durationSeconds,
+            String sectionPaces,
+            String notes
+    ) {
+        public int getEffectiveDurationSec() {
+            if (durationSec != null) return durationSec;
+            if (durationSeconds != null) return durationSeconds;
+            return 0;
+        }
+    }
+
+    public record UpdateRolesRequest(
+            UUID presenterId,
+            UUID operatorId
+    ) {}
+
+    // Q&A
+    public record QaItemDto(
+            UUID id,
+            String question,
+            String text,
+            String answer,
+            String category,
+            String source,
+            boolean practiced,
+            String status,
+            UserSummaryDto owner
+    ) {}
+
+    public record CodeDefenseDto(
+            UUID id,
+            String module,
+            String question,
+            UserSummaryDto owner,
+            Instant practicedAt
+    ) {}
+
+    public record RequiredQuestionDto(
+            String text,
+            boolean present
+    ) {}
+
+    public record QaResponse(
+            List<QaItemDto> items,
+            List<QaItemDto> questions,
+            List<CodeDefenseDto> codeDefense,
+            List<RequiredQuestionDto> requiredQuestions
+    ) {}
+
+    public record CreateQaRequest(
+            String question,
+            String answer,
+            String category,
+            UUID ownerId
+    ) {}
+
+    public record UpdateQaRequest(
+            String question,
+            String answer,
+            String category,
+            UUID ownerId
+    ) {}
+
+    public record TogglePracticedRequest(
+            Boolean practiced
+    ) {}
+
+    public record CreateCodeDefenseRequest(
+            String module,
+            String question,
+            UUID ownerId
+    ) {}
+
+    public record GeneratedQaProposalDto(
+            String question,
+            String answer,
+            String category
+    ) {}
+
+    public record GenerateQaResponse(
+            List<GeneratedQaProposalDto> proposals
+    ) {}
+}

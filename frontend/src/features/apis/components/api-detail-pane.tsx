@@ -49,7 +49,7 @@ export function ApiDetailPane({ endpoint }: ApiDetailPaneProps) {
           </div>
           {endpoint.tags && endpoint.tags.length > 0 && (
             <div className="flex gap-2 mt-4">
-              {endpoint.tags.map(tag => (
+              {endpoint.tags.map((tag: any) => (
                 <Badge key={tag} variant="outline" className="text-slate-500">{tag}</Badge>
               ))}
             </div>

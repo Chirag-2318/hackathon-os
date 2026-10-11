@@ -40,9 +40,9 @@ export function VoteStage({ data }: { data: IdeateResponse }) {
       </div>
 
       <div className="grid grid-cols-2 gap-4 flex-1 overflow-auto pb-6">
-        {data.ideas.map(idea => {
+        {data.ideas.map((idea: any) => {
           const isSelected = selectedIdeaId === idea.id;
-          const voteResult = data.voteData.results.find(r => r.ideaId === idea.id);
+          const voteResult = data.voteData.results.find((r: any) => r.ideaId === idea.id);
           // If the user has voted and selected this one, we increment the mock display
           const displayVotes = (voteResult?.votes || 0) + (hasVoted && isSelected ? 1 : 0);
 

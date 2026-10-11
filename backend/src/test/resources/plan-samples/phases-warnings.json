@@ -1,0 +1,26 @@
+[
+  {
+    "id": "p1",
+    "name": "Initial Stage",
+    "startPct": 0,
+    "endPct": 30,
+    "exitCheckpoint": "Done",
+    "goals": ["Build"]
+  },
+  {
+    "id": "p2",
+    "name": "Middle Stage",
+    "startPct": 35,
+    "endPct": 80,
+    "exitCheckpoint": "Done",
+    "goals": ["Test"]
+  },
+  {
+    "id": "p3",
+    "name": "Final Stage",
+    "startPct": 80,
+    "endPct": 95,
+    "exitCheckpoint": "Done",
+    "goals": ["Ship"]
+  }
+]

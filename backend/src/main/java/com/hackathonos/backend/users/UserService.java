@@ -1,0 +1,384 @@
+package com.hackathonos.backend.users;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hackathonos.backend.common.config.AppProperties;
+import com.hackathonos.backend.common.error.BadRequestException;
+import com.hackathonos.backend.common.error.ConflictException;
+import com.hackathonos.backend.common.error.NotFoundException;
+import com.hackathonos.backend.common.security.SecretCipher;
+import com.hackathonos.backend.members.RoomMember;
+import com.hackathonos.backend.members.RoomMemberRepository;
+import com.hackathonos.backend.notifications.NotificationRepository;
+import com.hackathonos.backend.rooms.Room;
+import com.hackathonos.backend.rooms.RoomRepository;
+import com.hackathonos.backend.users.dto.*;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
+
+@Service
+public class UserService {
+
+    private final UserRepository userRepository;
+    private final UserSettingsRepository settingsRepository;
+    private final UserApiKeyRepository apiKeyRepository;
+    private final DataExportRepository exportRepository;
+    private final NotificationRepository notificationRepository;
+    private final RoomRepository roomRepository;
+    private final RoomMemberRepository memberRepository;
+    private final UserMapper userMapper;
+    private final SecretCipher secretCipher;
+    private final AppProperties appProperties;
+    private final ObjectMapper objectMapper;
+
+    public UserService(UserRepository userRepository,
+                       UserSettingsRepository settingsRepository,
+                       UserApiKeyRepository apiKeyRepository,
+                       DataExportRepository exportRepository,
+                       NotificationRepository notificationRepository,
+                       RoomRepository roomRepository,
+                       RoomMemberRepository memberRepository,
+                       UserMapper userMapper,
+                       SecretCipher secretCipher,
+                       AppProperties appProperties,
+                       ObjectMapper objectMapper) {
+        this.userRepository = userRepository;
+        this.settingsRepository = settingsRepository;
+        this.apiKeyRepository = apiKeyRepository;
+        this.exportRepository = exportRepository;
+        this.notificationRepository = notificationRepository;
+        this.roomRepository = roomRepository;
+        this.memberRepository = memberRepository;
+        this.userMapper = userMapper;
+        this.secretCipher = secretCipher;
+        this.appProperties = appProperties;
+        this.objectMapper = objectMapper;
+    }
+
+    /**
+     * Resolves or provisions a user from an OAuth2 principal, updating profile details and ensuring default settings.
+     * Throws AccountDeletedException (401) if the account was soft-deleted.
+     */
+    @Transactional
+    public User findOrCreateFromPrincipal(org.springframework.security.oauth2.core.user.OAuth2User principal, String registrationId) {
+        String provider;
+        if (registrationId != null && !registrationId.isBlank()) {
+            provider = "github".equalsIgnoreCase(registrationId) ? "GITHUB" : "GOOGLE";
+        } else {
+            provider = principal.getAttributes().containsKey("login") ? "GITHUB" : "GOOGLE";
+        }
+
+        String providerUserId;
+        String email = (String) principal.getAttributes().get("email");
+        String name;
+        String avatarUrl;
+        String login;
+
+        if ("GITHUB".equals(provider)) {
+            providerUserId = String.valueOf(principal.getAttributes().get("id"));
+            login = (String) principal.getAttributes().get("login");
+            String rawName = (String) principal.getAttributes().get("name");
+            name = (rawName != null && !rawName.isBlank()) ? rawName : (login != null ? login : "GitHub User");
+            avatarUrl = (String) principal.getAttributes().get("avatar_url");
+        } else {
+            providerUserId = String.valueOf(principal.getAttributes().get("sub"));
+            login = null;
+            String rawName = (String) principal.getAttributes().get("name");
+            name = (rawName != null && !rawName.isBlank()) ? rawName : "Google User";
+            avatarUrl = (String) principal.getAttributes().get("picture");
+        }
+
+        User user = userRepository.findByProviderAndProviderUserId(provider, providerUserId)
+                .map(existing -> {
+                    if (existing.getDeletedAt() != null) {
+                        throw new com.hackathonos.backend.common.error.AccountDeletedException("ACCOUNT_DELETED", "User account has been deleted");
+                    }
+                    existing.setLastLoginAt(Instant.now());
+                    existing.setName(name);
+                    if (email != null) existing.setEmail(email);
+                    if (avatarUrl != null) existing.setAvatarUrl(avatarUrl);
+                    if (login != null) existing.setLogin(login);
+                    return userRepository.save(existing);
+                })
+                .orElseGet(() -> userRepository.save(new User(
+                        provider,
+                        providerUserId,
+                        name,
+                        email,
+                        avatarUrl,
+                        login
+                )));
+
+        if (!settingsRepository.existsById(user.getId())) {
+            UserSettings settings = new UserSettings(user.getId(), user.getName());
+            settingsRepository.save(settings);
+        }
+
+        return user;
+    }
+
+    /**
+     * Loads identity details for the authenticated user along with their settings and unread count.
+     * Used by the frontend on application boot to hydrate user state.
+     */
+    public UserDetailDto getMe(User user) {
+        UserSettings settings = settingsRepository.findById(user.getId())
+                .orElseGet(() -> settingsRepository.save(new UserSettings(user.getId(), user.getName())));
+        long unread = notificationRepository.countByUserIdAndReadAtIsNull(user.getId());
+        return userMapper.toDetailDto(user, settings, unread);
+    }
+
+    /**
+     * Returns full user settings including appearance, notifications, billing plan, and API keys.
+     * Keys only expose the last 4 characters for security.
+     */
+    public UserSettingsDto getSettings(User user) {
+        UserSettings settings = getOrCreateSettings(user);
+        List<UserApiKey> keys = apiKeyRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
+        return userMapper.toSettingsDto(user, settings, keys);
+    }
+
+    /**
+     * Partially updates user preferences including display name, theme, timezone, and notification toggles.
+     * Validates that timezone is an authentic IANA zone identifier.
+     */
+    @Transactional
+    public UserSettingsDto updateSettings(User user, UpdateSettingsRequest request) {
+        UserSettings settings = getOrCreateSettings(user);
+        applySettingsUpdate(settings, request);
+        settings.setUpdatedAt(Instant.now());
+        settingsRepository.save(settings);
+
+        List<UserApiKey> keys = apiKeyRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
+        return userMapper.toSettingsDto(user, settings, keys);
+    }
+
+    /**
+     * Encrypts and persists an external provider API key for the user.
+     * Only the last 4 characters are ever returned to the client.
+     */
+    @Transactional
+    public ApiKeyDto addApiKey(User user, AddApiKeyRequest request) {
+        validateProvider(request.provider());
+        String encrypted = secretCipher.encrypt(request.key().trim());
+        String cleanKey = request.key().trim();
+        String last4 = cleanKey.length() <= 4 ? cleanKey : cleanKey.substring(cleanKey.length() - 4);
+
+        UserApiKey apiKey = new UserApiKey(
+                user.getId(),
+                request.provider().trim().toUpperCase(),
+                request.label().trim(),
+                encrypted,
+                last4
+        );
+        apiKeyRepository.save(apiKey);
+        return userMapper.toApiKeyDto(apiKey);
+    }
+
+    /**
+     * Deletes a stored API key by ID if owned by the caller.
+     */
+    @Transactional
+    public void deleteApiKey(User user, UUID apiKeyId) {
+        UserApiKey key = apiKeyRepository.findByIdAndUserId(apiKeyId, user.getId())
+                .orElseThrow(() -> new NotFoundException("API_KEY_NOT_FOUND", "API key not found"));
+        apiKeyRepository.delete(key);
+    }
+
+    /**
+     * Generates a downloadable JSON export of the user's data and returns an expiring download link.
+     */
+    @Transactional
+    public DataExportResponse exportUserData(User user) {
+        Map<String, Object> exportMap = buildExportData(user);
+        File exportFile = saveExportFile(user.getId(), exportMap);
+
+        Instant expiresAt = Instant.now().plus(24, ChronoUnit.HOURS);
+        DataExport exportRecord = new DataExport(user.getId(), exportFile.getAbsolutePath(), expiresAt);
+        exportRepository.save(exportRecord);
+
+        String downloadUrl = appProperties.getBaseUrl() + "/api/v1/users/me/export/" + exportRecord.getId();
+        return new DataExportResponse(downloadUrl, expiresAt);
+    }
+
+    /**
+     * Streams the exported JSON file as an attachment for the owner if not expired.
+     */
+    public Resource getExportAttachment(User user, UUID exportId) {
+        DataExport exportRecord = exportRepository.findByIdAndUserId(exportId, user.getId())
+                .orElseThrow(() -> new NotFoundException("EXPORT_NOT_FOUND", "Export record not found"));
+
+        if (Instant.now().isAfter(exportRecord.getExpiresAt())) {
+            throw new BadRequestException("EXPORT_EXPIRED", "Data export link has expired");
+        }
+
+        exportRecord.setDownloadedAt(Instant.now());
+        exportRepository.save(exportRecord);
+
+        File file = new File(exportRecord.getFilePath());
+        if (!file.exists()) {
+            throw new NotFoundException("FILE_NOT_FOUND", "Export file is no longer on disk");
+        }
+        return new FileSystemResource(file);
+    }
+
+    /**
+     * Permanently deletes user account, anonymizes history, and invalidates active session.
+     * Blocks deletion if user is leader of rooms that contain other teammates.
+     */
+    @Transactional
+    public void deleteAccount(User user, DeleteAccountRequest request, HttpServletRequest httpRequest) {
+        if (request == null || !"DELETE".equals(request.confirm())) {
+            throw new BadRequestException("CONFIRMATION_REQUIRED", "Body must include confirm: DELETE");
+        }
+
+        checkLeadershipConstraints(user);
+        cleanupUserRooms(user);
+        cleanupUserData(user);
+        anonymizeUser(user);
+
+        HttpSession session = httpRequest.getSession(false);
+        if (session != null) {
+            session.invalidate();
+        }
+    }
+
+    private UserSettings getOrCreateSettings(User user) {
+        return settingsRepository.findById(user.getId())
+                .orElseGet(() -> settingsRepository.save(new UserSettings(user.getId(), user.getName())));
+    }
+
+    private void validateProvider(String provider) {
+        String upper = provider.trim().toUpperCase();
+        if (!upper.equals("ANTHROPIC") && !upper.equals("OPENAI") && !upper.equals("GEMINI")) {
+            throw new BadRequestException("INVALID_PROVIDER", "Provider must be ANTHROPIC, OPENAI, or GEMINI");
+        }
+    }
+
+    private void applySettingsUpdate(UserSettings settings, UpdateSettingsRequest request) {
+        if (request.displayName() != null) settings.setDisplayName(request.displayName().trim());
+        if (request.theme() != null) settings.setTheme(request.theme().trim().toLowerCase());
+        if (request.timezone() != null) {
+            validateTimezone(request.timezone().trim());
+            settings.setTimezone(request.timezone().trim());
+        }
+        if (request.notifyDeadlines() != null) settings.setNotifyDeadlines(request.notifyDeadlines());
+        if (request.notifyMentions() != null) settings.setNotifyMentions(request.notifyMentions());
+        if (request.notifyBlocked() != null) settings.setNotifyBlocked(request.notifyBlocked());
+        if (request.notifyEmail() != null) settings.setNotifyEmail(request.notifyEmail());
+
+        // Support nested payloads from frontend settings sections
+        if (request.profile() != null && request.profile().get("displayName") instanceof String name) {
+            settings.setDisplayName(name.trim());
+        }
+        if (request.appearance() != null) {
+            if (request.appearance().get("theme") instanceof String t) settings.setTheme(t.trim().toLowerCase());
+            if (request.appearance().get("timezone") instanceof String tz) {
+                validateTimezone(tz.trim());
+                settings.setTimezone(tz.trim());
+            }
+        }
+        if (request.notifications() != null) {
+            applyNestedNotificationToggles(settings, request.notifications());
+        }
+    }
+
+    private void applyNestedNotificationToggles(UserSettings settings, Map<String, Object> notif) {
+        if (notif.get("deadlines") instanceof Boolean b) settings.setNotifyDeadlines(b);
+        if (notif.get("mentions") instanceof Boolean b) settings.setNotifyMentions(b);
+        if (notif.get("blocked") instanceof Boolean b) settings.setNotifyBlocked(b);
+        if (notif.get("email") instanceof Boolean b) settings.setNotifyEmail(b);
+        if (notif.get("blockerAlerts") instanceof Boolean b) settings.setNotifyBlocked(b);
+        if (notif.get("deadlineReminders") instanceof Boolean b) settings.setNotifyDeadlines(b);
+    }
+
+    private void validateTimezone(String timezone) {
+        try {
+            ZoneId.of(timezone);
+        } catch (Exception e) {
+            Map<String, String> errors = Map.of("timezone", "Invalid IANA timezone identifier: " + timezone);
+            throw new BadRequestException("VALIDATION_FAILED", "Invalid timezone", errors);
+        }
+    }
+
+    private Map<String, Object> buildExportData(User user) {
+        Map<String, Object> root = new LinkedHashMap<>();
+        root.put("profile", Map.of("id", user.getId(), "name", user.getName(), "email", user.getEmail() != null ? user.getEmail() : ""));
+        root.put("settings", settingsRepository.findById(user.getId()).orElse(null));
+        root.put("memberships", memberRepository.findByUserId(user.getId()));
+        root.put("rooms", roomRepository.findActiveRoomsByMemberUserId(user.getId()));
+        root.put("notifications", notificationRepository.findByUserIdOrderByCreatedAtDesc(user.getId(), org.springframework.data.domain.PageRequest.of(0, 500)));
+        return root;
+    }
+
+    private File saveExportFile(UUID userId, Map<String, Object> data) {
+        File dir = new File(appProperties.getUploadDir(), "exports");
+        if (!dir.exists()) dir.mkdirs();
+        File file = new File(dir, "export-" + userId + "-" + System.currentTimeMillis() + ".json");
+        try (FileWriter writer = new FileWriter(file)) {
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(writer, data);
+            return file;
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to write export file", e);
+        }
+    }
+
+    private void checkLeadershipConstraints(User user) {
+        List<RoomMember> memberships = memberRepository.findByUserId(user.getId());
+        List<String> blockingRooms = new ArrayList<>();
+
+        for (RoomMember m : memberships) {
+            if ("LEADER".equalsIgnoreCase(m.getRole())) {
+                long count = memberRepository.countByRoomId(m.getRoomId());
+                if (count > 1) {
+                    roomRepository.findById(m.getRoomId()).ifPresent(r -> blockingRooms.add(r.getName()));
+                }
+            }
+        }
+
+        if (!blockingRooms.isEmpty()) {
+            throw new ConflictException("TRANSFER_LEADERSHIP_FIRST",
+                    "You are the leader of active rooms with teammates: " + String.join(", ", blockingRooms) +
+                            ". Transfer leadership before deleting your account.");
+        }
+    }
+
+    private void cleanupUserRooms(User user) {
+        List<RoomMember> memberships = memberRepository.findByUserId(user.getId());
+        for (RoomMember m : memberships) {
+            long memberCount = memberRepository.countByRoomId(m.getRoomId());
+            if (memberCount <= 1) {
+                roomRepository.deleteById(m.getRoomId());
+            } else {
+                memberRepository.delete(m);
+            }
+        }
+    }
+
+    private void cleanupUserData(User user) {
+        settingsRepository.deleteById(user.getId());
+        apiKeyRepository.deleteByUserId(user.getId());
+        notificationRepository.deleteByUserId(user.getId());
+        exportRepository.deleteByUserId(user.getId());
+    }
+
+    private void anonymizeUser(User user) {
+        user.setName("Deleted user");
+        user.setEmail(null);
+        user.setAvatarUrl(null);
+        user.setLogin(null);
+        user.setDeletedAt(Instant.now());
+        userRepository.save(user);
+    }
+}

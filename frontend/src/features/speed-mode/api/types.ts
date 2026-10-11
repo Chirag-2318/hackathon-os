@@ -40,7 +40,7 @@ export interface SpeedModeBlocker {
 
 export interface SpeedModeState {
   timeToCheckpoint: string; // e.g. "2h 14m"
-  timeToSubmission: string;  // e.g. "9h 05m"
+  timeToSubmission: string;  // formatted duration string
   nextCheckpoint: SpeedModeCheckpoint;
   currentTask: SpeedModeTask | null;
   nextUpTasks: SpeedModeTask[]; // exactly 0–2 items per §3.3

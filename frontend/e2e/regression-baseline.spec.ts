@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test.use({
+  baseURL: 'http://localhost:5173',
   viewport: { width: 1534, height: 729 },
   deviceScaleFactor: 1.25,
 });

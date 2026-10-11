@@ -13,11 +13,8 @@ export function AiPolicyGate({ onOverride }: AiPolicyGateProps) {
         <DarkCallout
           title="AI use is restricted"
           description="The Brief for this event restricts AI code generation or planning. Using this tool may violate event rules."
-          action={
-            <Button variant="default" onClick={onOverride}>
-              Override and continue
-            </Button>
-          }
+          buttonLabel="Override and continue"
+          onAction={onOverride}
         />
       </div>
     </div>

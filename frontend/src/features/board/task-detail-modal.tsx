@@ -2,20 +2,23 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, Flag, Copy, MoreHorizontal, Trash2, Check, Plus, Bold, Italic, List, Link2,
-  Calendar, User, Clock, AlertTriangle, ShieldAlert, ChevronDown
+  Calendar, User, Clock, AlertTriangle, ShieldAlert, ChevronDown, GitBranch
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { boardService } from '@/services/boardService';
-import { getCurrentRole, CURRENT_USER_ID } from '@/services/mockStore';
-import type { Task, RoomMember, BoardPhase, TaskStatus, TaskPriority } from '@/services/types';
+import { githubService } from '@/services/githubService';
+import type { Task, RoomMember, BoardPhase, TaskStatus, TaskPriority, Branch } from '@/services/types';
 import {
   IssueKey, IssueTypeIcon, PriorityIcon, StatusLozenge, PhaseChip,
   DueChip, EstimateChip, SubtaskProgress
 } from '@/features/build/ui';
 import { MarkdownRenderer } from '@/utils/markdown';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useCurrentUser } from '@/features/auth/useCurrentUser';
+import { useParams } from 'react-router-dom';
 
 export interface TaskDetailModalProps {
   task: Task;
@@ -38,9 +41,10 @@ export function TaskDetailModal({
   onDeleteTask,
   onOpenTaskByKey,
 }: TaskDetailModalProps) {
-  const isLeader = getCurrentRole() === 'leader';
-  const currentMember = members.find(m => m.id === CURRENT_USER_ID);
-
+  const { data: currentUser } = useCurrentUser();
+  const currentUserId = currentUser?.id ? String(currentUser.id) : '';
+  const currentMember = members.find(m => m.id === currentUserId) || members[0] || null;
+  const isLeader = currentMember ? currentMember.role === 'leader' : true;
   // Editable summary
   const [isEditingSummary, setIsEditingSummary] = useState(false);
   const [summaryText, setSummaryText] = useState(task.summary);
@@ -72,6 +76,40 @@ export function TaskDetailModal({
   const [showAssigneeMenu, setShowAssigneeMenu] = useState(false);
   const [showPriorityMenu, setShowPriorityMenu] = useState(false);
   const [showPhaseMenu, setShowPhaseMenu] = useState(false);
+
+  // Development linked branches
+  const { roomId: paramRoomId } = useParams<{ roomId?: string }>();
+  const targetRoomId = task.roomId || paramRoomId || '';
+  const [githubBranches, setGithubBranches] = useState<Branch[]>([]);
+  const [showLinkBranchPopover, setShowLinkBranchPopover] = useState(false);
+
+  useEffect(() => {
+    if (!targetRoomId) return;
+    githubService
+      .getGithubData(targetRoomId)
+      .then((res) => setGithubBranches(res.branches || []))
+      .catch(() => {});
+  }, [targetRoomId, task.key]);
+
+  const linkedBranches = githubBranches.filter((b) => b.linkedTaskKeys.includes(task.key));
+  const unlinkedBranches = githubBranches.filter((b) => !b.linkedTaskKeys.includes(task.key));
+
+  const handleLinkBranch = async (branchName: string) => {
+    if (!targetRoomId) return;
+    await githubService.linkTaskToBranch(targetRoomId, branchName, task.key);
+    const res = await githubService.getGithubData(targetRoomId);
+    setGithubBranches(res.branches || []);
+    setShowLinkBranchPopover(false);
+    toast.success(`Linked ${branchName} to ${task.key}`);
+  };
+
+  const handleUnlinkBranch = async (branchName: string) => {
+    if (!targetRoomId) return;
+    await githubService.unlinkTaskFromBranch(targetRoomId, branchName, task.key);
+    const res = await githubService.getGithubData(targetRoomId);
+    setGithubBranches(res.branches || []);
+    toast.success(`Unlinked ${branchName}`);
+  };
 
   // Sync internal state when task changes (e.g. following deep link or related task)
   useEffect(() => {
@@ -119,69 +157,146 @@ export function TaskDetailModal({
   const blockedTasks = allTasks.filter(t => (t.dependsOn || []).includes(task.id) || (t.dependsOn || []).includes(task.key));
   const dependsOnTasks = allTasks.filter(t => (task.dependsOn || []).includes(t.id) || (task.dependsOn || []).includes(t.key));
 
+  // Dependency popover
+  const [showAddDepMenu, setShowAddDepMenu] = useState(false);
+
+  const handleApiConflict = async () => {
+    toast.error('Task was updated by another team member. Loading latest...');
+    try {
+      const fresh = await boardService.getTask(task.roomId, task.id);
+      onUpdateTask(fresh);
+    } catch {}
+  };
+
   const handleSaveSummary = async () => {
     if (!summaryText.trim() || summaryText === task.summary) {
       setIsEditingSummary(false);
       return;
     }
-    const updated = await boardService.updateTask(task.roomId, task.id, { summary: summaryText.trim() }, 'Summary updated');
-    onUpdateTask(updated);
-    setIsEditingSummary(false);
+    try {
+      const updated = await boardService.updateTask(
+        task.roomId,
+        task.id,
+        { summary: summaryText.trim(), version: (task as any).version },
+        'Summary updated'
+      );
+      onUpdateTask(updated);
+      setIsEditingSummary(false);
+    } catch (err: any) {
+      if (err?.status === 409 || err?.message?.includes('TASK_CHANGED')) {
+        await handleApiConflict();
+      } else {
+        toast.error(err?.message || 'Failed to update summary');
+      }
+    }
   };
 
   const handleSaveDesc = async () => {
-    const updated = await boardService.updateTask(task.roomId, task.id, { description: descText }, 'Description updated');
-    onUpdateTask(updated);
-    setIsEditingDesc(false);
+    try {
+      const updated = await boardService.updateTask(
+        task.roomId,
+        task.id,
+        { description: descText, version: (task as any).version },
+        'Description updated'
+      );
+      onUpdateTask(updated);
+      setIsEditingDesc(false);
+    } catch (err: any) {
+      if (err?.status === 409 || err?.message?.includes('TASK_CHANGED')) {
+        await handleApiConflict();
+      } else {
+        toast.error(err?.message || 'Failed to update description');
+      }
+    }
   };
 
   const handleToggleFlag = async () => {
     if (!task.flagged) {
       setShowFlagPopover(true);
     } else {
-      const updated = await boardService.updateTask(task.roomId, task.id, { flagged: false, blockedReason: undefined }, 'Unflagged task');
-      onUpdateTask(updated);
-      toast.success('Task unflagged');
+      try {
+        const updated = await boardService.flagTask(task.roomId, task.id, false);
+        onUpdateTask(updated);
+        toast.success('Task unflagged');
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to unflag task');
+      }
     }
   };
 
   const handleConfirmFlag = async () => {
-    const updated = await boardService.updateTask(
-      task.roomId,
-      task.id,
-      { flagged: true, blockedReason: blockReasonInput.trim() || 'Blocked by team dependency' },
-      `Flagged as blocked: ${blockReasonInput.trim() || 'Blocked'}`
-    );
-    onUpdateTask(updated);
-    setShowFlagPopover(false);
-    toast.error('Task flagged as blocked');
+    try {
+      const reason = blockReasonInput.trim() || 'Blocked by team dependency';
+      const updated = await boardService.flagTask(task.roomId, task.id, true, reason);
+      onUpdateTask(updated);
+      setShowFlagPopover(false);
+      toast.error('Task flagged as blocked');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to flag task');
+    }
   };
 
   const handleStatusChange = async (newStatus: TaskStatus) => {
     setShowStatusMenu(false);
-    const updated = await boardService.updateTaskStatus(task.roomId, task.id, newStatus, currentMember?.displayName || 'Aarav');
-    onUpdateTask(updated);
+    try {
+      const updated = await boardService.moveTask(task.roomId, task.id, newStatus, 0, (task as any).version);
+      onUpdateTask(updated);
+    } catch (err: any) {
+      if (err?.status === 409 || err?.message?.includes('TASK_CHANGED')) {
+        await handleApiConflict();
+      } else if (err?.message?.includes('DEPENDENCY_CYCLE') || err?.code === 'DEPENDENCY_CYCLE') {
+        toast.error('Cannot move task: circular dependency detected.');
+      } else {
+        toast.error(err?.message || 'Failed to update status');
+      }
+    }
   };
 
   const handleAssigneeChange = async (newAssigneeId?: string) => {
     setShowAssigneeMenu(false);
-    const targetMember = members.find(m => m.id === newAssigneeId);
-    const text = newAssigneeId ? `${targetMember?.displayName || 'Teammate'} was assigned` : 'Unassigned';
-    const updated = await boardService.updateTask(task.roomId, task.id, { assigneeId: newAssigneeId }, text);
-    onUpdateTask(updated);
+    try {
+      const updated = await boardService.assignTask(task.roomId, task.id, newAssigneeId || null);
+      onUpdateTask(updated);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to assign task');
+    }
   };
 
   const handlePriorityChange = async (newPriority: TaskPriority) => {
     setShowPriorityMenu(false);
-    const updated = await boardService.updateTask(task.roomId, task.id, { priority: newPriority }, `Priority changed to ${newPriority}`);
-    onUpdateTask(updated);
+    try {
+      const updated = await boardService.updateTask(
+        task.roomId,
+        task.id,
+        { priority: newPriority, version: (task as any).version },
+        `Priority changed to ${newPriority}`
+      );
+      onUpdateTask(updated);
+    } catch (err: any) {
+      if (err?.status === 409 || err?.message?.includes('TASK_CHANGED')) {
+        await handleApiConflict();
+      } else {
+        toast.error(err?.message || 'Failed to change priority');
+      }
+    }
   };
 
   const handlePhaseChange = async (newPhaseId: string) => {
     setShowPhaseMenu(false);
-    const targetPhase = phases.find(p => p.id === newPhaseId);
-    const updated = await boardService.updateTask(task.roomId, task.id, { phaseId: newPhaseId }, `Moved to ${targetPhase?.name || 'Phase'}`);
-    onUpdateTask(updated);
+    try {
+      const updated = await boardService.updateTask(
+        task.roomId,
+        task.id,
+        { phaseId: newPhaseId, version: (task as any).version }
+      );
+      onUpdateTask(updated);
+    } catch (err: any) {
+      if (err?.status === 409 || err?.message?.includes('TASK_CHANGED')) {
+        await handleApiConflict();
+      } else {
+        toast.error(err?.message || 'Failed to move phase');
+      }
+    }
   };
 
   const handleCopyLink = () => {
@@ -192,33 +307,83 @@ export function TaskDetailModal({
 
   const handleAddAcceptanceItem = async () => {
     if (!newAcceptanceText.trim()) return;
-    const acceptance = [...(task.acceptance || []), newAcceptanceText.trim()];
-    const updated = await boardService.updateTask(task.roomId, task.id, { acceptance });
-    onUpdateTask(updated);
-    setNewAcceptanceText('');
-    setShowAddAcceptance(false);
+    try {
+      const updated = await boardService.addAcceptance(task.roomId, task.id, newAcceptanceText.trim());
+      onUpdateTask(updated);
+      setNewAcceptanceText('');
+      setShowAddAcceptance(false);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to add acceptance');
+    }
   };
 
   const handleAddSubtaskItem = async () => {
     if (!newSubtaskText.trim()) return;
-    const updated = await boardService.addSubtask(task.roomId, task.id, newSubtaskText.trim());
-    onUpdateTask(updated);
-    setNewSubtaskText('');
-    setShowAddSubtask(false);
+    try {
+      const updated = await boardService.addSubtask(task.roomId, task.id, newSubtaskText.trim());
+      onUpdateTask(updated);
+      setNewSubtaskText('');
+      setShowAddSubtask(false);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to add subtask');
+    }
   };
 
   const handleToggleSubtask = async (subtaskId: string, done: boolean) => {
-    const updated = await boardService.toggleSubtask(task.roomId, task.id, subtaskId, done);
-    onUpdateTask(updated);
+    try {
+      const updated = await boardService.toggleSubtask(task.roomId, task.id, subtaskId, done);
+      onUpdateTask(updated);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to toggle subtask');
+    }
   };
 
   const handlePostComment = async () => {
     if (!commentText.trim()) return;
-    const updated = await boardService.addComment(task.roomId, task.id, commentText.trim(), CURRENT_USER_ID);
-    onUpdateTask(updated);
-    setCommentText('');
-    setIsFocusedComment(false);
-    toast.success('Comment posted');
+    try {
+      const updated = await boardService.addComment(task.roomId, task.id, commentText.trim());
+      onUpdateTask(updated);
+      setCommentText('');
+      setIsFocusedComment(false);
+      toast.success('Comment posted');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to post comment');
+    }
+  };
+
+  const availableDepTasks = allTasks.filter(
+    t => t.id !== task.id && !(task.dependsOn || []).includes(t.id) && !(task.dependsOn || []).includes(t.key)
+  );
+
+  const handleAddDependency = async (depTaskId: string) => {
+    setShowAddDepMenu(false);
+    const target = allTasks.find(t => t.id === depTaskId || t.key === depTaskId);
+    if (!target) return;
+    const currentDepIds = (task.dependsOn || []).map(k => allTasks.find(t => t.key === k || t.id === k)?.id || k);
+    const nextIds = [...currentDepIds, target.id];
+    try {
+      const updated = await boardService.updateDependencies(task.roomId, task.id, nextIds);
+      onUpdateTask(updated);
+      toast.success(`Added dependency on ${target.key}`);
+    } catch (err: any) {
+      if (err?.status === 400 || err?.message?.includes('DEPENDENCY_CYCLE') || err?.code === 'DEPENDENCY_CYCLE') {
+        toast.error('Cannot add dependency: circular dependency detected.');
+      } else {
+        toast.error(err?.message || 'Failed to add dependency');
+      }
+    }
+  };
+
+  const handleRemoveDependency = async (depKeyOrId: string) => {
+    const nextKeysOrIds = (task.dependsOn || []).filter(k => k !== depKeyOrId);
+    const nextIds = nextKeysOrIds.map(k => allTasks.find(t => t.key === k || t.id === k)?.id || k);
+    try {
+      const updated = await boardService.updateDependencies(task.roomId, task.id, nextIds);
+      onUpdateTask(updated);
+      toast.success('Removed dependency');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update dependencies');
+    }
   };
 
   const subtasks = task.subtasks || [];
@@ -717,10 +882,10 @@ export function TaskDetailModal({
                     )}
                   </button>
 
-                  {task.assigneeId !== CURRENT_USER_ID && (
+                  {task.assigneeId !== currentUserId && (
                     <button
                       type="button"
-                      onClick={() => handleAssigneeChange(CURRENT_USER_ID)}
+                      onClick={() => handleAssigneeChange(currentUserId)}
                       className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
                     >
                       Assign to me
@@ -761,7 +926,7 @@ export function TaskDetailModal({
               <div className="flex items-center justify-between py-1">
                 <span className="text-muted-foreground w-24 shrink-0">Reporter</span>
                 <span className="flex-1 font-medium text-foreground px-2">
-                  {reporter?.displayName || 'Aarav Mehta'}
+                  {reporter?.displayName || 'Team Member'}
                 </span>
               </div>
 
@@ -847,7 +1012,37 @@ export function TaskDetailModal({
 
               {/* Blocked by (dependsOn) */}
               <div className="flex flex-col gap-1 pt-2 border-t border-border/40">
-                <span className="text-muted-foreground">Blocked by:</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Blocked by:</span>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddDepMenu(!showAddDepMenu)}
+                      className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
+                    >
+                      + Add
+                    </button>
+                    {showAddDepMenu && (
+                      <div className="absolute right-0 top-6 z-50 p-1.5 rounded-xl bg-card border border-border shadow-lg flex flex-col gap-1 w-48 max-h-48 overflow-y-auto">
+                        {availableDepTasks.length === 0 ? (
+                          <div className="p-2 text-muted-foreground text-center text-xs">No available tasks</div>
+                        ) : (
+                          availableDepTasks.map(t => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => handleAddDependency(t.id)}
+                              className="w-full text-left p-1.5 rounded-lg hover:bg-muted text-xs font-mono flex items-center justify-between cursor-pointer"
+                            >
+                              <span className="text-blue-600 font-bold">{t.key}</span>
+                              <span className="text-[10px] text-muted-foreground truncate ml-1">{t.summary.slice(0, 15)}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
                 {dependsOnTasks.length === 0 ? (
                   <span className="text-muted-foreground italic">None</span>
                 ) : (
@@ -855,10 +1050,19 @@ export function TaskDetailModal({
                     {dependsOnTasks.map((t) => (
                       <span
                         key={t.id}
-                        onClick={() => onOpenTaskByKey?.(t.key)}
-                        className="px-2 py-0.5 rounded-md bg-muted text-blue-600 font-mono text-[11px] hover:underline cursor-pointer"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted text-blue-600 font-mono text-[11px]"
                       >
-                        {t.key}
+                        <span onClick={() => onOpenTaskByKey?.(t.key)} className="hover:underline cursor-pointer">
+                          {t.key}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDependency(t.key)}
+                          className="hover:text-destructive cursor-pointer ml-0.5 text-xs font-bold leading-none"
+                          title="Remove dependency"
+                        >
+                          ×
+                        </button>
                       </span>
                     ))}
                   </div>
@@ -880,6 +1084,81 @@ export function TaskDetailModal({
                       >
                         {t.key}
                       </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Development / Linked Branches (Jira style) */}
+              <div className="flex flex-col gap-1.5 pt-2 border-t border-border/40">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground font-medium">Development</span>
+                  <Popover open={showLinkBranchPopover} onOpenChange={setShowLinkBranchPopover}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="text-[11px] font-medium text-blue-600 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="size-3" />
+                        <span>Link branch</span>
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-56 p-1.5 text-xs font-[var(--font-inter)] shadow-md">
+                      <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        Available Branches
+                      </div>
+                      {unlinkedBranches.length === 0 ? (
+                        <div className="p-2 text-muted-foreground text-center">All branches linked</div>
+                      ) : (
+                        unlinkedBranches.map((b) => (
+                          <button
+                            key={b.name}
+                            type="button"
+                            onClick={() => handleLinkBranch(b.name)}
+                            className="w-full text-left p-1.5 rounded hover:bg-muted font-mono text-[11px] flex items-center justify-between cursor-pointer truncate"
+                          >
+                            <span className="truncate">{b.name}</span>
+                            <span className="text-[10px] text-muted-foreground capitalize font-sans">{b.role}</span>
+                          </button>
+                        ))
+                      )}
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {linkedBranches.length === 0 ? (
+                  <span className="text-muted-foreground italic text-[11px]">No branches linked</span>
+                ) : (
+                  <div className="flex flex-col gap-1.5 mt-0.5">
+                    {linkedBranches.map((b) => (
+                      <div
+                        key={b.name}
+                        className="flex items-center justify-between p-1.5 rounded-md bg-muted/50 border border-border/40 text-[11px]"
+                      >
+                        <div className="flex items-center gap-1.5 truncate">
+                          <GitBranch className="size-3 text-muted-foreground shrink-0" />
+                          <span className="font-mono font-medium text-foreground truncate">{b.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {b.pr && (
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                              b.pr.status === 'open' ? 'bg-emerald-100 text-emerald-800' :
+                              b.pr.status === 'merged' ? 'bg-purple-100 text-purple-800' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              PR #{b.pr.number}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleUnlinkBranch(b.name)}
+                            className="text-muted-foreground/50 hover:text-destructive p-0.5 cursor-pointer"
+                            title="Unlink branch"
+                          >
+                            <X className="size-2.5" />
+                          </button>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}

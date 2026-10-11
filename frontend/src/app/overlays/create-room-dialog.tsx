@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { roomService, EVENT_TEMPLATES } from '@/services';
+import { roomService } from '@/services';
 import type { EventTemplate } from '@/services/types';
 import { useOverlay } from '@/app/providers/overlay-store';
 import { useSidebarStore } from '@/app/layout/use-sidebar-store';
@@ -58,7 +58,7 @@ export function CreateRoomDialogOverlay() {
   const [nameTouched, setNameTouched] = useState(false);
   const [description, setDescription] = useState('');
   const [projectDescription, setProjectDescription] = useState('');
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('pb-sih');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   const defaultStart = getNextSaturday9AM();
   const [startValue, setStartValue] = useState(toInputValue(defaultStart));
@@ -72,17 +72,28 @@ export function CreateRoomDialogOverlay() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  // Template list — fetched ONLY from GET /api/v1/event-templates
+  const { data: templates = [] } = useQuery({
+    queryKey: ['event-templates'],
+    queryFn: () => roomService.getEventTemplates(),
+    enabled: isOpen,
+  });
+
   // Auto-open More if fields populated
   useEffect(() => {
     if (description || projectDescription) setMoreOpen(true);
   }, [description, projectDescription]);
 
-  // Apply defaultTemplateId from Playbooks
+  // Apply defaultTemplateId from Playbooks if in templates; otherwise clear it
   useEffect(() => {
     if (isOpen && data?.defaultTemplateId) {
-      setSelectedTemplateId(data.defaultTemplateId);
+      if (templates.some((t) => t.id === data.defaultTemplateId)) {
+        setSelectedTemplateId(data.defaultTemplateId);
+      } else {
+        setSelectedTemplateId(null);
+      }
     }
-  }, [isOpen, data?.defaultTemplateId]);
+  }, [isOpen, data?.defaultTemplateId, templates]);
 
   // Reset on close
   useEffect(() => {
@@ -91,7 +102,7 @@ export function CreateRoomDialogOverlay() {
       setNameTouched(false);
       setDescription('');
       setProjectDescription('');
-      setSelectedTemplateId('pb-sih');
+      setSelectedTemplateId(null);
       const s = getNextSaturday9AM();
       setStartValue(toInputValue(s));
       setEndValue(toInputValue(new Date(s.getTime() + 36 * 60 * 60 * 1000)));
@@ -103,15 +114,18 @@ export function CreateRoomDialogOverlay() {
     }
   }, [isOpen]);
 
-  // Template list
-  const { data: templates = EVENT_TEMPLATES } = useQuery({
-    queryKey: ['event-templates'],
-    queryFn: () => roomService.getEventTemplates(),
-    enabled: isOpen,
-    initialData: EVENT_TEMPLATES,
-  });
+  // Preselect only the first returned template if none selected or not in list
+  useEffect(() => {
+    if (templates.length > 0) {
+      if (!selectedTemplateId || !templates.some((t) => t.id === selectedTemplateId)) {
+        setSelectedTemplateId(templates[0].id);
+      }
+    } else {
+      setSelectedTemplateId(null);
+    }
+  }, [templates, selectedTemplateId]);
 
-  const selectedTemplate = templates.find((t) => t.id === selectedTemplateId) ?? templates[0];
+  const selectedTemplate = templates.find((t) => t.id === selectedTemplateId) ?? templates[0] ?? null;
 
   // Auto-fill end from start + template duration
   const handleStartChange = useCallback((val: string) => {

@@ -1,10 +1,18 @@
 import { apiFetch } from '../../api/client';
 
 export interface CurrentUserDto {
-  id: number;
+  id: string;
+  name: string;
   displayName: string;
+  firstName?: string;
+  initials?: string;
   email: string;
-  avatarUrl: string;
+  avatarUrl?: string;
+  provider?: string;
+  timezone?: string;
+  theme?: string;
+  plan?: string;
+  unreadNotifications?: number;
 }
 
 export const authApi = {

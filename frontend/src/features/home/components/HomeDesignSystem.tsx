@@ -394,10 +394,10 @@ export function DesignPreview() {
       <section className="space-y-4">
         <h2 className="text-xl font-semibold border-b pb-2">G) PairedBarRow</h2>
         <div className="max-w-md p-6 bg-white rounded-3xl border">
-          <PairedBarRow label="Aarav" hue="blue" doneValue={12} expectedValue={10} maxValue={16} status="working" />
-          <PairedBarRow label="Priya" hue="cyan" doneValue={9} expectedValue={10} maxValue={16} status="working" />
-          <PairedBarRow label="Rohan" hue="purple" doneValue={4} expectedValue={9} maxValue={16} status="blocked" />
-          <PairedBarRow label="Sneha" hue="teal" doneValue={11} expectedValue={10} maxValue={16} status="idle" />
+          <PairedBarRow label="Alice" hue="blue" doneValue={12} expectedValue={10} maxValue={16} status="working" />
+          <PairedBarRow label="Bob" hue="cyan" doneValue={9} expectedValue={10} maxValue={16} status="working" />
+          <PairedBarRow label="Charlie" hue="purple" doneValue={4} expectedValue={9} maxValue={16} status="blocked" />
+          <PairedBarRow label="Dana" hue="teal" doneValue={11} expectedValue={10} maxValue={16} status="idle" />
         </div>
       </section>
       

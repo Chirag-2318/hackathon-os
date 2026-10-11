@@ -3,7 +3,6 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { boardService } from '@/services/boardService';
 import { roomService } from '@/services/roomService';
-import { CURRENT_USER_ID } from '@/services/mockStore';
 import type { Task, BoardPhase, RoomMember, TaskStatus } from '@/services/types';
 
 import { BoardHeader } from './components/board-header';
@@ -16,14 +15,22 @@ import { TaskDetailModal } from './task-detail-modal';
 import { SegmentedControl, SegmentedControlItem } from '@/components/primitives/segmented-control';
 import { Skeleton } from '@/components/ui/skeleton';
 
+import { useCurrentUser } from '@/features/auth/useCurrentUser';
+
 export function BoardPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { data: currentUser } = useCurrentUser();
+  const currentUserId = currentUser?.id ? String(currentUser.id) : '';
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [phases, setPhases] = useState<BoardPhase[]>([]);
   const [members, setMembers] = useState<RoomMember[]>([]);
+  const [boardSummary, setBoardSummary] = useState<any>(null);
+  const [hoursLeft, setHoursLeft] = useState<number | null>(null);
+  const [currentPhaseName, setCurrentPhaseName] = useState<string>('Sprint');
   const [loading, setLoading] = useState(true);
 
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
@@ -53,7 +60,7 @@ export function BoardPage() {
   }, [selectedTaskKey, tasks]);
 
   // Load Board data
-  const loadData = async () => {
+  const loadData = async (silent = false) => {
     if (!roomId) return;
     try {
       const [boardData, roomData] = await Promise.all([
@@ -62,17 +69,26 @@ export function BoardPage() {
       ]);
       setTasks(boardData.tasks || []);
       setPhases(boardData.phases || []);
-      setMembers(roomData?.members || []);
+      setBoardSummary(boardData.summary || null);
+      if (typeof boardData.hoursLeft === 'number') setHoursLeft(boardData.hoursLeft);
+      if (boardData.currentPhase?.name) setCurrentPhaseName(boardData.currentPhase.name);
+      setMembers((roomData as any)?.members || []);
     } catch (err) {
       console.error('Failed to load board data:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     loadData();
-  }, [roomId]);
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible' && !draggingTaskId) {
+        loadData(true);
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [roomId, draggingTaskId]);
 
   // Global keyboard shortcut 'C' for Create Task
   useEffect(() => {
@@ -133,19 +149,24 @@ export function BoardPage() {
     setTasks(prev => prev.map(t => t.id === taskId ? updated : t));
 
     try {
-      await boardService.updateTaskStatus(roomId, taskId, newStatus);
+      await boardService.moveTask(roomId, taskId, newStatus, 0, (prevTask as any).version);
       toast.success(`Moved ${prevTask.key} to ${newStatus === 'todo' ? 'To do' : newStatus === 'inprogress' ? 'In progress' : 'Done'}`, {
         action: {
           label: 'Undo',
           onClick: async () => {
             setTasks(prev => prev.map(t => t.id === taskId ? prevTask : t));
-            await boardService.updateTaskStatus(roomId, taskId, oldStatus);
+            await boardService.moveTask(roomId, taskId, oldStatus, 0, (updated as any).version);
           },
         },
       });
-    } catch {
+    } catch (err: any) {
       setTasks(prev => prev.map(t => t.id === taskId ? prevTask : t));
-      toast.error('Failed to update status');
+      if (err?.status === 409 || err?.message?.includes('TASK_CHANGED')) {
+        toast.error('Task was updated by another team member. Reloading board...');
+        loadData();
+      } else {
+        toast.error(err?.message || 'Failed to update status');
+      }
     }
   };
 
@@ -155,9 +176,9 @@ export function BoardPage() {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
 
-    const updated = { ...task, assigneeId: CURRENT_USER_ID };
+    const updated = { ...task, assigneeId: currentUserId };
     setTasks(prev => prev.map(t => t.id === taskId ? updated : t));
-    await boardService.updateTask(roomId, taskId, { assigneeId: CURRENT_USER_ID }, 'Assigned to Aarav');
+    await boardService.updateTask(roomId, taskId, { assigneeId: currentUserId });
     toast.success(`Assigned ${task.key} to you`);
   };
 
@@ -173,8 +194,7 @@ export function BoardPage() {
     await boardService.updateTask(
       roomId,
       taskId,
-      { flagged: willBlock, blockedReason: willBlock ? 'Blocked' : undefined },
-      willBlock ? 'Flagged as blocked' : 'Unflagged'
+      { flagged: willBlock, blockedReason: willBlock ? 'Blocked' : undefined }
     );
     toast.success(willBlock ? `Flagged ${task.key} as blocked` : `Unblocked ${task.key}`);
   };
@@ -187,8 +207,8 @@ export function BoardPage() {
       summary,
       status,
       phaseId: currentPhase,
-      assigneeId: CURRENT_USER_ID,
-      reporterId: CURRENT_USER_ID,
+      assigneeId: currentUserId,
+      reporterId: currentUserId,
     });
     setTasks(prev => [...prev, newTask]);
     toast.success(`Created ${newTask.key}`);
@@ -219,7 +239,7 @@ export function BoardPage() {
     return tasks.filter(task => {
       // Summary filter
       if (summaryFilter === 'open' && task.status === 'done') return false;
-      if (summaryFilter === 'blocked' && (!task.flagged && task.status !== 'blocked')) return false;
+      if (summaryFilter === 'blocked' && !task.flagged && !task.blockedReason) return false;
       if (summaryFilter === 'unassigned' && task.assigneeId) return false;
       if (summaryFilter === 'duetoday') {
         if (!task.dueAt) return false;
@@ -243,10 +263,10 @@ export function BoardPage() {
       }
 
       // Only mine
-      if (filterState.onlyMine && task.assigneeId !== CURRENT_USER_ID) return false;
+      if (filterState.onlyMine && task.assigneeId !== currentUserId) return false;
 
       // Blocked
-      if (filterState.blocked && !task.flagged && task.status !== 'blocked') return false;
+      if (filterState.blocked && !task.flagged && !task.blockedReason) return false;
 
       // Due soon (within 6h or overdue)
       if (filterState.dueSoon) {
@@ -260,7 +280,6 @@ export function BoardPage() {
   }, [tasks, filterState, summaryFilter]);
 
   // Drag and drop state
-  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dropTargetCol, setDropTargetCol] = useState<TaskStatus | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const dragRef = useRef<{ task: Task; startX: number; startY: number } | null>(null);
@@ -309,20 +328,34 @@ export function BoardPage() {
           // If moving from TO DO to IN PROGRESS and unassigned, assign to current user
           let patch: Partial<Task> = { status: dropTargetCol };
           if (draggedTask.status === 'todo' && dropTargetCol === 'inprogress' && !draggedTask.assigneeId) {
-            patch.assigneeId = CURRENT_USER_ID;
+            patch.assigneeId = currentUserId;
           }
 
           const prev = tasks.find(t => t.id === draggedTask.id);
           setTasks(ts => ts.map(t => t.id === draggedTask.id ? { ...t, ...patch } : t));
 
-          await boardService.updateTask(
-            roomId,
-            draggedTask.id,
-            patch,
-            `Moved to ${dropTargetCol === 'todo' ? 'To do' : dropTargetCol === 'inprogress' ? 'In progress' : 'Done'}`
-          );
-
-          toast.success(`Moved ${draggedTask.key} to ${dropTargetCol}`);
+          try {
+            await boardService.moveTask(
+              roomId,
+              draggedTask.id,
+              dropTargetCol,
+              dropIndex ?? 0,
+              (draggedTask as any).version
+            );
+            toast.success(`Moved ${draggedTask.key} to ${dropTargetCol}`);
+          } catch (err: any) {
+            if (prev) {
+              setTasks(ts => ts.map(t => t.id === draggedTask.id ? prev : t));
+            }
+            if (err?.status === 409 || err?.message?.includes('TASK_CHANGED')) {
+              toast.error('Task was updated by another team member. Reloading board...');
+              loadData();
+            } else if (err?.message?.includes('DEPENDENCY_CYCLE') || err?.code === 'DEPENDENCY_CYCLE') {
+              toast.error('Cannot move task: circular dependency detected.');
+            } else {
+              toast.error(err?.message || 'Failed to move task');
+            }
+          }
         }
       }
 
@@ -344,8 +377,8 @@ export function BoardPage() {
     <div className="flex flex-col gap-4 p-5 max-w-full min-h-[calc(100vh-64px)]">
       {/* 1 & 2: Header & Summary chips */}
       <BoardHeader
-        currentPhaseName={phases[0]?.name || 'Polish'}
-        timeLeftText="9h 05m left"
+        currentPhaseName={currentPhaseName || phases[0]?.name || 'Sprint'}
+        timeLeftText={hoursLeft !== null ? `${hoursLeft}h left` : undefined}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
         onCreateClick={() => setIsCreateModalOpen(true)}
@@ -357,7 +390,7 @@ export function BoardPage() {
       {/* 3: Quick filter bar */}
       <BoardFilterBar
         members={members}
-        currentUserId={CURRENT_USER_ID}
+        currentUserId={currentUserId}
         filterState={filterState}
         onFilterChange={handleFilterChange}
         onClearFilters={handleClearFilters}
@@ -369,6 +402,11 @@ export function BoardPage() {
           <Skeleton className="h-[500px] rounded-[16px]" />
           <Skeleton className="h-[500px] rounded-[16px]" />
           <Skeleton className="h-[500px] rounded-[16px]" />
+        </div>
+      ) : tasks.length === 0 ? (
+        <div className="flex flex-col items-center justify-center p-16 text-center rounded-[24px] border border-border bg-card shadow-xs">
+          <p className="text-base font-bold text-foreground">No tasks yet.</p>
+          <p className="text-xs text-muted-foreground mt-1">Tasks are created by your plan or by you.</p>
         </div>
       ) : viewMode === 'list' ? (
         <BoardListView

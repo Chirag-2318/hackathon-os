@@ -2,104 +2,110 @@
  * briefService.ts — Brief CRUD, intake parsing, and confirmation.
  */
 import { apiFetch } from '@/api/client';
-import type { Brief, BriefFields, BriefSource, RubricCriterion } from './types';
-import {
-  getBrief, setBrief, getRoom, setRoom,
-  mockDelay, CURRENT_USER_ID, addNotification, genId,
-} from './mockStore';
-import { USE_MOCKS } from './roomService';
-
-export const DEFAULT_BRIEF_FIELDS: BriefFields = {
-  problemStatement: 'Students and early-career developers struggle to take hackathon projects from raw ideas to complete, pitchable products within strict time limits.',
-  targetAudience: 'Hackathon participants, college student teams, and solo builders.',
-  rubric: [
-    { criterion: 'Innovation & Originality', weight: 30 },
-    { criterion: 'Technical Execution & Architecture', weight: 30 },
-    { criterion: 'User Experience & Polish', weight: 20 },
-    { criterion: 'Pitch & Demo Quality', weight: 20 },
-  ],
-  deadlines: {
-    start: new Date().toISOString(),
-    freeze: null,
-    submission: new Date(Date.now() + 36 * 3600 * 1000).toISOString(),
-  },
-  eligibility: 'Open to all registered university students and working professionals.',
-  techRules: 'Any open-source library or modern tech stack permitted. GitHub commits must occur during the event window.',
-  aiPolicy: 'AI coding assistants (Claude, ChatGPT, GitHub Copilot) are allowed and encouraged. Disclose AI generated code.',
-  deliverables: ['Working live demo URL', 'Public GitHub repository with README', '2-minute demo video', 'Pitch deck PDF'],
-  tracksAndPrizes: ['Open Innovation ($5,000)', 'Best AI Application ($3,000)', 'Best Student Project ($2,000)'],
-  judgingFormat: 'Live 3-minute pitch followed by 2-minute judge Q&A.',
-};
+import type { Brief, BriefFields, RubricCriterion } from './types';
 
 export const briefService = {
   async getBrief(roomId: string): Promise<Brief | null> {
-    if (USE_MOCKS) {
-      await mockDelay(100, 300);
-      return getBrief(roomId);
-    }
-    return apiFetch<any>(`/api/v1/rooms/${roomId}/brief`);
+    return apiFetch<Brief>(`/api/v1/rooms/${roomId}/brief`);
   },
 
   async saveBrief(brief: Brief): Promise<Brief> {
-    if (USE_MOCKS) {
-      await mockDelay(150, 350);
-      setBrief(brief);
-      return brief;
-    }
-    return apiFetch<any>(`/api/v1/rooms/${brief.roomId}/brief`, {
+    return apiFetch<Brief>(`/api/v1/rooms/${brief.roomId}/brief`, {
       method: 'PUT',
-      body: JSON.stringify(brief),
+      body: JSON.stringify({
+        source: brief.source,
+        sourceUrl: brief.sourceUrl,
+        fileName: brief.fileName,
+        rawText: brief.rawText,
+        fields: brief.fields,
+        confirmedFields: brief.confirmedFields,
+        risks: brief.risks,
+      }),
     });
   },
 
-  async confirmBrief(roomId: string): Promise<Brief> {
-    if (USE_MOCKS) {
-      await mockDelay(200, 400);
-      const brief = getBrief(roomId);
-      if (!brief) throw new Error('Brief not found');
-      brief.confirmed = true;
-      setBrief(brief);
+  async updateConfirmedField(roomId: string, fieldKey: string, confirmed: boolean): Promise<Brief> {
+    return apiFetch<Brief>(`/api/v1/rooms/${roomId}/brief/confirmed-fields`, {
+      method: 'PATCH',
+      body: JSON.stringify({ fieldKey, confirmed }),
+    });
+  },
 
-      // Advance room stage if still at brief
-      const room = getRoom(roomId);
-      if (room) {
-        room.stageDone.brief = true;
-        if (room.stage === 'brief') {
-          room.stage = 'ideate';
-        }
-        setRoom(room);
+  async setLinkSource(roomId: string, url: string): Promise<Brief> {
+    return apiFetch<Brief>(`/api/v1/rooms/${roomId}/brief/source/link`, {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+    });
+  },
+
+  async setPdfSource(roomId: string, file: File, onProgress?: (pct: number) => void): Promise<Brief> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+      xhr.open('POST', `${baseUrl}/api/v1/rooms/${roomId}/brief/source/pdf`);
+      xhr.withCredentials = true;
+
+      if (onProgress && xhr.upload) {
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            onProgress(percent);
+          }
+        };
       }
 
-      addNotification({
-        id: genId('notif'),
-        roomId,
-        type: 'brief_confirmed',
-        message: 'Hackathon brief confirmed! The team can start ideating.',
-        createdAt: new Date().toISOString(),
-        read: false,
-        link: `/app/room/${roomId}/ideate`,
-      });
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch {
+            reject(new Error('Invalid server response'));
+          }
+        } else {
+          try {
+            const err = JSON.parse(xhr.responseText);
+            reject(new Error(err.message || `Upload failed with status ${xhr.status}`));
+          } catch {
+            reject(new Error(`Upload failed with status ${xhr.status}`));
+          }
+        }
+      };
 
-      return brief;
-    }
-    return apiFetch<any>(`/api/v1/rooms/${roomId}/brief/confirm`, { method: 'POST' });
+      xhr.onerror = () => reject(new Error('Network error during upload'));
+
+      const formData = new FormData();
+      formData.append('file', file);
+      xhr.send(formData);
+    });
   },
 
-  async parseBriefFromUrl(url: string): Promise<BriefFields> {
-    // Simulated 3-step parsing: Fetching page, Reading rules, Structuring
-    await mockDelay(2000, 2500);
-    return {
-      ...DEFAULT_BRIEF_FIELDS,
-      problemStatement: `Extracted from ${url}: Teams need an all-in-one execution platform to build, coordinate, and submit exceptional hackathon entries.`,
-    };
+  async getExtractionPrompt(roomId: string): Promise<string> {
+    const res = await apiFetch<{ promptText: string }>(`/api/v1/rooms/${roomId}/brief/extraction-prompt`);
+    return res.promptText;
   },
 
-  async parseBriefFromPdf(fileName: string): Promise<BriefFields> {
-    await mockDelay(2000, 2500);
-    return {
-      ...DEFAULT_BRIEF_FIELDS,
-      problemStatement: `Extracted from PDF (${fileName}): Build a product addressing real-world workflow fragmentation under high-pressure sprint environments.`,
-    };
+  async validateExtract(roomId: string, jsonText: string): Promise<{ valid: boolean; fields?: BriefFields; errors: string[] }> {
+    return apiFetch<{ valid: boolean; fields?: BriefFields; errors: string[] }>(`/api/v1/rooms/${roomId}/brief/extract/validate`, {
+      method: 'POST',
+      body: JSON.stringify({ jsonText }),
+    });
+  },
+
+  async autoExtract(roomId: string): Promise<{ valid: boolean; fields?: BriefFields; errors: string[] }> {
+    return apiFetch<{ valid: boolean; fields?: BriefFields; errors: string[] }>(`/api/v1/rooms/${roomId}/brief/extract/auto`, {
+      method: 'POST',
+    });
+  },
+
+  async confirmBrief(roomId: string, applyDatesToRoom: boolean = false): Promise<Brief> {
+    return apiFetch<Brief>(`/api/v1/rooms/${roomId}/brief/confirm`, {
+      method: 'POST',
+      body: JSON.stringify({ applyDatesToRoom }),
+    });
+  },
+
+  async deleteBrief(roomId: string): Promise<void> {
+    await apiFetch<void>(`/api/v1/rooms/${roomId}/brief`, { method: 'DELETE' });
   },
 
   validateBriefJson(jsonStr: string): { valid: boolean; fields?: BriefFields; errors: string[] } {

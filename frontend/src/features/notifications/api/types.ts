@@ -11,7 +11,7 @@ export type NotificationType = 'mention' | 'blocker' | 'system' | 'other';
 export interface Notification {
   id: string;
   /** Initials for avatar fallback (C09 §2.8 pastel) */
-  avatarInitials: string;
+  avatarInitials?: string;
   avatarUrl?: string;
   title: string;
   /** Single-line truncated body */
@@ -20,6 +20,9 @@ export interface Notification {
   timestamp: string;
   read: boolean;
   type: NotificationType;
+  roomId?: string;
+  roomName?: string;
+  link?: string;
 }
 
 export interface NotificationsResponse {

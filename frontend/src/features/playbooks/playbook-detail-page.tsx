@@ -100,7 +100,7 @@ export function PlaybookDetailPage() {
                 <div className="mb-8">
                   <h3 className="text-h4 text-ink-strong mb-4">What you'll do</h3>
                   <ul className="space-y-3">
-                    {playbook.checklistPreview.map((item, i) => (
+                    {playbook.checklistPreview.map((item: string, i: number) => (
                       <li key={i} className="flex items-start gap-3 text-body text-ink">
                         <CheckCircle2 className="size-5 text-mint-500 shrink-0 mt-0.5" />
                         <span>{item}</span>
@@ -113,7 +113,7 @@ export function PlaybookDetailPage() {
                 <div className="mb-8 pt-6 border-t border-border">
                   <h3 className="text-h4 text-ink-strong mb-4">Judging Criteria</h3>
                   <div className="flex flex-wrap gap-2">
-                    {playbook.defaultRubric.map((item, i) => (
+                    {playbook.defaultRubric.map((item: string, i: number) => (
                       <Chip key={i} variant="soft">{item}</Chip>
                     ))}
                   </div>

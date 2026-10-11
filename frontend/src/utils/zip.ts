@@ -123,7 +123,7 @@ export function createZipArchive(files: ZipFileInput[]): Blob {
 
   chunks.push(eocd);
 
-  return new Blob(chunks, { type: 'application/zip' });
+  return new Blob(chunks as BlobPart[], { type: 'application/zip' });
 }
 
 export function downloadZip(files: ZipFileInput[], zipFilename = 'documents.zip') {

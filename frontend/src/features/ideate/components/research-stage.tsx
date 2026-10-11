@@ -7,9 +7,9 @@ import { cn } from 'cn';
 export function ResearchStage({ data }: { data: IdeateResponse }) {
   const [selectedIdeaId, setSelectedIdeaId] = React.useState<string>(data.ideas[0]?.id);
 
-  const selectedIdea = data.ideas.find(i => i.id === selectedIdeaId);
-  const attachments = data.attachments.filter(a => a.ideaId === selectedIdeaId);
-  const quotes = data.quotes.filter(q => q.ideaId === selectedIdeaId);
+  const selectedIdea = data.ideas.find((i: any) => i.id === selectedIdeaId);
+  const attachments = data.attachments.filter((a: any) => a.ideaId === selectedIdeaId);
+  const quotes = data.quotes.filter((q: any) => q.ideaId === selectedIdeaId);
   const talkedToRealUser = data.talkedToRealUserCheckboxes[selectedIdeaId] || false;
 
   return (
@@ -17,7 +17,7 @@ export function ResearchStage({ data }: { data: IdeateResponse }) {
       {/* Left List */}
       <div className="w-1/3 flex flex-col gap-3 overflow-auto pr-2">
         <h2 className="text-xl font-bold mb-2">Research Ideas</h2>
-        {data.ideas.map(idea => (
+        {data.ideas.map((idea: any) => (
           <div 
             key={idea.id}
             onClick={() => setSelectedIdeaId(idea.id)}
@@ -30,8 +30,8 @@ export function ResearchStage({ data }: { data: IdeateResponse }) {
           >
             <h4 className="font-semibold text-ink line-clamp-1">{idea.title}</h4>
             <div className="flex gap-4 mt-2 text-xs text-ink-muted">
-              <span>{data.attachments.filter(a => a.ideaId === idea.id).length} attachments</span>
-              <span>{data.quotes.filter(q => q.ideaId === idea.id).length} quotes</span>
+              <span>{data.attachments.filter((a: any) => a.ideaId === idea.id).length} attachments</span>
+              <span>{data.quotes.filter((q: any) => q.ideaId === idea.id).length} quotes</span>
             </div>
           </div>
         ))}
@@ -51,7 +51,7 @@ export function ResearchStage({ data }: { data: IdeateResponse }) {
                 Attachments
               </h4>
               <div className="space-y-3">
-                {attachments.length > 0 ? attachments.map(att => (
+                {attachments.length > 0 ? attachments.map((att: any) => (
                   <div key={att.id} className="flex items-center gap-3 p-3 bg-surface rounded-md border border-border hover:border-primary/50 cursor-pointer">
                     {att.type === 'link' ? <Link className="size-4 text-ink-muted" /> : <FileText className="size-4 text-ink-muted" />}
                     <div className="flex-1 overflow-hidden">
@@ -75,7 +75,7 @@ export function ResearchStage({ data }: { data: IdeateResponse }) {
                 User Quotes
               </h4>
               <div className="space-y-4 mb-8">
-                {quotes.length > 0 ? quotes.map(quote => (
+                {quotes.length > 0 ? quotes.map((quote: any) => (
                   <div key={quote.id} className="p-4 bg-surface rounded-md border-l-2 border-primary">
                     <p className="text-sm italic text-ink mb-2">"{quote.text}"</p>
                     <p className="text-xs text-ink-muted">— {quote.source}</p>

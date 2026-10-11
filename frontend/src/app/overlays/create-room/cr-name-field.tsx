@@ -51,7 +51,7 @@ export function CrNameField({
           data-testid="cr-name"
           type="text"
           maxLength={MAX}
-          placeholder="e.g. Campus Build Sprint 2026"
+          placeholder="e.g. Hackathon Build Sprint"
           value={value}
           onChange={(e) => {
             onChange(e.target.value);

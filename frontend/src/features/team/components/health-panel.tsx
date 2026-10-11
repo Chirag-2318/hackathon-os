@@ -14,8 +14,8 @@ export function HealthPanel({ data, members }: HealthPanelProps) {
   const [selectedCheckIn, setSelectedCheckIn] = React.useState<string | null>(null);
 
   // Find if anyone is overloaded
-  const rescuer = data.memberHealth.find(h => h.isOverloaded);
-  const rescuerMember = rescuer ? members.find(m => m.id === rescuer.memberId) : null;
+  const rescuer = data.memberHealth.find((h: any) => h.isOverloaded);
+  const rescuerMember = rescuer ? members.find((m: any) => m.id === rescuer.memberId) : null;
   return (
     <div className="flex flex-col gap-4 p-5 bg-surface border border-border shadow-e0 rounded-card">
       <header className="flex items-center justify-between">
@@ -25,7 +25,7 @@ export function HealthPanel({ data, members }: HealthPanelProps) {
       <div className="flex flex-col gap-3 min-w-0">
         <span className="text-label text-ink-muted">Your check-in (optional)</span>
         <SegmentedControl className="w-full justify-between">
-          {data.checkInOptions.map(opt => (
+          {data.checkInOptions.map((opt: any) => (
             <SegmentedControlItem 
               key={opt.id}
               active={selectedCheckIn === opt.id}
@@ -56,7 +56,7 @@ export function HealthPanel({ data, members }: HealthPanelProps) {
       <div className="flex flex-col gap-4 mt-2 min-w-0">
         <span className="text-label text-ink-muted">Workload share</span>
         <div className="flex flex-col gap-3">
-          {data.memberHealth.map(health => {
+          {data.memberHealth.map((health: any) => {
             const member = members.find(m => m.id === health.memberId);
             if (!member) return null;
             

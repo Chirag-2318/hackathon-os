@@ -26,23 +26,21 @@ import { COPY } from '@/shared/constants/copy';
 import { RefreshCw, AlertTriangle, Zap } from 'lucide-react';
 import { cn } from 'cn';
 import type { SpeedModeState } from './api/types';
+import { apiFetch } from '@/api/client';
 
 // ── API ──────────────────────────────────────────────────────────
 
 async function fetchSpeedMode(roomId: string): Promise<SpeedModeState> {
-  const res = await fetch(`/api/v1/rooms/${roomId}/speed-mode`);
-  if (!res.ok) throw new Error('Failed to load Speed Mode');
-  return res.json() as Promise<SpeedModeState>;
+  return apiFetch<SpeedModeState>(`/api/v1/rooms/${roomId}/speed-mode`);
 }
 
 async function markTaskDone(roomId: string, taskId: string): Promise<void> {
-  await fetch(`/api/v1/rooms/${roomId}/speed-mode/tasks/${taskId}/done`, { method: 'POST' });
+  await apiFetch(`/api/v1/rooms/${roomId}/speed-mode/tasks/${taskId}/done`, { method: 'POST' });
 }
 
 async function quickCapture(roomId: string, text: string): Promise<void> {
-  await fetch(`/api/v1/rooms/${roomId}/speed-mode/capture`, {
+  await apiFetch(`/api/v1/rooms/${roomId}/speed-mode/capture`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ text }),
   });
 }
@@ -317,7 +315,7 @@ function QuickCapture({ roomId, disabled }: { roomId: string; disabled: boolean 
 
 export function SpeedModePage() {
   const { roomId } = useParams<{ roomId?: string }>();
-  const effectiveRoomId = roomId ?? 'r-1';
+  const effectiveRoomId = roomId ?? '';
 
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [eventCardVisible, setEventCardVisible] = useState(true);
@@ -334,7 +332,8 @@ export function SpeedModePage() {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['speedMode', effectiveRoomId],
     queryFn: () => fetchSpeedMode(effectiveRoomId),
-    refetchInterval: 30_000, // live countdown context
+    enabled: Boolean(effectiveRoomId),
+    refetchInterval: 15_000, // live countdown context per spec
   });
 
   const { mutate: doMarkDone, isPending: isMarkingDone } = useMutation({

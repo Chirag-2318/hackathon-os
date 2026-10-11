@@ -7,7 +7,7 @@ import { YourTasks } from './components/YourTasks';
 import { TeamWorkload } from './components/TeamWorkload';
 import { OtherRooms } from './components/OtherRooms';
 import { FirstTimeState } from './components/FirstTimeState';
-import { mockCurrentEvent } from './homeMock';
+import { setServerNow } from '@/utils/time';
 
 function HomeSkeleton() {
   return (
@@ -39,9 +39,20 @@ function HomeSkeleton() {
   );
 }
 
+export interface HomeContextValue {
+  homeData?: any;
+}
+export const HomeContext = React.createContext<HomeContextValue>({});
+
 export function HomePage() {
-  const { isLoading, error, refetch } = useHome();
+  const { data: homeData, isLoading, error, refetch } = useHome();
   const [isFirstTime, setIsFirstTime] = React.useState(false); // Toggle this to test
+
+  React.useEffect(() => {
+    if (homeData?.serverNow) {
+      setServerNow(homeData.serverNow);
+    }
+  }, [homeData?.serverNow]);
 
   if (error) {
     return (
@@ -64,7 +75,9 @@ export function HomePage() {
     return <HomeSkeleton />;
   }
 
-  if (isFirstTime || !mockCurrentEvent) {
+  const hasRooms = Boolean(homeData?.rooms && homeData.rooms.length > 0);
+
+  if (isFirstTime || !hasRooms) {
     return (
       <div className="w-full min-h-screen bg-[var(--shell)] flex flex-col pt-16">
         <FirstTimeState />
@@ -73,9 +86,10 @@ export function HomePage() {
   }
 
   return (
-    <div className="w-full min-h-screen bg-[var(--shell)]">
-      {/* Responsive container: px-4 on mobile, px-8 on tablet+ */}
-      <div className="max-w-[1180px] mx-auto px-4 md:px-[32px] py-[32px] flex flex-col gap-[24px]">
+    <HomeContext.Provider value={{ homeData }}>
+      <div className="w-full min-h-screen bg-[var(--shell)]">
+        {/* Responsive container: px-4 on mobile, px-8 on tablet+ */}
+        <div className="max-w-[1180px] mx-auto px-4 md:px-[32px] py-[32px] flex flex-col gap-[24px]">
         {/* Row 0 */}
         <SmartHeader />
         
@@ -114,6 +128,7 @@ export function HomePage() {
         </div>
       </div>
     </div>
+    </HomeContext.Provider>
   );
 }
 

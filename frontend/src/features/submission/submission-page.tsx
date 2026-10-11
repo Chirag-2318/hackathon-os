@@ -73,17 +73,17 @@ export function SubmissionPage() {
 
   const isLastHour = remainingSeconds > 0 && remainingSeconds <= 3600;
 
-  const doneCount = useMemo(() => data?.items.filter((i) => i.done).length ?? 0, [data]);
+  const doneCount = useMemo(() => data?.items.filter((i: any) => i.done).length ?? 0, [data]);
   const totalCount = data?.items.length ?? 0;
 
   const groups: SubmissionGroup[] = ['required', 'team', 'verification'];
 
   const handleToggle = (id: string) => {
-    setData((prev) => {
+    setData((prev: any) => {
       if (!prev) return prev;
       return {
         ...prev,
-        items: prev.items.map((item) =>
+        items: prev.items.map((item: any) =>
           item.id === id && item.group !== 'verification'
             ? { ...item, done: !item.done }
             : item
@@ -93,7 +93,7 @@ export function SubmissionPage() {
   };
 
   const handleDraftChange = (field: keyof SubmissionDraft, value: string) => {
-    setData((prev) => {
+    setData((prev: any) => {
       if (!prev) return prev;
       return {
         ...prev,
@@ -201,7 +201,7 @@ export function SubmissionPage() {
 
               {/* Checklist Groups */}
               {groups.map((group) => {
-                const groupItems = data.items.filter((i) => i.group === group);
+                const groupItems = data.items.filter((i: any) => i.group === group);
                 if (groupItems.length === 0) return null;
                 return (
                   <ChecklistGroup

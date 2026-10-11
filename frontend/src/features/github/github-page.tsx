@@ -1,115 +1,265 @@
-import { useEffect, useState } from 'react';
-import { fetchGithub, type GithubResponse } from '@/api/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, GitCommit, GitPullRequest, GitBranch, AlertTriangle } from 'lucide-react';
-import { IconBrandGithub } from '@tabler/icons-react';
+import { githubService } from '@/services/githubService';
+import type {
+  GithubDataComputed, BranchRole, AttentionItem
+} from '@/services/types';
+import { GithubHeader } from './components/github-header';
+import { ReadinessBand } from './components/readiness-band';
 import { BranchMap } from './components/branch-map';
-import { RepoHealthChecklist } from './components/repo-health-checklist';
+import { NeedsAttentionCard } from './components/needs-attention-card';
+import { RepoHealthCard } from './components/repo-health-card';
+import { CommitActivityCard } from './components/commit-activity-card';
+import { FreezeDemoDialog } from './components/freeze-demo-dialog';
+import { NotConnectedView } from './components/not-connected-view';
 
 export function GithubPage() {
-  const [data, setData] = useState<GithubResponse | null>(null);
+  const { roomId = '' } = useParams<{ roomId: string }>();
+  const navigate = useNavigate();
+
+  const [data, setData] = useState<GithubDataComputed | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Dialog state
+  const [freezeDialogOpen, setFreezeDialogOpen] = useState(false);
+
+  const loadData = useCallback(async () => {
+    if (!roomId) return;
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await githubService.getGithubData(roomId);
+      setData(res);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to load GitHub repository details');
+    } finally {
+      setLoading(false);
+    }
+  }, [roomId]);
 
   useEffect(() => {
-    fetchGithub('r-1').then(setData);
-  }, []);
+    loadData();
+  }, [loadData]);
 
-  if (!data) {
-    return <div className="p-8 text-center text-slate-500">Loading GitHub data...</div>;
-  }
+  // Handlers
+  const handleSync = async () => {
+    if (!roomId) return;
+    const res = await githubService.syncRepo(roomId);
+    setData(res);
+  };
 
-  if (!data.isConnected) {
+  const handleUpdatePurpose = async (branchName: string, purpose: string) => {
+    await githubService.updateBranchPurpose(roomId, branchName, purpose);
+    setData((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        branches: prev.branches.map((b) => (b.name === branchName ? { ...b, purpose } : b)),
+      };
+    });
+  };
+
+  const handleUpdateRole = async (branchName: string, role: BranchRole) => {
+    const updatedBranches = await githubService.updateBranchRole(roomId, branchName, role);
+    const refreshed = await githubService.getGithubData(roomId);
+    setData(refreshed);
+  };
+
+  const handleLinkTask = async (branchName: string, taskKey: string) => {
+    await githubService.linkTaskToBranch(roomId, branchName, taskKey);
+    const refreshed = await githubService.getGithubData(roomId);
+    setData(refreshed);
+  };
+
+  const handleUnlinkTask = async (branchName: string, taskKey: string) => {
+    await githubService.unlinkTaskFromBranch(roomId, branchName, taskKey);
+    const refreshed = await githubService.getGithubData(roomId);
+    setData(refreshed);
+  };
+
+  const handleFreezeConfirm = async (freezeData: {
+    branch: string;
+    tag: string;
+    sha: string;
+    message: string;
+  }) => {
+    await githubService.freezeDemo(roomId, freezeData);
+    const refreshed = await githubService.getGithubData(roomId);
+    setData(refreshed);
+  };
+
+  const handleRecheckHealth = async () => {
+    const refreshed = await githubService.recheckHealth(roomId);
+    setData(refreshed);
+  };
+
+  const handleDismissAttention = async (itemId: string) => {
+    await githubService.dismissAttentionItem(roomId, itemId);
+    setData((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        attentionItems: prev.attentionItems.filter((i) => i.id !== itemId),
+      };
+    });
+  };
+
+  const handleConnectRepo = async (repoInput: string) => {
+    const res = await githubService.connectRepo(roomId, repoInput);
+    setData(res);
+  };
+
+  const handleDisconnectRepo = async () => {
+    await githubService.disconnectRepo(roomId);
+    setData((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        repo: { ...prev.repo, connected: false },
+      };
+    });
+  };
+
+  const handleAttentionAction = (item: AttentionItem) => {
+    if (item.actionType === 'open_url' && item.url) {
+      window.open(item.url, '_blank', 'noopener,noreferrer');
+    } else if (item.actionType === 'open_freeze') {
+      setFreezeDialogOpen(true);
+    } else if (item.actionType === 'scroll_branch') {
+      const el = document.getElementById('branch-map-section');
+      el?.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const handleScrollToSection = (sectionId: string) => {
+    const el = document.getElementById(sectionId);
+    el?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // ── Skeletons / Loading State ──
+  if (loading && !data) {
     return (
-      <div className="flex-1 p-8">
-        <div className="max-w-2xl mx-auto text-center space-y-6 pt-12">
-          <IconBrandGithub className="w-16 h-16 mx-auto text-slate-300 dark:text-slate-700" />
-          <h2 className="text-2xl font-semibold">Connect GitHub</h2>
-          <p className="text-slate-500">Connect your repository to track branches, health, and activity.</p>
-          <Button variant="default">Connect Repository</Button>
+      <div className="flex-1 overflow-y-auto bg-background p-6">
+        <div className="max-w-[1280px] mx-auto space-y-4">
+          <div className="h-10 w-64 bg-muted/60 animate-pulse rounded-lg" />
+          <div className="h-32 bg-card border border-border/50 rounded-2xl animate-pulse" />
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <div className="lg:col-span-8 h-80 bg-card border border-border/50 rounded-2xl animate-pulse" />
+            <div className="lg:col-span-4 h-80 bg-card border border-border/50 rounded-2xl animate-pulse" />
+          </div>
+          <div className="h-56 bg-card border border-border/50 rounded-2xl animate-pulse" />
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900">
-      <div className="max-w-6xl mx-auto p-8 space-y-8">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-bold tracking-tight">GitHub Hub</h1>
-            <Badge variant="secondary" className="font-mono text-sm">{data.repoName}</Badge>
-            <Badge variant="outline" className="text-emerald-500 border-emerald-500/20">Connected</Badge>
+  // ── Error State with Retry ──
+  if (error && !data) {
+    return (
+      <div className="flex-1 overflow-y-auto bg-background p-6 flex items-center justify-center">
+        <div className="max-w-md w-full p-6 rounded-2xl bg-card border border-border shadow-xs text-center space-y-4 font-[var(--font-inter)]">
+          <div className="size-12 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
+            <AlertCircle className="size-6" />
           </div>
-          <Button variant="outline" size="sm" className="gap-2">
-            <RefreshCw className="h-4 w-4" />
-            Sync
+          <h2 className="text-lg font-semibold text-foreground">Could not load repository</h2>
+          <p className="text-xs text-muted-foreground">{error}</p>
+          <Button onClick={loadData} size="sm" className="gap-2 cursor-pointer">
+            <RefreshCw className="size-3.5" />
+            <span>Retry</span>
           </Button>
         </div>
+      </div>
+    );
+  }
 
-        {/* History Health Callout */}
-        {data.historyHealthWarning && (
-          <div className="bg-[#2A2D32] text-white p-4 rounded-lg flex items-start gap-4">
-            <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
-            <div>
-              <h4 className="font-medium text-amber-500">History Health Warning</h4>
-              <p className="text-sm text-slate-300 mt-1">D8 condition triggered: Not all demo-safe branches are up to date.</p>
+  // ── Not Connected State ──
+  if (!data?.repo?.connected) {
+    return (
+      <div className="flex-1 overflow-y-auto bg-background p-6">
+        <NotConnectedView onConnect={handleConnectRepo} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto bg-background p-4 sm:p-6 select-none font-[var(--font-inter)]">
+      <div className="max-w-[1280px] mx-auto space-y-4">
+        {/* ── Row 0: Header ── */}
+        <GithubHeader
+          repo={data.repo}
+          isFrozen={Boolean(data.frozenDemo)}
+          onSync={handleSync}
+          onOpenFreeze={() => setFreezeDialogOpen(true)}
+          onChangeRepo={() => handleDisconnectRepo()}
+          onDisconnect={handleDisconnectRepo}
+        />
+
+        {/* ── Row 1: Readiness Band (full width) ── */}
+        <ReadinessBand
+          data={data}
+          onScrollToSection={handleScrollToSection}
+          onOpenFreeze={() => setFreezeDialogOpen(true)}
+        />
+
+        {/* ── Responsive Row 2: Branch Map + Right Stack ── */}
+        {/* On >=1100px (lg): 8/12 and 4/12 columns */}
+        {/* On <1100px: single column order: band, Needs attention, Branch Map, Repo health */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+          {/* Branch Map (8/12 on large, 2nd on small) */}
+          <div id="branch-map-section" className="order-2 lg:order-1 lg:col-span-8 space-y-4">
+            <BranchMap
+              branches={data.branches}
+              commits={data.commits}
+              missingMap={data.branchMissing}
+              repoFullName={data.repo.fullName}
+              onUpdatePurpose={handleUpdatePurpose}
+              onUpdateRole={handleUpdateRole}
+              onLinkTask={handleLinkTask}
+              onUnlinkTask={handleUnlinkTask}
+              onOpenTaskModal={(key) => navigate(`/app/room/${roomId}/board?task=${key}`)}
+            />
+          </div>
+
+          {/* Right Stack: Needs Attention then Repo Health (4/12 on large) */}
+          <div className="order-1 lg:order-2 lg:col-span-4 space-y-4">
+            {/* Needs Attention */}
+            <NeedsAttentionCard
+              items={data.attentionItems}
+              onActionClick={handleAttentionAction}
+              onDismiss={handleDismissAttention}
+            />
+
+            {/* Repo Health */}
+            <div id="repo-health">
+              <RepoHealthCard
+                health={data.health}
+                repoFullName={data.repo.fullName}
+                onRecheck={handleRecheckHealth}
+              />
             </div>
           </div>
-        )}
-
-        {/* KPIs */}
-        <div className="grid grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500">Branches</CardTitle>
-              <GitBranch className="h-4 w-4 text-slate-400" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{data.branchesCount}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500">Open PRs</CardTitle>
-              <GitPullRequest className="h-4 w-4 text-slate-400" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{data.openPrsCount}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500">Last Commit</CardTitle>
-              <GitCommit className="h-4 w-4 text-slate-400" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{data.lastCommitTime}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500">Event Commits</CardTitle>
-              <GitCommit className="h-4 w-4 text-slate-400" />
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end justify-between">
-                <div className="text-2xl font-bold">{data.commitsSinceStart}</div>
-                <Badge variant="outline" className={data.preEventRulePassed ? "text-emerald-500 border-emerald-500/20" : "text-rose-500 border-rose-500/20"}>
-                  {data.preEventRulePassed ? "Pre-event rule: Pass" : "Pre-event rule: Fail"}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
-        {/* Main Grid */}
-        <div className="grid grid-cols-4 gap-6">
-          <BranchMap branches={data.branches} />
-          <RepoHealthChecklist checklist={data.healthChecklist} />
-        </div>
+        {/* ── Row 3: Commit Activity (full width) ── */}
+        <CommitActivityCard
+          commits={data.commits}
+          eventStartIso="2026-10-07T07:00:00+05:30"
+        />
       </div>
+
+      {/* ── Freeze Demo Dialog ── */}
+      <FreezeDemoDialog
+        open={freezeDialogOpen}
+        onOpenChange={setFreezeDialogOpen}
+        branches={data.branches}
+        health={data.health}
+        existingFreeze={data.frozenDemo}
+        repoFullName={data.repo.fullName}
+        onConfirmFreeze={handleFreezeConfirm}
+      />
     </div>
   );
 }

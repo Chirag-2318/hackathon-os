@@ -1,0 +1,22 @@
+package com.hackathonos.backend.notifications;
+
+public enum NotificationType {
+    ROOM_CREATED,
+    MEMBER_JOINED,
+    MEMBER_LEFT,
+    ROLE_CHANGED,
+    BRIEF_CONFIRMED,
+    IDEA_POSTED,
+    IDEA_APPROVED,
+    IDEA_REJECTED,
+    IDEATION_DONE,
+    PLAN_COMPLETE,
+    TASK_ASSIGNED,
+    TASK_BLOCKED,
+    DEADLINE_SOON,
+    MENTION,
+    REPO_ATTENTION,
+    MENTOR_QUESTION,
+    SUBMISSION_VERIFIED,
+    DEMO_FROZEN
+}

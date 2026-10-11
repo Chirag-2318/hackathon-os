@@ -51,7 +51,7 @@ export function BoardSwimlanes({
       const memberTasks = tasks.filter(t => t.assigneeId === m.id);
       groups.push({
         id: m.id,
-        title: m.name,
+        title: m.name || 'Member',
         type: 'assignee',
         avatar: m.avatar,
         tasks: memberTasks,

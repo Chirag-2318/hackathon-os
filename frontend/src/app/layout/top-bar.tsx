@@ -62,7 +62,7 @@ export function PanelHeader({ inRoom: inRoomProp = false, pageName = 'Home' }: P
   const subSection = roomMatch && roomMatch[2] ? roomMatch[2] : 'overview';
 
   const currentRoom = homeData?.roomList?.find((r: any) => r.id === roomId);
-  const roomTitle = currentRoom?.title ?? 'Campus Build Sprint 2026';
+  const roomTitle = currentRoom?.title ?? currentRoom?.name ?? 'Hackathon Workspace';
 
   const sectionMeta = SECTION_MAP[subSection] || { label: subSection || 'Overview' };
 

@@ -1,255 +1,247 @@
 /**
- * boardService.ts — Jira-style Kanban board tasks and phases service.
- * Supports optimistic updates, history tracking, and plan task generation.
+ * boardService.ts — Jira-style Kanban board tasks and phases service calling backend API directly.
  */
 import { apiFetch } from '@/api/client';
 import type { Task, BoardPhase, TaskStatus, TaskPriority, RoomMember } from './types';
-import {
-  getTasks, setTasks, getPhases, setPhases, upsertTask, deleteTask,
-  getRoom, getAllMembers, mockDelay, genId, CURRENT_USER_ID, addNotification
-} from './mockStore';
-import { USE_MOCKS } from './roomService';
 
-function getRoomInitials(roomName: string): string {
-  const words = roomName.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 1) {
-    return words[0].slice(0, 3).toUpperCase();
-  }
-  return words.map(w => w[0]).join('').slice(0, 4).toUpperCase();
+function genId(prefix: string): string {
+  return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+export function mapBackendTaskToFrontend(t: any): Task {
+  return {
+    id: String(t.id),
+    key: t.key || t.taskKey || '',
+    roomId: String(t.roomId || ''),
+    summary: t.summary || t.title || 'Untitled task',
+    description: t.description || '',
+    status: (t.status || 'todo').toLowerCase().replace('_', '') as TaskStatus,
+    flagged: Boolean(t.flagged),
+    blockedReason: t.blockedReason || undefined,
+    assigneeId: t.assigneeId ? String(t.assigneeId) : (t.assignee?.id ? String(t.assignee.id) : undefined),
+    reporterId: t.reporterId ? String(t.reporterId) : (t.reporter?.id ? String(t.reporter.id) : undefined),
+    priority: (t.priority || 'medium').toLowerCase() as TaskPriority,
+    phaseId: t.phaseId ? String(t.phaseId) : (t.phase?.id ? String(t.phase.id) : 'p-0'),
+    role: t.role || 'Frontend',
+    labels: t.labels || [],
+    estimateMin: Number(t.estimateMin) || 0,
+    dueAt: t.dueAt || undefined,
+    dependsOn: (t.dependsOn || []).map((d: any) => (typeof d === 'string' ? d : (d.key || String(d.id)))),
+    acceptance: (t.acceptance || []).map((a: any) => (typeof a === 'string' ? a : a.text)),
+    subtasks: (t.subtasks || []).map((s: any) => ({
+      id: String(s.id),
+      text: s.text || s.title || '',
+      done: Boolean(s.done ?? s.isDone),
+    })),
+    comments: (t.comments || []).map((c: any) => ({
+      id: String(c.id),
+      authorId: String(c.authorId || c.author?.id || ''),
+      text: c.text || '',
+      createdAt: c.createdAt || new Date().toISOString(),
+    })),
+    history: (t.history || []).map((h: any) => ({
+      id: String(h.id),
+      actorId: String(h.actorId || h.actor?.id || ''),
+      text: h.text || '',
+      at: h.at || h.createdAt || new Date().toISOString(),
+    })),
+    order: Number(t.position ?? t.order ?? 0),
+    createdAt: t.createdAt || new Date().toISOString(),
+    updatedAt: t.updatedAt || new Date().toISOString(),
+    version: Number(t.version ?? 0),
+  } as Task & { version?: number };
 }
 
 export const boardService = {
-  async getBoard(roomId: string): Promise<{ tasks: Task[]; phases: BoardPhase[] }> {
-    if (USE_MOCKS) {
-      await mockDelay(60, 150);
-      return {
-        tasks: getTasks(roomId),
-        phases: getPhases(roomId),
-      };
-    }
-    const [tasks, phases] = await Promise.all([
-      apiFetch<Task[]>(`/api/v1/rooms/${roomId}/board/tasks`),
-      apiFetch<BoardPhase[]>(`/api/v1/rooms/${roomId}/board/phases`),
-    ]);
-    return { tasks, phases };
+  async getBoard(roomId: string): Promise<{
+    tasks: Task[];
+    phases: BoardPhase[];
+    members?: any[];
+    summary?: any;
+    currentPhase?: any;
+    hoursLeft?: number;
+    serverNow?: string;
+  }> {
+    const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/board`);
+    const columns = res?.columns || { todo: [], inprogress: [], done: [] };
+    const rawTasks: any[] = [
+      ...(columns.todo || []),
+      ...(columns.inprogress || []),
+      ...(columns.done || []),
+    ];
+    const tasks = rawTasks.map(mapBackendTaskToFrontend);
+    const phases: BoardPhase[] = (res.phases || []).map((p: any) => ({
+      id: String(p.id),
+      name: p.name,
+      startPct: p.startPct ?? 0,
+      endPct: p.endPct ?? 100,
+      exitCheckpoint: p.exitCheckpoint || '',
+      goals: p.goals || [],
+    }));
+
+    return {
+      tasks,
+      phases,
+      members: res.members,
+      summary: res.summary,
+      currentPhase: res.currentPhase,
+      hoursLeft: res.hoursLeft,
+      serverNow: res.serverNow,
+    };
   },
 
-  async setTasksAndPhases(roomId: string, tasks: Task[], phases: BoardPhase[]): Promise<void> {
-    if (USE_MOCKS) {
-      await mockDelay(60, 150);
-      setTasks(roomId, tasks);
-      setPhases(roomId, phases);
-      return;
-    }
-    await apiFetch(`/api/v1/rooms/${roomId}/board`, {
-      method: 'PUT',
-      body: JSON.stringify({ tasks, phases }),
-    });
+  async getTasks(roomId: string): Promise<Task[]> {
+    const board = await this.getBoard(roomId);
+    return board.tasks;
   },
 
-  getNextKey(roomId: string): string {
-    const room = getRoom(roomId);
-    const prefix = room ? getRoomInitials(room.name) : 'HOS';
-    const tasks = getTasks(roomId);
-    let maxNum = 0;
-    tasks.forEach(t => {
-      const match = t.key?.match(new RegExp(`^${prefix}-(\\d+)$`));
-      if (match) {
-        const num = parseInt(match[1], 10);
-        if (num > maxNum) maxNum = num;
-      }
-    });
-    return `${prefix}-${maxNum + 1}`;
+  async getTask(roomId: string, taskIdOrKey: string): Promise<Task> {
+    const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/tasks/${taskIdOrKey}`);
+    return mapBackendTaskToFrontend(res);
   },
 
   async createTask(roomId: string, draft: Partial<Task>): Promise<Task> {
-    if (USE_MOCKS) {
-      await mockDelay(60, 180);
-      const room = getRoom(roomId);
-      const key = draft.key || this.getNextKey(roomId);
-      const now = new Date().toISOString();
-      const phases = getPhases(roomId);
-      const defaultPhaseId = phases[0]?.id || 'p-0';
-      const actorId = CURRENT_USER_ID;
+    const payload = {
+      summary: draft.summary || draft.title || 'New task',
+      description: draft.description || '',
+      status: draft.status || 'todo',
+      priority: draft.priority || 'medium',
+      phaseId: draft.phaseId || undefined,
+      role: draft.role || 'Frontend',
+      labels: draft.labels || [],
+      estimateMin: draft.estimateMin || 45,
+      dueAt: draft.dueAt || null,
+      assigneeId: draft.assigneeId || null,
+    };
 
-      const newTask: Task = {
-        id: genId('task'),
-        key,
-        roomId,
-        summary: draft.summary || draft.title || 'New task',
-        description: draft.description || '',
-        status: draft.status || 'todo',
-        flagged: Boolean(draft.flagged),
-        blockedReason: draft.blockedReason,
-        assigneeId: draft.assigneeId,
-        reporterId: draft.reporterId || actorId,
-        priority: draft.priority || 'medium',
-        phaseId: draft.phaseId || defaultPhaseId,
-        role: draft.role || 'Frontend',
-        labels: draft.labels || (draft.role ? [draft.role] : []),
-        estimateMin: draft.estimateMin || 45,
-        dueAt: draft.dueAt,
-        dependsOn: draft.dependsOn || [],
-        acceptance: draft.acceptance || [],
-        subtasks: draft.subtasks || [],
-        comments: draft.comments || [],
-        history: [{
-          id: genId('hist'),
-          actorId,
-          text: 'Created task',
-          at: now,
-        }],
-        order: draft.order ?? getTasks(roomId).length,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      upsertTask(newTask);
-
-      if (newTask.assigneeId && newTask.assigneeId !== actorId) {
-        addNotification({
-          id: genId('notif'),
-          roomId,
-          type: 'new_idea',
-          message: `You were assigned ${newTask.key}: "${newTask.summary.slice(0, 35)}"`,
-          createdAt: now,
-          read: false,
-          link: `/app/room/${roomId}/board?task=${newTask.key}`,
-        });
-      }
-
-      return newTask;
-    }
-
-    return apiFetch<Task>(`/api/v1/rooms/${roomId}/board/tasks`, {
+    const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/tasks`, {
       method: 'POST',
-      body: JSON.stringify(draft),
+      body: JSON.stringify(payload),
     });
+    return mapBackendTaskToFrontend(res);
+  },
+
+  async moveTask(
+    roomId: string,
+    taskId: string,
+    toStatus: TaskStatus,
+    targetIndex = 0,
+    version?: number
+  ): Promise<Task> {
+    const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/tasks/${taskId}/move`, {
+      method: 'POST',
+      body: JSON.stringify({
+        toStatus,
+        targetIndex,
+        version: version ?? null,
+      }),
+    });
+    return mapBackendTaskToFrontend(res.movedTask || res);
+  },
+
+  async flagTask(roomId: string, taskId: string, flagged: boolean, blockedReason?: string): Promise<Task> {
+    const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/tasks/${taskId}/flag`, {
+      method: 'POST',
+      body: JSON.stringify({ flagged, blockedReason: blockedReason || null }),
+    });
+    return mapBackendTaskToFrontend(res);
+  },
+
+  async assignTask(roomId: string, taskId: string, assigneeId?: string | null): Promise<Task> {
+    const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/tasks/${taskId}/assign`, {
+      method: 'POST',
+      body: JSON.stringify({ assigneeId: assigneeId || null }),
+    });
+    return mapBackendTaskToFrontend(res);
   },
 
   async updateTask(
     roomId: string,
     taskId: string,
-    patch: Partial<Task>,
-    historyText?: string,
-    actorId = CURRENT_USER_ID
+    patch: Partial<Task> & { version?: number },
+    historyNote?: string
   ): Promise<Task> {
-    if (USE_MOCKS) {
-      await mockDelay(50, 150);
-      const tasks = getTasks(roomId);
-      const idx = tasks.findIndex(t => t.id === taskId || t.key === taskId);
-      if (idx < 0) throw new Error('Task not found');
-
-      const current = tasks[idx];
-      const now = new Date().toISOString();
-      const updatedHistory = [...(current.history || [])];
-
-      if (historyText) {
-        updatedHistory.unshift({
-          id: genId('hist'),
-          actorId,
-          text: historyText,
-          at: now,
-        });
-      }
-
-      const updated: Task = {
-        ...current,
-        ...patch,
-        history: updatedHistory,
-        updatedAt: now,
-      };
-
-      tasks[idx] = updated;
-      setTasks(roomId, tasks);
-
-      if (patch.flagged && !current.flagged) {
-        addNotification({
-          id: genId('notif'),
-          roomId,
-          type: 'idea_rejected',
-          message: `${updated.key} was flagged as blocked`,
-          createdAt: now,
-          read: false,
-          link: `/app/room/${roomId}/board?task=${updated.key}`,
-        });
-      }
-
-      if (patch.assigneeId && patch.assigneeId !== current.assigneeId && patch.assigneeId !== actorId) {
-        const actorName = actorId === CURRENT_USER_ID ? 'Aarav' : 'Teammate';
-        addNotification({
-          id: genId('notif'),
-          roomId,
-          type: 'new_idea',
-          message: `${actorName} assigned you ${updated.key}`,
-          createdAt: now,
-          read: false,
-          link: `/app/room/${roomId}/board?task=${updated.key}`,
-        });
-      }
-
-      return updated;
+    if (patch.flagged !== undefined && Object.keys(patch).length <= 2) {
+      return this.flagTask(roomId, taskId, patch.flagged, patch.blockedReason);
+    }
+    if ('assigneeId' in patch && Object.keys(patch).length === 1) {
+      return this.assignTask(roomId, taskId, patch.assigneeId);
+    }
+    if ('status' in patch && Object.keys(patch).length === 1 && patch.status) {
+      return this.moveTask(roomId, taskId, patch.status, patch.order ?? 0, patch.version);
     }
 
-    return apiFetch<Task>(`/api/v1/rooms/${roomId}/board/tasks/${taskId}`, {
+    const payload: any = {
+      summary: patch.summary,
+      description: patch.description,
+      priority: patch.priority,
+      phaseId: patch.phaseId,
+      role: patch.role,
+      labels: patch.labels,
+      estimateMin: patch.estimateMin,
+      dueAt: patch.dueAt,
+      version: patch.version ?? null,
+    };
+
+    const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/tasks/${taskId}`, {
       method: 'PATCH',
-      body: JSON.stringify(patch),
+      body: JSON.stringify(payload),
     });
+    return mapBackendTaskToFrontend(res);
   },
 
   async updateTaskStatus(
     roomId: string,
     taskId: string,
-    status: TaskStatus,
-    actorName = 'Aarav'
+    status: TaskStatus
   ): Promise<Task> {
-    const statusLabel = status === 'todo' ? 'To do' : status === 'inprogress' ? 'In progress' : 'Done';
-    return this.updateTask(roomId, taskId, { status }, `${actorName} moved this to ${statusLabel}`);
+    return this.moveTask(roomId, taskId, status, 0);
   },
 
   async deleteTask(roomId: string, taskId: string): Promise<void> {
-    if (USE_MOCKS) {
-      await mockDelay(50, 150);
-      deleteTask(roomId, taskId);
-      return;
-    }
-    await apiFetch(`/api/v1/rooms/${roomId}/board/tasks/${taskId}`, {
+    await apiFetch(`/api/v1/rooms/${roomId}/tasks/${taskId}`, {
       method: 'DELETE',
     });
   },
 
-  async addComment(roomId: string, taskId: string, text: string, authorId = CURRENT_USER_ID): Promise<Task> {
-    const tasks = getTasks(roomId);
-    const task = tasks.find(t => t.id === taskId || t.key === taskId);
-    if (!task) throw new Error('Task not found');
-
-    const comment = {
-      id: genId('comm'),
-      authorId,
-      text,
-      createdAt: new Date().toISOString(),
-    };
-    const comments = [...(task.comments || []), comment];
-    return this.updateTask(roomId, task.id, { comments }, `${authorId === 'u-aarav' ? 'Aarav' : 'Team member'} commented`);
-  },
-
-  async toggleSubtask(roomId: string, taskId: string, subtaskId: string, done: boolean): Promise<Task> {
-    const tasks = getTasks(roomId);
-    const task = tasks.find(t => t.id === taskId || t.key === taskId);
-    if (!task) throw new Error('Task not found');
-
-    const subtasks = (task.subtasks || []).map(st => st.id === subtaskId ? { ...st, done } : st);
-    return this.updateTask(roomId, task.id, { subtasks });
+  async addComment(roomId: string, taskId: string, text: string): Promise<Task> {
+    const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/tasks/${taskId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+    return mapBackendTaskToFrontend(res);
   },
 
   async addSubtask(roomId: string, taskId: string, text: string): Promise<Task> {
-    const tasks = getTasks(roomId);
-    const task = tasks.find(t => t.id === taskId || t.key === taskId);
-    if (!task) throw new Error('Task not found');
+    const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/tasks/${taskId}/subtasks`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+    return mapBackendTaskToFrontend(res);
+  },
 
-    const newSubtask = { id: genId('sub'), text, done: false };
-    const subtasks = [...(task.subtasks || []), newSubtask];
-    return this.updateTask(roomId, task.id, { subtasks });
+  async toggleSubtask(roomId: string, _taskId: string, subtaskId: string, done: boolean): Promise<Task> {
+    const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/subtasks/${subtaskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ done }),
+    });
+    return mapBackendTaskToFrontend(res);
+  },
+
+  async addAcceptance(roomId: string, taskId: string, text: string): Promise<Task> {
+    const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/tasks/${taskId}/acceptance`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+    return mapBackendTaskToFrontend(res);
+  },
+
+  async updateDependencies(roomId: string, taskId: string, dependsOnIds: string[]): Promise<Task> {
+    const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/tasks/${taskId}/dependencies`, {
+      method: 'PUT',
+      body: JSON.stringify({ dependsOnIds }),
+    });
+    return mapBackendTaskToFrontend(res);
   },
 
   createTasksFromPlan(
@@ -259,15 +251,12 @@ export const boardService = {
     eventStartIso: string | null,
     durationHours: number,
     members: RoomMember[],
-    leaderId = CURRENT_USER_ID
+    leaderId?: string
   ): Task[] {
-    const room = getRoom(roomId);
-    const prefix = room ? getRoomInitials(room.name) : 'HOS';
     const startTime = eventStartIso ? new Date(eventStartIso).getTime() : Date.now();
     const durationMs = (durationHours || 36) * 3600 * 1000;
     const now = new Date().toISOString();
 
-    // Map members by role tag for round robin matching
     const roleToMembers: Record<string, RoomMember[]> = {};
     members.forEach(m => {
       (m.roleTags || []).forEach(tag => {
@@ -280,7 +269,7 @@ export const boardService = {
     const rolePointers: Record<string, number> = {};
 
     return parsedTasks.map((t, idx) => {
-      const key = `${prefix}-${idx + 1}`;
+      const key = `TASK-${idx + 1}`;
       const role = t.role || 'Frontend';
       const roleLower = role.toLowerCase();
       const candidates = roleToMembers[roleLower] || [];
@@ -292,13 +281,11 @@ export const boardService = {
         rolePointers[roleLower] = ptr + 1;
       }
 
-      // Derive dueAt from phase endPct
       const phase = phases.find(p => p.id === t.phaseId);
       const endPct = phase ? phase.endPct : 50;
       const dueMs = startTime + (endPct / 100) * durationMs;
       const dueAt = new Date(dueMs).toISOString();
 
-      // Split acceptance string by sentences
       const acceptanceList: string[] = Array.isArray(t.acceptance)
         ? t.acceptance
         : t.acceptance

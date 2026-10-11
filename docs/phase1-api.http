@@ -1,0 +1,176 @@
+### Phase 1 API Request Collection
+### Base URL
+@baseUrl = http://localhost:8080
+
+### 1. Public Health Check
+GET {{baseUrl}}/api/v1/health
+
+### 2. Current User Profile
+GET {{baseUrl}}/api/v1/me
+
+### 3. User Settings
+GET {{baseUrl}}/api/v1/users/me/settings
+
+### 4. Update User Settings
+PATCH {{baseUrl}}/api/v1/users/me/settings
+Content-Type: application/json
+
+{
+  "displayName": "Alex Chen",
+  "theme": "dark",
+  "timezone": "America/New_York",
+  "notifyDeadlines": true,
+  "notifyMentions": true
+}
+
+### 5. Add User API Key (Encrypted AES-256-GCM)
+POST {{baseUrl}}/api/v1/users/me/api-keys
+Content-Type: application/json
+
+{
+  "provider": "OPENAI",
+  "label": "My OpenAI Key",
+  "key": "sk-proj-1234567890abcdef1234567890abcdef"
+}
+
+### 6. Delete User API Key
+DELETE {{baseUrl}}/api/v1/users/me/api-keys/00000000-0000-0000-0000-000000000000
+
+### 7. Request Data Export
+POST {{baseUrl}}/api/v1/users/me/export
+
+### 8. Download Data Export
+GET {{baseUrl}}/api/v1/users/me/export/00000000-0000-0000-0000-000000000000
+
+### 9. Delete User Account
+POST {{baseUrl}}/api/v1/users/me/delete
+Content-Type: application/json
+
+{
+  "confirm": "DELETE"
+}
+
+### 10. List Event Templates
+GET {{baseUrl}}/api/v1/event-templates
+
+### 11. Suggest Room Name
+GET {{baseUrl}}/api/v1/rooms/suggest-name
+
+### 12. Create Room
+POST {{baseUrl}}/api/v1/rooms
+Content-Type: application/json
+
+{
+  "name": "Neural Nexus Hackers",
+  "description": "Building edge AI copilot",
+  "projectDescription": "Local LLM runner with vector store",
+  "templateId": "sih-2025",
+  "timezone": "UTC"
+}
+
+### 13. List My Active Rooms
+GET {{baseUrl}}/api/v1/rooms
+
+### 14. Get Room Detail
+GET {{baseUrl}}/api/v1/rooms/00000000-0000-0000-0000-000000000000
+
+### 15. Update Room Details
+PATCH {{baseUrl}}/api/v1/rooms/00000000-0000-0000-0000-000000000000
+Content-Type: application/json
+
+{
+  "name": "Neural Nexus V2",
+  "description": "Updated project description"
+}
+
+### 16. Regenerate Room Join Code
+POST {{baseUrl}}/api/v1/rooms/00000000-0000-0000-0000-000000000000/regenerate-join-code
+
+### 17. Archive Room
+POST {{baseUrl}}/api/v1/rooms/00000000-0000-0000-0000-000000000000/archive
+
+### 18. Home Dashboard Summary
+GET {{baseUrl}}/api/v1/home
+
+### 19. Room Overview
+GET {{baseUrl}}/api/v1/rooms/00000000-0000-0000-0000-000000000000/overview
+
+### 20. List Room Members & Invitations
+GET {{baseUrl}}/api/v1/rooms/00000000-0000-0000-0000-000000000000/members
+
+### 21. Update Member Role (or Transfer Leadership)
+PATCH {{baseUrl}}/api/v1/rooms/00000000-0000-0000-0000-000000000000/members/11111111-1111-1111-1111-111111111111/role
+Content-Type: application/json
+
+{
+  "role": "DESIGNER"
+}
+
+### 22. Update Member Skills
+PUT {{baseUrl}}/api/v1/rooms/00000000-0000-0000-0000-000000000000/members/11111111-1111-1111-1111-111111111111/skills
+Content-Type: application/json
+
+{
+  "skills": ["React", "TypeScript", "TailwindCSS"]
+}
+
+### 23. Remove Member (Leader only)
+DELETE {{baseUrl}}/api/v1/rooms/00000000-0000-0000-0000-000000000000/members/11111111-1111-1111-1111-111111111111
+
+### 24. Leave Room
+POST {{baseUrl}}/api/v1/rooms/00000000-0000-0000-0000-000000000000/leave
+
+### 25. Create Invite Link
+POST {{baseUrl}}/api/v1/rooms/00000000-0000-0000-0000-000000000000/invites
+Content-Type: application/json
+
+{
+  "role": "MEMBER",
+  "maxUses": 5
+}
+
+### 26. List Active Invites
+GET {{baseUrl}}/api/v1/rooms/00000000-0000-0000-0000-000000000000/invites
+
+### 27. Revoke Invite Link
+DELETE {{baseUrl}}/api/v1/rooms/00000000-0000-0000-0000-000000000000/invites/22222222-2222-2222-2222-222222222222
+
+### 28. Preview Public Invite (Unauthenticated or Authenticated)
+GET {{baseUrl}}/api/v1/invites/INVITE_TOKEN_HERE
+
+### 29. Join by Public Invite Token
+POST {{baseUrl}}/api/v1/invites/INVITE_TOKEN_HERE/join
+
+### 30. Join by 4-Character Join Code
+POST {{baseUrl}}/api/v1/rooms/join
+Content-Type: application/json
+
+{
+  "code": "ABCD"
+}
+
+### 31. List User Notifications
+GET {{baseUrl}}/api/v1/notifications?limit=20
+
+### 32. Get Unread Notification Count
+GET {{baseUrl}}/api/v1/notifications/unread-count
+
+### 33. List Room Notifications
+GET {{baseUrl}}/api/v1/rooms/00000000-0000-0000-0000-000000000000/notifications
+
+### 34. Mark Single Room Notification Read
+PATCH {{baseUrl}}/api/v1/rooms/00000000-0000-0000-0000-000000000000/notifications/33333333-3333-3333-3333-333333333333/read
+
+### 35. Mark All Notifications Read for Room
+POST {{baseUrl}}/api/v1/rooms/00000000-0000-0000-0000-000000000000/notifications/mark-all-read
+
+### 36. Mark All Notifications Read Across App
+POST {{baseUrl}}/api/v1/notifications/mark-all-read
+
+### 37. Seed Dev Fake Members (Dev profile only)
+POST {{baseUrl}}/api/v1/dev/rooms/00000000-0000-0000-0000-000000000000/fake-members
+Content-Type: application/json
+
+{
+  "count": 4
+}

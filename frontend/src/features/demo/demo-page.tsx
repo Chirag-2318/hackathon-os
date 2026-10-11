@@ -41,12 +41,12 @@ export function DemoPage() {
 
   if (!data) return null;
 
-  const totalSeconds = data.beats.reduce((sum, b) => sum + b.seconds, 0);
+  const totalSeconds = data.beats.reduce((sum: number, b: any) => sum + b.seconds, 0);
   const isOverLimit = totalSeconds > data.videoMaxSeconds;
   const pct = Math.min(100, (totalSeconds / data.videoMaxSeconds) * 100);
 
   // Filter tools to recording and video categories only
-  const filteredTools = data.tools.filter((t) => t.category === 'recording' || t.category === 'video');
+  const filteredTools = data.tools.filter((t: any) => t.category === 'recording' || t.category === 'video');
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -60,7 +60,7 @@ export function DemoPage() {
             <Card className="p-4">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Script builder</h3>
               <div className="divide-y">
-                {data.beats.map((beat) => (
+                {data.beats.map((beat: any) => (
                   <div key={beat.id} className="flex items-start gap-4 py-3.5">
                     <span className="text-sm font-semibold w-28 shrink-0 pt-0.5">{beat.label}</span>
                     <span className="text-sm tabular-nums text-slate-500 w-12 shrink-0 pt-0.5 text-right">{beat.seconds}s</span>
@@ -103,11 +103,11 @@ export function DemoPage() {
             <DemoInsuranceChecklist
               items={data.insurance}
               onToggle={(id) => {
-                setData((prev) => {
+                setData((prev: any) => {
                   if (!prev) return prev;
                   return {
                     ...prev,
-                    insurance: prev.insurance.map((item) =>
+                    insurance: prev.insurance.map((item: any) =>
                       item.id === id ? { ...item, done: !item.done } : item
                     ),
                   };

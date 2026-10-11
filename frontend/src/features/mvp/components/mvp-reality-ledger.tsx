@@ -156,8 +156,8 @@ export function MvpRealityLedger({
                   <DropdownMenuTrigger asChild>
                     <button className="size-6 rounded-full overflow-hidden border border-border/40 hover:scale-105 transition-transform flex items-center justify-center text-[10px]">
                       {owner ? (
-                        <div className="size-full bg-blue-100 text-blue-800 font-bold flex items-center justify-center" title={owner.name}>
-                          {owner.name.slice(0, 2).toUpperCase()}
+                        <div className="size-full bg-blue-100 text-blue-800 font-bold flex items-center justify-center" title={owner.name || 'Owner'}>
+                          {(owner.name || 'TM').slice(0, 2).toUpperCase()}
                         </div>
                       ) : (
                         <span className="text-muted-foreground/60">?</span>

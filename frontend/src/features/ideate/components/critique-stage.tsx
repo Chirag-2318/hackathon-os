@@ -46,7 +46,7 @@ export function CritiqueStage({ data }: { data: IdeateResponse }) {
   const ideas = data.ideas;
 
   const handleScoreChange = (ideaId: string, criteriaKey: string, val: number) => {
-    setScores(prev => prev.map(score => {
+    setScores((prev: any[]) => prev.map((score: any) => {
       if (score.ideaId !== ideaId) return score;
       
       const newScore = { ...score, [criteriaKey]: val };
@@ -78,8 +78,8 @@ export function CritiqueStage({ data }: { data: IdeateResponse }) {
             </tr>
           </thead>
           <tbody>
-            {ideas.map((idea) => {
-              const score = scores.find(s => s.ideaId === idea.id);
+            {ideas.map((idea: any) => {
+              const score = scores.find((s: any) => s.ideaId === idea.id);
               if (!score) return null;
 
               return (

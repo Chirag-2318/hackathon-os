@@ -60,7 +60,10 @@ export function DocsListPane({
       <div className="flex-1 overflow-y-auto divide-y divide-border/30">
         {files.map((file) => {
           const isSelected = file.id === selectedFileId;
-          const health = checkDocHealth(file.name, file.content);
+          const serverHealth = (file as any).health;
+          const health = serverHealth
+            ? { isHealthy: serverHealth.status === 'ok', warnings: serverHealth.issues || [] }
+            : checkDocHealth(file.name, file.content);
 
           return (
             <button
@@ -103,7 +106,7 @@ export function DocsListPane({
                     ) : (
                       <div className="flex flex-col gap-0.5">
                         <span className="font-semibold text-amber-600">Warnings:</span>
-                        {health.warnings.map((w, i) => (
+                        {health.warnings.map((w: string, i: number) => (
                           <span key={i} className="text-muted-foreground">• {w}</span>
                         ))}
                       </div>

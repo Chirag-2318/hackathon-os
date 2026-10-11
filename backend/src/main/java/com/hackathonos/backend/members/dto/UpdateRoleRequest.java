@@ -1,0 +1,8 @@
+package com.hackathonos.backend.members.dto;
+
+import jakarta.validation.constraints.NotBlank;
+
+public record UpdateRoleRequest(
+        @NotBlank(message = "Role is required")
+        String role
+) {}

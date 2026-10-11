@@ -1,41 +1,7 @@
-const isMSW = import.meta.env.VITE_MSW_ENABLED === 'true';
-const BASE_URL = isMSW ? '' : 'http://localhost:8080';
-
-function getCookie(name: string): string | null {
-  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-  return match ? decodeURIComponent(match[2]) : null;
-}
+import { apiClient } from '@/lib/apiClient';
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const method = (options.method ?? 'GET').toUpperCase();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
-  };
-
-  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-    const csrfToken = getCookie('XSRF-TOKEN');
-    if (csrfToken) headers['X-XSRF-TOKEN'] = csrfToken;
-  }
-
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers,
-    credentials: 'include', // sends the session cookie
-  });
-
-  if (res.status === 401) {
-    window.location.href = `${BASE_URL}/oauth2/authorization/github`;
-    throw new Error('Not authenticated');
-  }
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(body.detail ?? 'Request failed');
-  }
-
-  if (res.status === 204) return undefined as T;
-  return res.json();
+  return apiClient<T>(path, options);
 }
 
 export const fetchEventTemplates = () => apiFetch<any[]>('/api/v1/event-templates');
@@ -75,9 +41,13 @@ export type DemoResponse = any;
 export const fetchApis = (roomId: string) => apiFetch<any>(`/api/v1/rooms/${roomId}/apis`);
 export type ApiEndpoint = any;
 export const ApiEndpoint: any = {};
-export const authWithGitHub = async (...args: any[]): Promise<any> => {};
-export const authWithGoogle = async (...args: any[]): Promise<any> => {};
-export const AuthResult = async (...args: any[]): Promise<any> => {};
+export const authWithGitHub = async (): Promise<void> => {
+  window.location.href = '/oauth2/authorization/github';
+};
+export const authWithGoogle = async (): Promise<void> => {
+  window.location.href = '/oauth2/authorization/google';
+};
+export type AuthResult = { authenticated: boolean; user?: any };
 export const fetchBoardTasks = (roomId: string) => apiFetch<any>(`/api/v1/rooms/${roomId}/board`);
 export type Task = any;
 export const Task: any = {};

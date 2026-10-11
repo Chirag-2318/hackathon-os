@@ -182,8 +182,8 @@ Pgvector indexing latency during peak submission bursts. Mitigated with in-memor
 
   4: `# Demo script
 - 0 to 15s (15s): Hook — The common nightmare of mismatched hackathon teams and last-minute dropouts.
-- 15 to 45s (30s): Problem in Action — Aarav shows an empty workspace with no frontend developer.
-- 45 to 75s (30s): The Solution — Instant swipe match with Kabir, auto-scaffolding the repo and room in 2 seconds.
+- 15 to 45s (30s): Problem in Action — Builder A shows an empty workspace with no frontend developer.
+- 45 to 75s (30s): The Solution — Instant swipe match with Builder B, auto-scaffolding the repo and room in 2 seconds.
 - 75 to 90s (15s): Impact & Close — Ready to build from minute one with zero wasted planning overhead.
 
 # Shot list

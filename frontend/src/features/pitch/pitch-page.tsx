@@ -98,7 +98,7 @@ export function PitchPage() {
     );
   }
 
-  const selectedSlide = deck?.slides.find((s) => s.id === selectedSlideId);
+  const selectedSlide = deck?.slides.find((s: any) => s.id === selectedSlideId);
 
   // Compute slide-level coverage status
   const coverageStatus: Record<string, 'covered' | 'partly' | 'not_yet'> = {};
@@ -172,7 +172,7 @@ export function PitchPage() {
               {deck && (
                 <SlideLintList
                   issues={deck.lint}
-                  onSelectSlide={setSelectedSlideId}
+                  onSelectSlide={(slideId: string) => roomId && setSelectedSlideId(roomId, slideId)}
                 />
               )}
             </div>
@@ -194,13 +194,13 @@ export function PitchPage() {
 
             {/* Role Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {rehearse?.roles.map((role) => (
+              {rehearse?.roles.map((role: any) => (
                 <Card key={role.memberId} className="p-5 shadow-sm">
                   <h3 className="text-base font-semibold mb-3">{role.role}</h3>
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10">
                       <AvatarFallback className="text-xs bg-lav-100 text-lav-700">
-                        {role.name.split(' ').map((n) => n[0]).join('')}
+                        {role.name.split(' ').map((n: string) => n[0]).join('')}
                       </AvatarFallback>
                     </Avatar>
                     <span className="font-medium text-sm">{role.name}</span>
@@ -242,7 +242,7 @@ export function PitchPage() {
                 Questions
               </h2>
               <div className="space-y-3">
-                {qa?.questions.map((q) => (
+                {qa?.questions.map((q: any) => (
                   <Card key={q.id} className="p-4 shadow-sm">
                     <div className="flex items-start justify-between gap-4">
                       <p className="text-sm font-semibold line-clamp-2">{q.text}</p>
@@ -270,7 +270,7 @@ export function PitchPage() {
                 Code Defense
               </h2>
               <Card className="divide-y">
-                {qa?.codeDefense.map((mod) => (
+                {qa?.codeDefense.map((mod: any) => (
                   <div key={mod.id} className="flex items-center justify-between px-4 py-3.5">
                     <span className="text-sm font-medium">{mod.module}</span>
                     <span className="text-xs text-lav-600 dark:text-lav-400">Explain this</span>

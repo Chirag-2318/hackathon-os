@@ -8,8 +8,11 @@ import { CharterPollBar } from './components/charter-poll-bar';
 import { cn } from 'cn';
 import { Mail, GitBranch, Users, Plus } from 'lucide-react';
 
+import { useParams } from 'react-router-dom';
+
 export function TeamPage() {
-  const { data, isLoading } = useTeam('r-1');
+  const { roomId } = useParams<{ roomId: string }>();
+  const { data, isLoading } = useTeam(roomId || '');
   const [selectedMemberId, setSelectedMemberId] = React.useState<string | null>(null);
 
   const isLeader = true; // Hardcoded mock role for this phase
@@ -19,7 +22,7 @@ export function TeamPage() {
   }
 
   // Default to first member if none selected
-  const selectedMember = data.members.find(m => m.id === selectedMemberId) || data.members[0];
+  const selectedMember = data.members.find((m: any) => m.id === selectedMemberId) || data.members[0];
 
   return (
     <div className="max-w-[1440px] mx-auto w-full px-6 pb-12">
@@ -29,7 +32,7 @@ export function TeamPage() {
       <div className="w-full lg:w-[320px] shrink-0 flex flex-col gap-6">
         <h2 className="text-h2">Members</h2>
         <div className="flex flex-col bg-surface rounded-card border border-border py-5 divide-y divide-border">
-          {data.members.map(member => {
+          {data.members.map((member: any) => {
             const isSelected = selectedMember?.id === member.id;
             return (
               <button
@@ -100,7 +103,7 @@ export function TeamPage() {
               <div className="flex flex-col gap-1.5 min-w-0">
                 <label className="text-label text-ink-muted">Role tags</label>
                 <div className="flex flex-wrap gap-1 min-h-[40px] px-3 py-2 rounded-control border border-input bg-surface min-w-0">
-                  {selectedMember.roleTags.map(tag => (
+                  {selectedMember.roleTags.map((tag: any) => (
                     <Chip key={tag} fill="stone" className="text-ink">{tag}</Chip>
                   ))}
                 </div>
@@ -116,7 +119,7 @@ export function TeamPage() {
               <div className="flex flex-col gap-1.5 min-w-0">
                 <label className="text-label text-ink-muted">Skills</label>
                 <div className="flex flex-wrap gap-1 min-h-[40px] px-3 py-2 rounded-control border border-input bg-surface min-w-0">
-                  {selectedMember.skills.map(skill => (
+                  {selectedMember.skills.map((skill: any) => (
                     <Chip key={skill} fill="peach" className="text-ink">{skill}</Chip>
                   ))}
                 </div>
@@ -159,7 +162,7 @@ export function TeamPage() {
             <h3 className="text-h3 text-ink">Team Charter</h3>
           </header>
           <div className="flex flex-col gap-5 min-w-0">
-            {data.charterPolls.map((poll, i) => (
+            {data.charterPolls.map((poll: any, i: number) => (
               <React.Fragment key={poll.id}>
                 {i > 0 && <hr className="border-t border-border" />}
                 <div className="flex flex-col gap-2 min-w-0">
@@ -171,8 +174,8 @@ export function TeamPage() {
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-[10px] uppercase font-bold text-ink-muted tracking-wider shrink-0">Waiting on</span>
                       <div className="flex items-center gap-1 min-w-0 overflow-hidden">
-                        {poll.unansweredMemberIds.map(id => {
-                          const m = data.members.find(member => member.id === id);
+                        {poll.unansweredMemberIds.map((id: any) => {
+                          const m = data.members.find((member: any) => member.id === id);
                           return m ? (
                             <div 
                               key={id} 

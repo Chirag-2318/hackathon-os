@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
-  Flag, MoreHorizontal, Check, UserCheck, ShieldAlert, ArrowRight, CornerDownRight
+  Flag, MoreHorizontal, Check, UserCheck, ShieldAlert, ArrowRight, CornerDownRight, GitBranch
 } from 'lucide-react';
 import type { Task, RoomMember, BoardPhase, TaskStatus } from '@/services/types';
 import {
   IssueKey, IssueTypeIcon, PriorityIcon, StatusLozenge, PhaseChip,
   DueChip, EstimateChip, SubtaskProgress, CommentCount
 } from '@/features/build/ui';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
@@ -37,7 +38,7 @@ export function JiraCard({
   onPointerDownDrag,
 }: JiraCardProps) {
   const isDone = task.status === 'done';
-  const isBlocked = task.flagged || task.status === 'blocked';
+  const isBlocked = task.flagged || Boolean(task.blockedReason);
   const assignee = members.find(m => m.id === task.assigneeId);
   const phaseIndex = phases.findIndex(p => p.id === task.phaseId);
   const phase = phases[phaseIndex] || { name: 'Sprint' };
@@ -159,11 +160,12 @@ export function JiraCard({
 
       {/* Footer Row (Edge Aligned) */}
       <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-border/40">
-        {/* Left: IssueTypeIcon + IssueKey + PriorityIcon */}
+        {/* Left: IssueTypeIcon + IssueKey + PriorityIcon + Branch icon */}
         <div className="flex items-center gap-1.5 shrink-0">
           <IssueTypeIcon type="task" isDone={isDone} />
           <IssueKey issueKey={task.key} isDone={isDone} />
           <PriorityIcon priority={task.priority} />
+
         </div>
 
         {/* Right: Estimate, Due, Subtasks, Comments, Assignee */}
@@ -182,9 +184,9 @@ export function JiraCard({
               title={assignee.name}
             >
               {assignee.avatar ? (
-                <img src={assignee.avatar} alt={assignee.name} className="size-full rounded-full object-cover" />
+                <img src={assignee.avatar} alt={assignee.name || 'Assignee'} className="size-full rounded-full object-cover" />
               ) : (
-                assignee.name.slice(0, 2).toUpperCase()
+                (assignee.name || 'TM').slice(0, 2).toUpperCase()
               )}
             </div>
           ) : (

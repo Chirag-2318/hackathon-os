@@ -47,9 +47,12 @@ export function SpeedModeShell({ children }: SpeedModeShellProps) {
           <TooltipTrigger asChild>
             <button
               onClick={() => {
-                const match = window.location.pathname.match(/\/speed-mode\/([^/]+)/);
-                const roomId = match ? match[1] : 'r-1';
-                window.location.href = `/app/room/${roomId}/overview`;
+                const match = window.location.pathname.match(/\/(?:room|speed-mode)\/([^/]+)/);
+                if (match && match[1]) {
+                  window.location.href = `/app/room/${match[1]}/overview`;
+                } else {
+                  window.location.href = '/app/rooms';
+                }
               }}
               className="flex items-center justify-center size-10 rounded-control text-sidebar-muted hover:text-white hover:bg-white/10 transition-colors mb-2 cursor-pointer"
               aria-label="Exit speed mode"

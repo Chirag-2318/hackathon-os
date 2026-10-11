@@ -26,7 +26,7 @@ export function TaskDrawer({ task, onClose, onToggleChecklist, onMarkDone }: Tas
   if (!task) return null;
 
   const totalChecks = task.checklist.length;
-  const completedChecks = task.checklist.filter((c) => c.isDone).length;
+  const completedChecks = task.checklist.filter((c: any) => c.isDone).length;
   const progressPercent = totalChecks === 0 ? 0 : (completedChecks / totalChecks) * 100;
 
   return (
@@ -34,7 +34,7 @@ export function TaskDrawer({ task, onClose, onToggleChecklist, onMarkDone }: Tas
       <SheetContent side="right" className="w-[520px] sm:w-[520px] overflow-y-auto bg-surface">
         <SheetHeader className="mb-6">
           <div className="flex gap-2 mb-2">
-            {task.tags.map((tag) => (
+            {task.tags.map((tag: any) => (
               <Badge key={tag} variant="secondary" className="r-chip text-xs">
                 {tag}
               </Badge>
@@ -82,7 +82,7 @@ export function TaskDrawer({ task, onClose, onToggleChecklist, onMarkDone }: Tas
             <div className="space-y-2">
               <h4 className="text-sm font-semibold">Linked PRs / Branches</h4>
               <div className="flex gap-2 flex-wrap">
-                {task.linkedPrs.map((pr) => (
+                {task.linkedPrs.map((pr: any) => (
                   <Badge key={pr} variant="outline" className="r-chip bg-surface-sunken">
                     <Paperclip className="h-3 w-3 mr-1" /> {pr}
                   </Badge>
@@ -105,7 +105,7 @@ export function TaskDrawer({ task, onClose, onToggleChecklist, onMarkDone }: Tas
                 </div>
               </div>
               <div className="space-y-2">
-                {task.checklist.map((item) => (
+                {task.checklist.map((item: any) => (
                   <label
                     key={item.id}
                     className="flex items-start gap-3 p-2 rounded hover:bg-white/50 cursor-pointer transition-colors group"

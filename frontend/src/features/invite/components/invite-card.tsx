@@ -123,7 +123,7 @@ export function InviteCard({ room, token }: InviteCardProps) {
 
       {/* Roles needed */}
       <div className="flex flex-wrap gap-2" data-testid="invite-roles">
-        {room.rolesNeeded.map((role) => (
+        {room.rolesNeeded.map((role: any) => (
           <Chip key={role.label} variant="soft" fill={role.color}>
             {role.label}
           </Chip>
@@ -132,7 +132,7 @@ export function InviteCard({ room, token }: InviteCardProps) {
 
       {/* Member avatars — 40ms stagger, once */}
       <div className="flex items-center" data-testid="invite-members">
-        {room.members.map((member, i) => (
+        {room.members.map((member: any, i: number) => (
           <div
             key={member.name}
             className={cn(
@@ -170,7 +170,7 @@ export function InviteCard({ room, token }: InviteCardProps) {
             <SelectValue placeholder="Select a role" />
           </SelectTrigger>
           <SelectContent>
-            {room.joinableRoles.map((role) => (
+            {room.joinableRoles.map((role: any) => (
               <SelectItem key={role.label} value={role.label}>
                 {role.label}
               </SelectItem>

@@ -153,13 +153,7 @@ export function DocsCenterPane({ file, onSaveContent }: DocsCenterPaneProps) {
                 <Download className="size-3.5" />
               </button>
 
-              <button
-                onClick={() => setMode('edit')}
-                className="h-8 px-2.5 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-black font-semibold text-xs flex items-center gap-1.5 hover:bg-black transition-colors"
-              >
-                <Edit3 className="size-3" />
-                <span>Edit</span>
-              </button>
+              {/* Edit controls hidden in Phase 2 read-only endpoints per spec */}
             </>
           ) : (
             <div className="flex items-center gap-2">

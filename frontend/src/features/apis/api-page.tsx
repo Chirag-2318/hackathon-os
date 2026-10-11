@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { fetchApis, type ApiEndpoint, type ApiHubResponse } from '@/api/client';
 import { ApiListPane } from './components/api-list-pane';
 import { ApiDetailPane } from './components/api-detail-pane';
@@ -8,18 +9,21 @@ import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 export function ApiPage() {
+  const { roomId } = useParams<{ roomId: string }>();
   const [data, setData] = useState<ApiHubResponse | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchApis('r-1').then(setData);
-  }, []);
+    if (roomId) {
+      fetchApis(roomId).then(setData);
+    }
+  }, [roomId]);
 
   if (!data) {
     return <div className="p-8 text-center text-slate-500">Loading APIs...</div>;
   }
 
-  const selectedEndpoint = data.endpoints.find((e) => e.id === selectedId) || null;
+  const selectedEndpoint = data.endpoints.find((e: any) => e.id === selectedId) || null;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-[#1C1C1E]">

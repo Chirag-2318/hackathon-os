@@ -89,15 +89,18 @@ export function NotFoundPage() {
   );
 }
 
-// ── 403 Forbidden ────────────────────────────────────────────────
+import { apiClient } from '@/lib/apiClient';
 
 async function submitJoinCode(code: string): Promise<{ success: boolean; roomId?: string; error?: string }> {
-  const res = await fetch('/api/v1/rooms/join', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ code }),
-  });
-  return res.json() as Promise<{ success: boolean; roomId?: string; error?: string }>;
+  try {
+    const data = await apiClient<{ roomId: string }>('/api/v1/rooms/join', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    });
+    return { success: true, roomId: data.roomId };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
 }
 
 export function ForbiddenPage() {

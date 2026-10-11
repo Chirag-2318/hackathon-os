@@ -1,0 +1,10 @@
+[
+  {
+    "id": "t1",
+    "title": "Set up database",
+    "phaseId": "unknown_phase",
+    "role": "Astronaut",
+    "dependsOn": ["nonexistent_task"],
+    "acceptance": "Done"
+  }
+]

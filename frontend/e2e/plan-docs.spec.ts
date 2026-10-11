@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Phase 3b: Plan (Prompt Bridge) & Docs Vault', () => {
-  const roomId = 'r-1';
+  const roomId = '00000000-0000-0000-0000-000000000001'; // test-fixture-id
 
   test.beforeEach(async ({ page }) => {
     // Navigate directly to the Plan page

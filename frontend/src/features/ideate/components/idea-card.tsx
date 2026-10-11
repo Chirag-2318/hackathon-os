@@ -58,7 +58,7 @@ export const IdeaCard = React.forwardRef<HTMLDivElement, IdeaCardProps>(
         </p>
         
         <div className="flex flex-wrap gap-1 mt-auto pt-2">
-          {idea.roleNeeds.map(role => (
+          {idea.roleNeeds.map((role: any) => (
             <Chip key={role} color="sky" className="text-[10px] py-0.5 px-2">{role}</Chip>
           ))}
         </div>

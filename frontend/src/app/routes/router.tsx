@@ -2,10 +2,11 @@
  * React Router setup
  * Source: tech_stack.md §4.1 — React Router (pinned in AGENTS.md)
  *
- * Public routes (S01, S02, S03) run without the app shell.
+ * Public routes run without the app shell.
  * Authenticated routes are wrapped in the shell layout under /app.
- * Placeholder routes for later screen phases.
+ * Routes are code-split and lazy-loaded via React.lazy and Suspense.
  */
+import React, { Suspense, lazy, useState, type ReactNode } from 'react';
 import {
   createBrowserRouter,
   RouterProvider,
@@ -28,8 +29,108 @@ import { CreateRoomWizard } from '@/features/onboarding/create-room-wizard';
 import { PlaybooksView } from '@/features/playbooks/playbooks-view';
 import { ToolDirectoryView } from '@/features/tools/tool-directory-view';
 import { isModuleHidden } from '@/config/featureFlags';
+import { RoomErrorBoundary } from '@/shared/ui/RoomErrorBoundary';
+import {
+  NotFoundPage,
+  ForbiddenPage,
+  ServerErrorPage,
+  OfflinePage,
+  MaintenancePage,
+} from '@/features/system-pages/system-pages';
 
-import { useState, type ReactNode } from 'react';
+// Lazy-loaded app and room pages
+const HomePage = lazy(() => import('@/features/home/home-page').then((m) => ({ default: m.HomePage })));
+const RoomOverviewPage = lazy(() =>
+  import('@/features/room-overview/room-overview-page').then((m) => ({ default: m.RoomOverviewPage }))
+);
+const BriefPage = lazy(() => import('@/features/brief/brief-page').then((m) => ({ default: m.BriefPage })));
+const TeamPage = lazy(() => import('@/features/team/team-page').then((m) => ({ default: m.TeamPage })));
+const IdeatePage = lazy(() => import('@/features/ideate/ideate-page').then((m) => ({ default: m.IdeatePage })));
+const PlanPage = lazy(() => import('@/features/plan/plan-page').then((m) => ({ default: m.PlanPage })));
+const DocsPage = lazy(() => import('@/features/docs/docs-page').then((m) => ({ default: m.DocsPage })));
+const BoardPage = lazy(() => import('@/features/board/board-page').then((m) => ({ default: m.BoardPage })));
+const SchedulePage = lazy(() =>
+  import('@/features/schedule/schedule-page').then((m) => ({ default: m.SchedulePage }))
+);
+const MvpPage = lazy(() => import('@/features/mvp/mvp-page').then((m) => ({ default: m.MvpPage })));
+const GithubPage = lazy(() => import('@/features/github/github-page').then((m) => ({ default: m.GithubPage })));
+const ApiPage = lazy(() => import('@/features/apis/api-page').then((m) => ({ default: m.ApiPage })));
+const DiagramPage = lazy(() =>
+  import('@/features/diagrams/diagram-page').then((m) => ({ default: m.DiagramPage }))
+);
+const PitchPage = lazy(() => import('@/features/pitch/pitch-page').then((m) => ({ default: m.PitchPage })));
+const DemoPage = lazy(() => import('@/features/demo/demo-page').then((m) => ({ default: m.DemoPage })));
+const SubmissionPage = lazy(() =>
+  import('@/features/submission/submission-page').then((m) => ({ default: m.SubmissionPage }))
+);
+const ReadinessPage = lazy(() =>
+  import('@/features/readiness/readiness-page').then((m) => ({ default: m.ReadinessPage }))
+);
+const RetroPage = lazy(() => import('@/features/retro/retro-page').then((m) => ({ default: m.RetroPage })));
+const PrepPage = lazy(() => import('@/features/prep/prep-page').then((m) => ({ default: m.PrepPage })));
+const CrowdCheckPage = lazy(() =>
+  import('@/features/prep/crowd-check-page').then((m) => ({ default: m.CrowdCheckPage }))
+);
+const SettingsPage = lazy(() =>
+  import('@/features/settings/settings-page').then((m) => ({ default: m.SettingsPage }))
+);
+const SettingsIndexRedirect = lazy(() =>
+  import('@/features/settings/settings-page').then((m) => ({ default: m.SettingsIndexRedirect }))
+);
+const ProfileSection = lazy(() =>
+  import('@/features/settings/sections/profile-section').then((m) => ({ default: m.ProfileSection }))
+);
+const AppearanceSection = lazy(() =>
+  import('@/features/settings/sections/appearance-section').then((m) => ({ default: m.AppearanceSection }))
+);
+const NotificationsSection = lazy(() =>
+  import('@/features/settings/sections/notifications-section').then((m) => ({ default: m.NotificationsSection }))
+);
+const IntegrationsSection = lazy(() =>
+  import('@/features/settings/sections/integrations-section').then((m) => ({ default: m.IntegrationsSection }))
+);
+const AiKeysSection = lazy(() =>
+  import('@/features/settings/sections/ai-keys-section').then((m) => ({ default: m.AiKeysSection }))
+);
+const PrivacySection = lazy(() =>
+  import('@/features/settings/sections/privacy-section').then((m) => ({ default: m.PrivacySection }))
+);
+const BillingSection = lazy(() =>
+  import('@/features/settings/sections/billing-section').then((m) => ({ default: m.BillingSection }))
+);
+const NotificationsPage = lazy(() =>
+  import('@/features/notifications/notifications-page').then((m) => ({ default: m.NotificationsPage }))
+);
+const MentorPage = lazy(() => import('@/features/mentor/mentor-page').then((m) => ({ default: m.MentorPage })));
+const SpeedModePage = lazy(() =>
+  import('@/features/speed-mode/speed-mode-page').then((m) => ({ default: m.SpeedModePage }))
+);
+const MyRoomsPage = lazy(() => import('@/features/room/my-rooms-page').then((m) => ({ default: m.MyRoomsPage })));
+const SocialDashboard = lazy(() =>
+  import('@/features/prototypes/social-dashboard').then((m) => ({ default: m.SocialDashboard }))
+);
+const CalendarDashboard = lazy(() =>
+  import('@/features/prototypes/calendar-dashboard').then((m) => ({ default: m.CalendarDashboard }))
+);
+
+// Dynamic dev tool loading: only loaded in DEV mode
+const DevIconsPreviewPage = import.meta.env.DEV
+  ? lazy(() =>
+      import('@/components/icons/dev-icons-preview-page').then((m) => ({ default: m.DevIconsPreviewPage }))
+    )
+  : NotFoundPage;
+
+const DevFlowPage = import.meta.env.DEV
+  ? lazy(() => import('@/features/dev/dev-flow-page').then((m) => ({ default: m.DevFlowPage })))
+  : NotFoundPage;
+
+function PageSuspenseFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-[50vh] p-8 text-sm text-ink-muted animate-pulse">
+      Loading...
+    </div>
+  );
+}
 
 function HiddenModuleRoute({ moduleId, element }: { moduleId: string; element: React.ReactElement }) {
   const { roomId } = useParams<{ roomId: string }>();
@@ -53,26 +154,37 @@ function HomeShellLayout() {
     return 'Home';
   })();
 
-  // HomePage owns its own 2-column grid + right rail — no outlet context needed
   return (
     <ResponsiveShell showPhaseTrack={false} pageName={pageName}>
       <GlobalOverlays />
-      <Outlet />
+      <Suspense fallback={<PageSuspenseFallback />}>
+        <Outlet />
+      </Suspense>
     </ResponsiveShell>
   );
 }
 
-import { RoomErrorBoundary } from '@/shared/ui/RoomErrorBoundary';
-import { DevFlowPage } from '@/features/dev/dev-flow-page';
+import { toast } from 'sonner';
+import { isUuid } from '@/shared/lib/uuid';
 
 /** Layout route for room pages */
 function RoomShellLayout() {
   const [rightRail, setRightRail] = useState<ReactNode>(null);
+  const location = useLocation();
+  const { roomId } = useParams<{ roomId?: string }>();
+
+  if (!roomId || !isUuid(roomId)) {
+    toast.error('That room link is not valid');
+    return <Navigate to="/app/rooms" replace />;
+  }
+
   return (
     <ResponsiveShell showPhaseTrack={true} pageName="Overview" rightRail={rightRail}>
       <GlobalOverlays />
-      <RoomErrorBoundary>
-        <Outlet context={{ setRightRail }} />
+      <RoomErrorBoundary key={location.pathname}>
+        <Suspense fallback={<PageSuspenseFallback />}>
+          <Outlet context={{ setRightRail }} />
+        </Suspense>
       </RoomErrorBoundary>
     </ResponsiveShell>
   );
@@ -83,7 +195,9 @@ function SpeedModeLayout() {
   return (
     <SpeedModeShell>
       <GlobalOverlays />
-      <Outlet />
+      <Suspense fallback={<PageSuspenseFallback />}>
+        <Outlet />
+      </Suspense>
     </SpeedModeShell>
   );
 }
@@ -100,56 +214,25 @@ function PlaceholderPage({ title }: { title: string }) {
   );
 }
 
-import { HomePage } from '@/features/home/home-page';
-import { RoomOverviewPage } from '@/features/room-overview/room-overview-page';
-import { BriefPage } from '@/features/brief/brief-page';
-import { TeamPage } from '@/features/team/team-page';
-import { IdeatePage } from '@/features/ideate/ideate-page';
-import { PlanPage } from '@/features/plan/plan-page';
-import { DocsPage } from '@/features/docs/docs-page';
-import { BoardPage } from '@/features/board/board-page';
-import { SchedulePage } from '@/features/schedule/schedule-page';
-import { MvpPage } from '@/features/mvp/mvp-page';
-import { GithubPage } from '@/features/github/github-page';
-import { ApiPage } from '@/features/apis/api-page';
-import { DiagramPage } from '@/features/diagrams/diagram-page';
-import { PitchPage } from '@/features/pitch/pitch-page';
-import { DemoPage } from '@/features/demo/demo-page';
-import { SubmissionPage } from '@/features/submission/submission-page';
-import { ReadinessPage } from '@/features/readiness/readiness-page';
-import { RetroPage } from '@/features/retro/retro-page';
-import { PrepPage } from '@/features/prep/prep-page';
-import { CrowdCheckPage } from '@/features/prep/crowd-check-page';
-import { ToolDirectoryPage } from '@/features/prep/tool-directory-page';
-import { SettingsPage, SettingsIndexRedirect } from '@/features/settings/settings-page';
-import { ProfileSection } from '@/features/settings/sections/profile-section';
-import { AppearanceSection } from '@/features/settings/sections/appearance-section';
-import { NotificationsSection } from '@/features/settings/sections/notifications-section';
-import { IntegrationsSection } from '@/features/settings/sections/integrations-section';
-import { AiKeysSection } from '@/features/settings/sections/ai-keys-section';
-import { PrivacySection } from '@/features/settings/sections/privacy-section';
-import { BillingSection } from '@/features/settings/sections/billing-section';
-// Phase 6b
-import { NotificationsPage } from '@/features/notifications/notifications-page';
-import { MentorPage } from '@/features/mentor/mentor-page';
-import { SpeedModePage } from '@/features/speed-mode/speed-mode-page';
-import { MyRoomsPage } from '@/features/room/my-rooms-page';
-import { DevIconsPreviewPage } from '@/components/icons/dev-icons-preview-page';
-import {
-  NotFoundPage,
-  ForbiddenPage,
-  ServerErrorPage,
-  OfflinePage,
-  MaintenancePage,
-} from '@/features/system-pages/system-pages';
-import { SocialDashboard } from '@/features/prototypes/social-dashboard';
-import { CalendarDashboard } from '@/features/prototypes/calendar-dashboard';
-
 const router = createBrowserRouter([
   // ── Prototypes ────────────────────────────────────────────────
-  { path: '/prototypes/social', element: <SocialDashboard /> },
-  { path: '/prototypes/calendar', element: <CalendarDashboard /> },
-  
+  {
+    path: '/prototypes/social',
+    element: (
+      <Suspense fallback={<PageSuspenseFallback />}>
+        <SocialDashboard />
+      </Suspense>
+    ),
+  },
+  {
+    path: '/prototypes/calendar',
+    element: (
+      <Suspense fallback={<PageSuspenseFallback />}>
+        <CalendarDashboard />
+      </Suspense>
+    ),
+  },
+
   // ── Public routes (no app shell) ──────────────────────────────
   {
     path: '/',
@@ -199,16 +282,15 @@ const router = createBrowserRouter([
         element: <SettingsPage />,
         children: [
           { index: true, element: <SettingsIndexRedirect /> },
-          { path: 'profile',       element: <ProfileSection /> },
-          { path: 'appearance',    element: <AppearanceSection /> },
+          { path: 'profile', element: <ProfileSection /> },
+          { path: 'appearance', element: <AppearanceSection /> },
           { path: 'notifications', element: <NotificationsSection /> },
-          { path: 'integrations',  element: <IntegrationsSection /> },
-          { path: 'ai-keys',       element: <AiKeysSection /> },
-          { path: 'privacy',       element: <PrivacySection /> },
-          { path: 'billing',       element: <BillingSection /> },
+          { path: 'integrations', element: <IntegrationsSection /> },
+          { path: 'ai-keys', element: <AiKeysSection /> },
+          { path: 'privacy', element: <PrivacySection /> },
+          { path: 'billing', element: <BillingSection /> },
         ],
       },
-      // S29: full-page notifications (OQ-3: entry point unresolved)
       { path: 'notifications', element: <NotificationsPage /> },
     ],
   },
@@ -225,12 +307,18 @@ const router = createBrowserRouter([
       { path: 'brief', element: <BriefPage /> },
       { path: 'team', element: <TeamPage /> },
       { path: 'prep', element: <HiddenModuleRoute moduleId="prep" element={<PrepPage />} /> },
-      { path: 'crowd-check', element: <HiddenModuleRoute moduleId="crowd-check" element={<CrowdCheckPage />} /> },
+      {
+        path: 'crowd-check',
+        element: <HiddenModuleRoute moduleId="crowd-check" element={<CrowdCheckPage />} />,
+      },
       { path: 'ideate', element: <IdeatePage /> },
       { path: 'plan', element: <PlanPage /> },
       { path: 'docs', element: <DocsPage /> },
       { path: 'board', element: <BoardPage /> },
-      { path: 'schedule', element: <HiddenModuleRoute moduleId="schedule" element={<SchedulePage />} /> },
+      {
+        path: 'schedule',
+        element: <HiddenModuleRoute moduleId="schedule" element={<SchedulePage />} />,
+      },
       { path: 'mvp', element: <MvpPage /> },
       { path: 'github', element: <GithubPage /> },
       { path: 'apis', element: <ApiPage /> },
@@ -245,16 +333,19 @@ const router = createBrowserRouter([
       { path: 'readiness', element: <ReadinessPage /> },
       { path: 'retro', element: <RetroPage /> },
       { path: 'speed-mode', element: <SpeedModePage /> },
-      // S29 per-room notifications
       { path: 'notifications', element: <NotificationsPage /> },
     ],
   },
-  // S30 Mentor view — external route, token placeholder (OQ-6)
+  // S30 Mentor view
   {
     path: '/mentor/:token',
-    element: <MentorPage />,
+    element: (
+      <Suspense fallback={<PageSuspenseFallback />}>
+        <MentorPage />
+      </Suspense>
+    ),
   },
-  // S31 Speed Mode — content inside existing shell
+  // S31 Speed Mode
   {
     path: '/speed-mode',
     element: <SpeedModeLayout />,
@@ -264,9 +355,23 @@ const router = createBrowserRouter([
     ],
   },
   // Dev-only preview route for icons
-  { path: '/dev/icons', element: <DevIconsPreviewPage /> },
+  {
+    path: '/dev/icons',
+    element: (
+      <Suspense fallback={<PageSuspenseFallback />}>
+        <DevIconsPreviewPage />
+      </Suspense>
+    ),
+  },
   // Dev-only flow test panel
-  { path: '/dev/flow', element: <DevFlowPage /> },
+  {
+    path: '/dev/flow',
+    element: (
+      <Suspense fallback={<PageSuspenseFallback />}>
+        <DevFlowPage />
+      </Suspense>
+    ),
+  },
   // S32 System pages
   { path: '/403', element: <ForbiddenPage /> },
   { path: '/500', element: <ServerErrorPage /> },

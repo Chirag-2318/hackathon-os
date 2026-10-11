@@ -23,7 +23,7 @@ export function SubmissionDraftForm({ draft, onChange, disabled }: SubmissionDra
     <Card className="p-5 space-y-5">
       <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Submission draft</h3>
       {FIELDS.map(({ key, label }) => (
-        <div key={key}>
+        <div key={String(key)}>
           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
             {label}
           </label>

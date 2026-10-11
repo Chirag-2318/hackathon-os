@@ -1,5 +1,7 @@
 import * as React from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRoomEvents } from '@/api/useRoomEvents';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useHome } from '@/features/home/hooks/use-home';
 import { useRoomOverview } from '@/features/room-overview/hooks/use-room-overview';
@@ -39,8 +41,7 @@ import {
 import { InvitePopover } from '@/features/room/invite-popover';
 import { ChevronDown, Check, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { roomService, ideaService, prepService, getCurrentRole } from '@/services';
+import { roomService, planService, ideaService, prepService } from '@/services';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -78,6 +79,7 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  useRoomEvents(roomId);
   const { data: homeData } = useHome();
   const { data: overviewData } = useRoomOverview(roomId);
 
@@ -98,18 +100,18 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
     queryFn: () => prepService.getPrepItems(roomId),
   });
 
-  const isLeader = getCurrentRole() === 'leader';
+  const isLeader = roomData ? (roomData as any).currentUserRole === 'leader' : true;
   const isBuildUnlocked = roomData ? roomData.stage === 'build' : true;
-  const prepDone = prepData.filter((p) => p.done).length;
+  const prepDone = prepData.filter((p: any) => p.done).length;
   const prepTotal = prepData.length || 6;
-  const approvedIdeasCount = ideasData.filter((i) => i.status === 'approved').length;
+  const approvedIdeasCount = ideasData.filter((i: any) => i.status === 'approved').length;
 
   // Room details
   const rooms = homeData?.roomList ?? [];
   const currentRoom = rooms.find((r: any) => r.id === roomId) ?? {
     id: roomId,
-    title: roomData?.name || 'Campus Build Sprint 2026',
-    meta: { name: 'Aarav Mehta' },
+    title: roomData?.name || 'Hackathon Workspace',
+    meta: { name: homeData?.user?.firstName || 'Builder' },
   };
 
   const roomTitle = currentRoom.title;
@@ -120,13 +122,36 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
     .join('')
     .toUpperCase();
 
+  const { data: navBadges } = useQuery({
+    queryKey: ['nav-badges', roomId],
+    queryFn: () => roomService.getNavBadges(roomId),
+    refetchInterval: 60000,
+  });
+
+  React.useEffect(() => {
+    if (!roomId) return;
+    const sendBeat = () => {
+      if (document.visibilityState === 'visible') {
+        roomService.sendHeartbeat(roomId).catch(() => {});
+      }
+    };
+    sendBeat();
+    const interval = setInterval(sendBeat, 60000);
+    return () => clearInterval(interval);
+  }, [roomId]);
+
   // Overview metrics
-  const timeLeft = overviewData?.kpis?.timeLeft ?? '9h 05m left';
-  const openTasks = overviewData?.kpis?.tasksOpen?.value ?? '18';
+  const timeLeft = overviewData?.kpis?.timeLeft ?? (overviewData?.clock?.formattedRemaining || '');
+  const openTasks = navBadges?.openTasks !== undefined
+    ? String(navBadges.openTasks)
+    : (overviewData?.kpis?.tasksOpen?.value ?? '0');
   const currentPhase = 'Polish'; // Default or from overview
 
   // Determine active sub-path
   const currentSubPath = location.pathname.replace(`/app/room/${roomId}`, '').replace(/^\//, '') || 'overview';
+
+  // Check if GitHub has attention items
+  const githubHasAttention = Boolean((navBadges?.github ?? navBadges?.attentionCount ?? 0) > 0);
 
   // ── Groups definition ───────────────────────────────────────────
   const GROUPS: NavGroupDef[] = React.useMemo(() => {
@@ -227,6 +252,13 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
             label: 'GitHub',
             path: `/app/room/${roomId}/github`,
             icon: (p) => <GithubIcon {...p} />,
+            badge: () =>
+              githubHasAttention ? (
+                <span
+                  className="size-2 rounded-full bg-amber-500 shrink-0"
+                  title="Attention items exist"
+                />
+              ) : null,
           },
           {
             id: 'apis',
@@ -739,7 +771,7 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
             <Button
               size="sm"
               onClick={async () => {
-                await roomService.updateRoom(roomId, { stage: 'build' });
+                await planService.unlockBuild(roomId);
                 queryClient.invalidateQueries({ queryKey: ['room', roomId] });
                 queryClient.invalidateQueries({ queryKey: ['rooms'] });
                 queryClient.invalidateQueries({ queryKey: ['home'] });
