@@ -1,6 +1,7 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 import { Avatar as ShadcnAvatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { getPresetAvatarUrl } from "@/features/onboarding/preset-avatars";
 import type * as React from "react";
 
 /**
@@ -43,6 +44,11 @@ function UserAvatar({
   stacked = false,
   ...props
 }: UserAvatarProps) {
+  let resolvedSrc = src;
+  if (src && /^\d+$/.test(src)) {
+    resolvedSrc = getPresetAvatarUrl(parseInt(src, 10)) || src;
+  }
+
   return (
     <div
       className={cn(
@@ -52,7 +58,7 @@ function UserAvatar({
       )}
     >
       <ShadcnAvatar className={cn(avatarSizes({ size }), className)} {...props}>
-        <AvatarImage src={src} />
+        <AvatarImage src={resolvedSrc} />
         <AvatarFallback
           className="font-semibold text-ink"
           style={{ backgroundColor: fallbackColor }}

@@ -1,6 +1,8 @@
 package com.hackathonos.backend.readiness;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -18,9 +20,11 @@ public class ReadinessSimulation {
     @Column(name = "user_id")
     private UUID userId;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "answers", columnDefinition = "jsonb")
     private String answers;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "result", columnDefinition = "jsonb")
     private String result;
 

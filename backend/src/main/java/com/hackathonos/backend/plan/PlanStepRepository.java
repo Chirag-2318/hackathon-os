@@ -10,6 +10,7 @@ import java.util.UUID;
 @Repository
 public interface PlanStepRepository extends JpaRepository<PlanStep, UUID> {
     List<PlanStep> findByRoomId(UUID roomId);
+    List<PlanStep> findByRoomIdIn(java.util.Collection<UUID> roomIds);
     Optional<PlanStep> findByRoomIdAndStepKey(UUID roomId, String stepKey);
     void deleteByRoomId(UUID roomId);
 }

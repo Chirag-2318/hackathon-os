@@ -1,6 +1,8 @@
 package com.hackathonos.backend.users;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -42,6 +44,35 @@ public class User {
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
+
+    @Column(length = 20)
+    private String username;
+
+    @Column(name = "avatar_type", length = 20)
+    private String avatarType = "PRESET";
+
+    @Column(name = "avatar_preset")
+    private Integer avatarPreset;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "role_tags", columnDefinition = "jsonb")
+    private String roleTags = "[]";
+
+    @Column(name = "experience_level", length = 20)
+    private String experienceLevel;
+
+    @Column(name = "goal", length = 20)
+    private String goal;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "tech_stack", columnDefinition = "jsonb")
+    private String techStack = "[]";
+
+    @Column(name = "onboarding_completed", nullable = false)
+    private boolean onboardingCompleted = false;
+
+    @Column(name = "onboarded_at")
+    private Instant onboardedAt;
 
     protected User() {}
 
@@ -85,4 +116,31 @@ public class User {
 
     public Instant getDeletedAt() { return deletedAt; }
     public void setDeletedAt(Instant deletedAt) { this.deletedAt = deletedAt; }
+
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+
+    public String getAvatarType() { return avatarType; }
+    public void setAvatarType(String avatarType) { this.avatarType = avatarType; }
+
+    public Integer getAvatarPreset() { return avatarPreset; }
+    public void setAvatarPreset(Integer avatarPreset) { this.avatarPreset = avatarPreset; }
+
+    public String getRoleTags() { return roleTags; }
+    public void setRoleTags(String roleTags) { this.roleTags = roleTags; }
+
+    public String getExperienceLevel() { return experienceLevel; }
+    public void setExperienceLevel(String experienceLevel) { this.experienceLevel = experienceLevel; }
+
+    public String getGoal() { return goal; }
+    public void setGoal(String goal) { this.goal = goal; }
+
+    public String getTechStack() { return techStack; }
+    public void setTechStack(String techStack) { this.techStack = techStack; }
+
+    public boolean isOnboardingCompleted() { return onboardingCompleted; }
+    public void setOnboardingCompleted(boolean onboardingCompleted) { this.onboardingCompleted = onboardingCompleted; }
+
+    public Instant getOnboardedAt() { return onboardedAt; }
+    public void setOnboardedAt(Instant onboardedAt) { this.onboardedAt = onboardedAt; }
 }

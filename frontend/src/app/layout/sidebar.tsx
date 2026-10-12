@@ -27,6 +27,7 @@ import { useOverlay } from '@/app/providers/overlay-store';
 import { useHome } from '@/features/home/hooks/use-home';
 import { formatClock } from '@/shared/lib/clock';
 import { Copy, Plus } from 'lucide-react';
+import { UserName } from '@/components/ui/user-name';
 import goproImg from '../../../images/gopro.png';
 
 // ── Nav configuration ──────────────────────────────────────────────
@@ -290,10 +291,10 @@ export function AppSidebar() {
             {inRoom && roomId ? (
               <motion.div
                 key={`room-nav-${roomId}`}
-                initial={{ opacity: 0, x: 12 }}
+                initial={{ opacity: 0, x: 16 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 12 }}
-                transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                exit={{ opacity: 0, x: 16 }}
+                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
                 className="flex-1 flex flex-col min-h-0"
               >
                 <RoomNav roomId={roomId} isCollapsed={isCollapsed} />
@@ -301,10 +302,10 @@ export function AppSidebar() {
             ) : (
               <motion.div
                 key="global-nav"
-                initial={{ opacity: 0, x: -12 }}
+                initial={{ opacity: 0, x: -16 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -12 }}
-                transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+                exit={{ opacity: 0, x: -16 }}
+                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
                 className="flex-1 flex flex-col min-h-0"
               >
                 <nav className="flex flex-col gap-1" aria-label="Primary">
@@ -363,11 +364,11 @@ export function AppSidebar() {
           </AnimatePresence>
         )}
 
-        {/* 5. Footer: email + clock */}
-        {!isCollapsed && (
+        {/* 5. Footer: email + clock (Home/global sidebar) */}
+        {!isCollapsed && !inRoom && (
           <div className="flex flex-col mt-2 shrink-0">
             <AnimatePresence initial={false}>
-              {!inRoom && displayName && (
+              {displayName && (
                 <motion.div
                   key="footer-email-row"
                   initial={{ opacity: 0, height: 0 }}
@@ -386,7 +387,7 @@ export function AppSidebar() {
                       <Copy size={16} strokeWidth={1.75} className="opacity-60 group-hover:opacity-100" />
                     </div>
                     <span className="text-[14px] font-normal leading-[20px] text-ink truncate" data-testid="footer-email">
-                      {displayName}
+                      <UserName user={user} showDisplayName={true} />
                     </span>
                   </button>
                 </motion.div>

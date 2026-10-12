@@ -1,6 +1,8 @@
 package com.hackathonos.backend.readiness;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -18,6 +20,7 @@ public class ReadinessSnapshot {
     @Column(name = "score", nullable = false)
     private int score;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "breakdown", columnDefinition = "jsonb")
     private String breakdown;
 

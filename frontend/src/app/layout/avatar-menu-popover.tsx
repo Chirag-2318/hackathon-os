@@ -16,6 +16,8 @@ import {
   LogoutIcon,
 } from '@/components/icons';
 import { cn } from '@/lib/utils';
+import { UserAvatar } from '@/components/ui/user-avatar';
+import { UserName } from '@/components/ui/user-name';
 
 export function AvatarMenuPopover() {
   const [open, setOpen] = useState(false);
@@ -25,12 +27,6 @@ export function AvatarMenuPopover() {
 
   const displayName = user?.displayName ?? user?.email ?? 'Builder';
   const email = user?.email ?? '';
-  const initials = displayName
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w: string) => w[0] ?? '')
-    .join('')
-    .toUpperCase() || 'H';
 
   async function handleLogout() {
     try {
@@ -53,14 +49,14 @@ export function AvatarMenuPopover() {
         <button
           className={cn(
             'group relative flex items-center justify-center size-8 rounded-full',
-            'bg-active text-ink text-xs font-semibold cursor-pointer outline-none',
+            'bg-active text-ink text-xs font-semibold cursor-pointer outline-none overflow-hidden',
             'avatar-hover-ring transition-all duration-150',
             'focus-visible:ring-2 focus-visible:ring-ink'
           )}
           aria-label="User profile menu"
           data-testid="header-avatar"
         >
-          {initials}
+          <UserAvatar user={user} size={32} />
         </button>
       </PopoverTrigger>
 
@@ -71,11 +67,13 @@ export function AvatarMenuPopover() {
       >
         {/* Top block */}
         <div className="flex items-center gap-3 p-2.5 pb-3 border-b border-border">
-          <div className="size-9 rounded-full bg-blue-100 text-blue-700 text-sm font-bold flex items-center justify-center shrink-0">
-            {initials}
+          <div className="size-9 rounded-full overflow-hidden shrink-0">
+            <UserAvatar user={user} size={36} />
           </div>
           <div className="flex-1 min-w-0">
-            <h4 className="text-sm font-semibold text-ink truncate leading-tight">{displayName}</h4>
+            <h4 className="text-sm font-semibold text-ink truncate leading-tight">
+              <UserName user={user} showDisplayName={true} />
+            </h4>
             {email && <p className="text-xs text-ink-2 truncate mt-0.5">{email}</p>}
           </div>
         </div>

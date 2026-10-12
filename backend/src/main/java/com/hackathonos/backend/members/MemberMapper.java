@@ -19,6 +19,11 @@ public class MemberMapper {
         boolean isLeader = member != null && "LEADER".equalsIgnoreCase(member.getRole());
         boolean isMe = user != null && currentUserId != null && currentUserId.equals(user.getId());
 
+        String username = user != null ? user.getUsername() : null;
+        com.hackathonos.backend.users.dto.UserSummaryDto userSummary = user != null
+                ? com.hackathonos.backend.users.dto.UserSummaryDto.from(user, name)
+                : null;
+
         return new MemberItemDto(
                 member != null ? member.getUserId() : null,
                 name,
@@ -32,7 +37,9 @@ public class MemberMapper {
                 member != null ? member.getLastSeenAt() : null,
                 isLeader,
                 isMe,
-                null
+                null,
+                username,
+                userSummary
         );
     }
 

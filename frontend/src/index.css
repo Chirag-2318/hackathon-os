@@ -2,6 +2,10 @@
 @import "@fontsource-variable/dm-sans";
 @import "@fontsource/jetbrains-mono/400.css";
 @import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/instrument-serif/400.css";
+@import "@fontsource/instrument-serif/400-italic.css";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
 @import "./components/icons/icons.css";
 
 /*
@@ -16,6 +20,11 @@
    CSS Custom Properties — Light Theme (default)
    ──────────────────────────────────────────────────────── */
 :root {
+  /* Typography Variables (Scoped to Onboarding & new surfaces) */
+  --font-display: 'Instrument Serif', Georgia, serif;
+  --font-ui: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', monospace;
+
   /* §5.1 Palette */
   --shell:          #F5F5F5;
   --surface:        #FBFBFB;

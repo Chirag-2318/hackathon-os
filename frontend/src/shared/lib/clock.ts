@@ -1,3 +1,5 @@
+import * as React from 'react';
+
 const ZONE_ABBR: Record<string, string> = { 'Asia/Kolkata': 'IST', 'Asia/Calcutta': 'IST' };
 
 export function formatClock(d: Date): string {
@@ -9,4 +11,15 @@ export function formatClock(d: Date): string {
   let zone = get('timeZoneName');
   if (/^GMT[+-]/.test(zone)) zone = ZONE_ABBR[tz] ?? zone;
   return `${get('hour')}:${get('minute')}:${get('second')} ${get('dayPeriod').toUpperCase()} ${zone}`;
+}
+
+export function useClock() {
+  const [time, setTime] = React.useState(() => formatClock(new Date()));
+
+  React.useEffect(() => {
+    const id = setInterval(() => setTime(formatClock(new Date())), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  return time;
 }

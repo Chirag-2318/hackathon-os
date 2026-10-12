@@ -105,7 +105,7 @@ export function InviteCodeDialog({ roomId, open, onOpenChange, trigger }: Invite
         <div className="flex flex-col items-center gap-5 py-2">
           {/* 4 Monospace Boxes */}
           <div className="flex items-center justify-center gap-2.5">
-            {joinCode.split('').map((char, idx) => (
+            {joinCode.split('').map((char: string, idx: number) => (
               <div
                 key={idx}
                 className="size-14 rounded-2xl border-2 border-border/80 bg-muted/30 flex items-center justify-center font-mono text-2xl font-bold uppercase text-foreground shadow-xs select-all"

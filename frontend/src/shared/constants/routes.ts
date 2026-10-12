@@ -15,6 +15,9 @@ export const ROUTES = {
   PLAYBOOKS: '/playbooks',
   PLAYBOOK_DETAIL: '/playbooks/:slug',
 
+  /** Onboarding (public / outside app shell) */
+  ONBOARDING: '/onboarding',
+
   // ── Post-action destinations (configurable) ──
   /** Where to navigate after successful sign-in (Q2) */
   POST_AUTH: '/app/situation',

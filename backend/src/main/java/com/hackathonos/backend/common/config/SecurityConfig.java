@@ -68,7 +68,9 @@ public class SecurityConfig {
                     "/api/v1/tools/**",
                     "/api/v1/meta",
                     "/api/v1/github/link/callback",
-                    "/api/v1/integrations/canva/callback"
+                    "/api/v1/integrations/canva/callback",
+                    "/api/v1/users/username-available",
+                    "/uploads/**"
                 ).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/invites/*").permitAll()
                 .anyRequest().authenticated()

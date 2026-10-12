@@ -4,6 +4,8 @@ import { ChevronDown, ChevronRight, User } from 'lucide-react';
 import type { Task, RoomMember, BoardPhase, TaskStatus } from '@/services/types';
 import { PhaseChip } from '@/features/build/ui';
 import { JiraCard } from './jira-card';
+import { UserAvatar } from '@/components/ui/user-avatar';
+import { UserName } from '@/components/ui/user-name';
 
 export interface SwimlaneGroup {
   id: string;
@@ -136,11 +138,17 @@ export function BoardSwimlanes({
                   <ChevronDown className="size-4 text-muted-foreground" />
                 )}
 
-                {group.type === 'assignee' && (
-                  <div className="size-5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-bold flex items-center justify-center">
-                    {group.title.slice(0, 2).toUpperCase()}
-                  </div>
-                )}
+                {group.type === 'assignee' && (() => {
+                  const m = members.find((x) => x.id === group.id);
+                  return (
+                    <div className="size-5 rounded-full overflow-hidden shrink-0">
+                      <UserAvatar
+                        user={m || { displayName: group.title, avatarUrl: group.avatar }}
+                        size={20}
+                      />
+                    </div>
+                  );
+                })()}
                 {group.type === 'unassigned' && (
                   <div className="size-5 rounded-full border border-dashed border-muted-foreground flex items-center justify-center text-muted-foreground">
                     <User className="size-2.5" />

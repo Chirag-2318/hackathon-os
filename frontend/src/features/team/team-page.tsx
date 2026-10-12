@@ -11,6 +11,8 @@ import { Mail, GitBranch, Users, Plus } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 
 import { useOverlay } from '@/app/providers/overlay-store';
+import { UserAvatar } from '@/components/ui/user-avatar';
+import { UserName } from '@/components/ui/user-name';
 
 export function TeamPage() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -105,11 +107,13 @@ export function TeamPage() {
                     isSelected ? "bg-lav-100 border-lav-600" : "border-transparent hover:bg-hover-row"
                   )}
                 >
-                  <div className="w-10 h-10 rounded-full bg-surface-sunken flex items-center justify-center shrink-0 border border-border text-label font-bold text-ink">
-                    {memInitials}
+                  <div className="w-10 h-10 rounded-full overflow-hidden shrink-0">
+                    <UserAvatar user={member} size={40} />
                   </div>
                   <div className="flex flex-col flex-1 min-w-0">
-                    <span className="text-body-strong text-ink truncate">{memName}</span>
+                    <span className="text-body-strong text-ink truncate">
+                      <UserName user={member} showDisplayName={true} />
+                    </span>
                     <div className="flex flex-wrap gap-1 mt-0.5">
                       <span className="text-caption text-ink-muted truncate">{roleLabel}</span>
                     </div>
@@ -127,11 +131,13 @@ export function TeamPage() {
         {selectedMember && (
           <div className="flex flex-col gap-6 bg-surface-raised rounded-card border border-border p-6 shadow-e0">
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-surface-sunken flex items-center justify-center border border-border text-h3 text-ink shrink-0 font-bold">
-                {selectedInitials}
+              <div className="w-14 h-14 rounded-full overflow-hidden shrink-0">
+                <UserAvatar user={selectedMember} size={56} />
               </div>
               <div className="flex flex-col min-w-0">
-                <h1 className="text-h3 truncate">{selectedDisplayName}</h1>
+                <h1 className="text-h3 truncate">
+                  <UserName user={selectedMember} showDisplayName={true} />
+                </h1>
                 <div className="flex flex-wrap gap-2 mt-1">
                   <Chip fill="sun" className="text-ink">{selectedTimeSlots}</Chip>
                   <Chip fill="sky" className="text-ink">{selectedSessions} sessions</Chip>

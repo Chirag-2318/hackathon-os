@@ -11,22 +11,44 @@ export interface Room {
   id: string;
   name: string;
   description: string;
-  projectDescription: string;
+  projectDescription?: string;
   templateId: string;
+  templateName?: string;
   createdAt: string; // ISO
   eventStart: string | null; // ISO or null
   eventEnd: string | null; // ISO or null
-  timezone: string;
-  ownerId: string;
-  memberIds: string[];
+  timezone?: string;
+  ownerId?: string;
+  memberIds?: string[];
   stage: RoomStage;
-  stageDone: {
+  joinCode?: string;
+  stageDone?: {
     brief: boolean;
     ideate: boolean;
     crowd: boolean;
     plan: boolean;
   };
+  durationHours?: number;
+  phase?: string;
+  phaseIndex?: number;
+  phaseCount?: number;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  submittedAt?: string | null;
+  memberCount?: number;
+  myRole?: string;
+  isLeader?: boolean;
+  memberPreview?: Array<{
+    id: string;
+    username?: string;
+    displayName?: string;
+    avatarUrl?: string;
+  }>;
+  nextStepLabel?: string | null;
+  attentionCount?: number;
 }
+
+export type RoomListItem = Room;
 
 // ── Member ────────────────────────────────────────────────────────────────────
 

@@ -1,6 +1,8 @@
 package com.hackathonos.backend.pitch;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -27,12 +29,14 @@ public class PitchRehearsal {
     @Column(name = "operator_id")
     private UUID operatorId;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "section_paces", columnDefinition = "jsonb")
     private String sectionPaces;
 
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "stats", columnDefinition = "jsonb")
     private String stats;
 

@@ -37,6 +37,10 @@ public class RoomService {
     private final RoomMapper roomMapper;
     private final ActivityLogger activityLogger;
     private final NotificationService notificationService;
+    private final com.hackathonos.backend.users.UserRepository userRepository;
+    private final com.hackathonos.backend.submission.SubmissionRepository submissionRepository;
+    private final com.hackathonos.backend.tasks.TaskRepository taskRepository;
+    private final com.hackathonos.backend.plan.PlanStepRepository planStepRepository;
 
     public RoomService(RoomRepository roomRepository,
                        RoomMemberRepository memberRepository,
@@ -46,7 +50,11 @@ public class RoomService {
                        RoomStageService stageService,
                        RoomMapper roomMapper,
                        ActivityLogger activityLogger,
-                       NotificationService notificationService) {
+                       NotificationService notificationService,
+                       com.hackathonos.backend.users.UserRepository userRepository,
+                       com.hackathonos.backend.submission.SubmissionRepository submissionRepository,
+                       com.hackathonos.backend.tasks.TaskRepository taskRepository,
+                       com.hackathonos.backend.plan.PlanStepRepository planStepRepository) {
         this.roomRepository = roomRepository;
         this.memberRepository = memberRepository;
         this.templateService = templateService;
@@ -56,6 +64,10 @@ public class RoomService {
         this.roomMapper = roomMapper;
         this.activityLogger = activityLogger;
         this.notificationService = notificationService;
+        this.userRepository = userRepository;
+        this.submissionRepository = submissionRepository;
+        this.taskRepository = taskRepository;
+        this.planStepRepository = planStepRepository;
     }
 
     /**
@@ -105,15 +117,216 @@ public class RoomService {
      */
     public List<RoomListItemDto> listRooms(User user) {
         List<Room> rooms = roomRepository.findActiveRoomsByMemberUserId(user.getId());
-        List<RoomListItemDto> items = new ArrayList<>();
-        for (Room room : rooms) {
-            String templateName = templateService.getOrThrow(room.getTemplateId()).getName();
-            long count = memberRepository.countByRoomId(room.getId());
-            RoomMember member = memberRepository.findByRoomIdAndUserId(room.getId(), user.getId()).orElse(null);
-            String role = member != null ? member.getRole() : "BUILDER";
-            boolean isLeader = "LEADER".equalsIgnoreCase(role);
-            items.add(roomMapper.toListItem(room, templateName, count, role, isLeader));
+        if (rooms.isEmpty()) {
+            return Collections.emptyList();
         }
+
+        List<UUID> roomIds = rooms.stream().map(Room::getId).toList();
+
+        // 1. Batched fetch members
+        List<RoomMember> allMembers = memberRepository.findByRoomIdIn(roomIds);
+        Map<UUID, List<RoomMember>> membersByRoom = allMembers.stream()
+                .collect(java.util.stream.Collectors.groupingBy(RoomMember::getRoomId));
+
+        // 2. Collect up to 4 user IDs per room for avatar previews
+        Set<UUID> previewUserIds = new HashSet<>();
+        for (UUID rId : roomIds) {
+            List<RoomMember> rMembers = membersByRoom.getOrDefault(rId, Collections.emptyList());
+            rMembers.stream()
+                    .sorted((a, b) -> {
+                        boolean aLead = "LEADER".equalsIgnoreCase(a.getRole());
+                        boolean bLead = "LEADER".equalsIgnoreCase(b.getRole());
+                        if (aLead != bLead) return aLead ? -1 : 1;
+                        return 0;
+                    })
+                    .limit(4)
+                    .forEach(m -> previewUserIds.add(m.getUserId()));
+        }
+
+        // 3. Batched fetch users
+        Map<UUID, com.hackathonos.backend.users.User> userMap = userRepository.findAllById(previewUserIds).stream()
+                .collect(java.util.stream.Collectors.toMap(com.hackathonos.backend.users.User::getId, u -> u));
+
+        // 4. Batched fetch submissions
+        Map<UUID, com.hackathonos.backend.submission.Submission> submissionMap = submissionRepository.findAllById(roomIds).stream()
+                .collect(java.util.stream.Collectors.toMap(com.hackathonos.backend.submission.Submission::getRoomId, s -> s));
+
+        // 5. Batched fetch tasks
+        Map<UUID, List<com.hackathonos.backend.tasks.Task>> tasksByRoom = taskRepository.findByRoomIdIn(roomIds).stream()
+                .collect(java.util.stream.Collectors.groupingBy(com.hackathonos.backend.tasks.Task::getRoomId));
+
+        // 6. Batched fetch plan steps
+        Map<UUID, List<com.hackathonos.backend.plan.PlanStep>> planStepsByRoom = planStepRepository.findByRoomIdIn(roomIds).stream()
+                .collect(java.util.stream.Collectors.groupingBy(com.hackathonos.backend.plan.PlanStep::getRoomId));
+
+        Instant now = Instant.now();
+        List<RoomListItemDto> items = new ArrayList<>();
+
+        for (Room room : rooms) {
+            EventTemplate template = null;
+            try {
+                template = templateService.getOrThrow(room.getTemplateId());
+            } catch (Exception ignored) {}
+            String templateName = template != null ? template.getName() : "Hackathon";
+            int durationHours = template != null ? template.getDurationHours() : 36;
+
+            List<RoomMember> roomMembers = membersByRoom.getOrDefault(room.getId(), Collections.emptyList());
+            long memberCount = roomMembers.size();
+
+            RoomMember currentMember = roomMembers.stream()
+                    .filter(m -> m.getUserId().equals(user.getId()))
+                    .findFirst()
+                    .orElse(null);
+            String role = currentMember != null ? currentMember.getRole() : "BUILDER";
+            boolean isLeader = "LEADER".equalsIgnoreCase(role);
+
+            // Member previews
+            List<com.hackathonos.backend.users.dto.UserSummaryDto> memberPreview = roomMembers.stream()
+                    .sorted((a, b) -> {
+                        boolean aLead = "LEADER".equalsIgnoreCase(a.getRole());
+                        boolean bLead = "LEADER".equalsIgnoreCase(b.getRole());
+                        if (aLead != bLead) return aLead ? -1 : 1;
+                        return 0;
+                    })
+                    .limit(4)
+                    .map(m -> {
+                        com.hackathonos.backend.users.User u = userMap.get(m.getUserId());
+                        return com.hackathonos.backend.users.dto.UserSummaryDto.from(u, "Member");
+                    })
+                    .filter(Objects::nonNull)
+                    .toList();
+
+            com.hackathonos.backend.submission.Submission sub = submissionMap.get(room.getId());
+            Instant submittedAt = (sub != null && sub.getSubmittedAt() != null) ? sub.getSubmittedAt() : null;
+            boolean isSubmitted = submittedAt != null || (sub != null && "SUBMITTED".equalsIgnoreCase(sub.getStatus()));
+
+            String phase;
+            int phaseIndex;
+            int phaseCount = 4;
+
+            if (isSubmitted) {
+                phase = "Submitted";
+                phaseIndex = 3;
+            } else if ("present".equalsIgnoreCase(room.getStage())
+                    || (room.getBuildStartedAt() != null && room.getEventEnd() != null && now.isAfter(room.getEventEnd().minus(Duration.ofHours(2))))) {
+                phase = "Present";
+                phaseIndex = 2;
+            } else if (room.getBuildStartedAt() != null || "build".equalsIgnoreCase(room.getStage())) {
+                phase = "Build";
+                phaseIndex = 1;
+            } else {
+                phase = "Planning";
+                phaseIndex = 0;
+            }
+
+            List<com.hackathonos.backend.tasks.Task> roomTasks = tasksByRoom.getOrDefault(room.getId(), Collections.emptyList());
+            List<com.hackathonos.backend.plan.PlanStep> roomPlanSteps = planStepsByRoom.getOrDefault(room.getId(), Collections.emptyList());
+
+            int attentionCount = 0;
+            String nextStepLabel = null;
+
+            if (phaseIndex == 3) {
+                nextStepLabel = "Submitted — ready for judging";
+            } else if (phaseIndex == 2) {
+                nextStepLabel = "Next: finalize pitch deck & submission";
+                if (room.getEventEnd() != null && now.isAfter(room.getEventEnd().minus(Duration.ofHours(1)))) {
+                    attentionCount++;
+                }
+            } else if (phaseIndex == 1) {
+                long blockedTasks = roomTasks.stream()
+                        .filter(t -> t.isFlagged() && !"done".equalsIgnoreCase(t.getStatus()))
+                        .count();
+                long overdueTasks = roomTasks.stream()
+                        .filter(t -> t.getDueAt() != null && t.getDueAt().isBefore(now) && !"done".equalsIgnoreCase(t.getStatus()))
+                        .count();
+                long unassignedTasks = roomTasks.stream()
+                        .filter(t -> t.getAssigneeId() == null && !"done".equalsIgnoreCase(t.getStatus()))
+                        .count();
+
+                attentionCount = (int) (blockedTasks + overdueTasks);
+                if (room.getEventEnd() != null && now.isAfter(room.getEventEnd().minus(Duration.ofHours(2)))) {
+                    attentionCount++;
+                }
+
+                if (blockedTasks > 0) {
+                    nextStepLabel = blockedTasks == 1 ? "1 blocked task needs attention" : blockedTasks + " blocked tasks need attention";
+                } else if (unassignedTasks > 0) {
+                    nextStepLabel = unassignedTasks == 1 ? "1 task needs an owner" : unassignedTasks + " tasks need an owner";
+                } else {
+                    com.hackathonos.backend.tasks.Task nextTask = roomTasks.stream()
+                            .filter(t -> !"done".equalsIgnoreCase(t.getStatus()))
+                            .findFirst()
+                            .orElse(null);
+                    if (nextTask != null) {
+                        nextStepLabel = "Next: " + nextTask.getSummary();
+                    } else {
+                        nextStepLabel = "All sprint tasks complete";
+                    }
+                }
+            } else {
+                if (!room.isBriefDone()) {
+                    nextStepLabel = "Next: add problem statement";
+                    if (room.getEventStart() != null && now.isAfter(room.getEventStart())) {
+                        attentionCount++;
+                    }
+                } else if (!room.isIdeateDone()) {
+                    nextStepLabel = "Next: brainstorm and approve ideas";
+                } else if (!room.isPlanDone()) {
+                    com.hackathonos.backend.plan.PlanStep unvalidatedStep = roomPlanSteps.stream()
+                            .filter(s -> !s.isValidated())
+                            .findFirst()
+                            .orElse(null);
+                    if (unvalidatedStep != null) {
+                        String stepName = switch (unvalidatedStep.getStepKey()) {
+                            case "prd" -> "PRD & Scope";
+                            case "tech" -> "Tech Stack & Architecture";
+                            case "phases" -> "Phases & Timeline";
+                            case "tasks" -> "Tasks & Milestones";
+                            case "demo" -> "Demo & Q&A";
+                            default -> unvalidatedStep.getStepKey();
+                        };
+                        nextStepLabel = "Next: validate " + stepName;
+                        attentionCount++;
+                    } else {
+                        nextStepLabel = "Next: finalize implementation plan";
+                    }
+                } else {
+                    nextStepLabel = "Next: start build phase";
+                }
+            }
+
+            int doneJourney = (room.isBriefDone() ? 1 : 0) +
+                    (room.isIdeateDone() ? 1 : 0) +
+                    (room.isPlanDone() ? 1 : 0) +
+                    (room.getBuildStartedAt() != null ? 1 : 0);
+
+            items.add(new RoomListItemDto(
+                    room.getId(),
+                    room.getName(),
+                    room.getDescription(),
+                    room.getTemplateId(),
+                    templateName,
+                    room.getStage(),
+                    room.getEventStart(),
+                    room.getEventEnd(),
+                    memberCount,
+                    role,
+                    isLeader,
+                    new RoomListItemDto.JourneyProgress(doneJourney, 4),
+                    room.getCreatedAt(),
+                    durationHours,
+                    phase,
+                    phaseIndex,
+                    phaseCount,
+                    room.getEventStart(),
+                    room.getEventEnd(),
+                    submittedAt,
+                    memberPreview,
+                    nextStepLabel,
+                    attentionCount
+            ));
+        }
+
         return items;
     }
 

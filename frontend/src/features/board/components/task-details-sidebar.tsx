@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { ChevronDown, User, Check, Clock } from 'lucide-react';
 import type { Task, RoomMember, BoardPhase, TaskStatus, TaskPriority } from '@/services/types';
 import { StatusLozenge, PriorityIcon, PhaseChip, EstimateChip, DueChip } from '@/features/build/ui';
+import { UserAvatar } from '@/components/ui/user-avatar';
+import { UserName } from '@/components/ui/user-name';
 
 export interface TaskDetailsSidebarProps {
   task: Task;
@@ -102,13 +104,12 @@ export function TaskDetailsSidebar({
             >
               {assignee ? (
                 <>
-                  <div
-                    className="size-5 rounded-full text-white text-[9px] font-bold flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: assignee.avatarColor }}
-                  >
-                    {assignee.initials}
+                  <div className="size-5 rounded-full overflow-hidden shrink-0">
+                    <UserAvatar user={assignee} size={20} />
                   </div>
-                  <span className="font-medium text-foreground max-w-[110px] truncate">{assignee.displayName}</span>
+                  <span className="font-medium text-foreground max-w-[110px] truncate">
+                    <UserName user={assignee} />
+                  </span>
                 </>
               ) : (
                 <span className="text-muted-foreground italic">Unassigned</span>
@@ -142,13 +143,12 @@ export function TaskDetailsSidebar({
                     onClick={() => handleSelectAssignee(m.id)}
                     className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-muted text-xs flex items-center gap-2"
                   >
-                    <div
-                      className="size-5 rounded-full text-white text-[9px] font-bold flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: m.avatarColor }}
-                    >
-                      {m.initials}
+                    <div className="size-5 rounded-full overflow-hidden shrink-0">
+                      <UserAvatar user={m} size={20} />
                     </div>
-                    <span className="truncate flex-1">{m.displayName}</span>
+                    <span className="truncate flex-1">
+                      <UserName user={m} showDisplayName={true} />
+                    </span>
                     {task.assigneeId === m.id && <Check className="size-3 text-muted-foreground shrink-0" />}
                   </button>
                 ))}
@@ -163,13 +163,12 @@ export function TaskDetailsSidebar({
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg">
             {reporter ? (
               <>
-                <div
-                  className="size-5 rounded-full text-white text-[9px] font-bold flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: reporter.avatarColor }}
-                >
-                  {reporter.initials}
+                <div className="size-5 rounded-full overflow-hidden shrink-0">
+                  <UserAvatar user={reporter} size={20} />
                 </div>
-                <span className="font-medium text-foreground max-w-[120px] truncate">{reporter.displayName}</span>
+                <span className="font-medium text-foreground max-w-[120px] truncate">
+                  <UserName user={reporter} />
+                </span>
               </>
             ) : (
               <span className="text-foreground font-medium">Team Member</span>

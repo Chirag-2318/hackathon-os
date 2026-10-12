@@ -19,6 +19,7 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
     Optional<Task> findByRoomIdAndTaskKey(UUID roomId, String taskKey);
     Optional<Task> findByIdAndRoomId(UUID id, UUID roomId);
     List<Task> findByRoomId(UUID roomId);
+    List<Task> findByRoomIdIn(java.util.Collection<UUID> roomIds);
     List<Task> findByRoomIdAndAssigneeId(UUID roomId, UUID assigneeId);
     List<Task> findByAssigneeId(UUID assigneeId);
     List<Task> findByRoomIdAndFlaggedTrueAndStatusNot(UUID roomId, String status);

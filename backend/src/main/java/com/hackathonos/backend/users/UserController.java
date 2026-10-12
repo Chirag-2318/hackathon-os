@@ -29,6 +29,30 @@ public class UserController {
         return userService.getMe(user);
     }
 
+    @GetMapping("/api/v1/users/me")
+    public UserDetailDto getUsersMe() {
+        User user = currentUser.get();
+        return userService.getMe(user);
+    }
+
+    @GetMapping("/api/v1/users/username-available")
+    public UsernameAvailableResponse checkUsernameAvailable(@RequestParam("username") String username) {
+        UUID currentUserId = currentUser.getOptional().map(User::getId).orElse(null);
+        return userService.checkUsernameAvailability(username, currentUserId);
+    }
+
+    @PostMapping(value = "/api/v1/users/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public AvatarUploadResponse uploadAvatar(@RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        User user = currentUser.get();
+        return userService.uploadAvatar(user, file);
+    }
+
+    @PostMapping("/api/v1/users/me/onboarding")
+    public UserDetailDto completeOnboarding(@RequestBody OnboardingRequest request) {
+        User user = currentUser.get();
+        return userService.completeOnboarding(user, request);
+    }
+
     @GetMapping("/api/v1/users/me/settings")
     public UserSettingsDto getSettings() {
         User user = currentUser.get();

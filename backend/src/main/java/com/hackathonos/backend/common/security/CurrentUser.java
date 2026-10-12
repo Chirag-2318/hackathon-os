@@ -23,6 +23,14 @@ public class CurrentUser {
         this.userService = userService;
     }
 
+    public java.util.Optional<User> getOptional() {
+        try {
+            return java.util.Optional.ofNullable(get());
+        } catch (Exception e) {
+            return java.util.Optional.empty();
+        }
+    }
+
     /**
      * Resolves the authenticated user from the current security context. Never returns null.
      * Throws UnauthenticatedException (401) if not authenticated.

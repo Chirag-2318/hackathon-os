@@ -1,6 +1,8 @@
 package com.hackathonos.backend.pitch;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -21,6 +23,7 @@ public class PitchScript {
     @Column(name = "speaker_count", nullable = false)
     private int speakerCount = 1;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "speakers", nullable = false, columnDefinition = "jsonb")
     private String speakers = "[]";
 
@@ -36,6 +39,7 @@ public class PitchScript {
     @Column(name = "total_seconds", nullable = false)
     private int totalSeconds = 0;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "slides", nullable = false, columnDefinition = "jsonb")
     private String slides = "[]";
 

@@ -26,6 +26,7 @@ import { PlaybookBrowsePage } from '@/features/playbooks/playbook-browse-page';
 import { PlaybookDetailPage } from '@/features/playbooks/playbook-detail-page';
 import { SituationPickerPage } from '@/features/onboarding/situation-picker-page';
 import { CreateRoomWizard } from '@/features/onboarding/create-room-wizard';
+import { OnboardingView } from '@/features/onboarding/onboarding-view';
 import { PlaybooksView } from '@/features/playbooks/playbooks-view';
 import { ToolDirectoryView } from '@/features/tools/tool-directory-view';
 import { isModuleHidden } from '@/config/featureFlags';
@@ -259,6 +260,10 @@ const router = createBrowserRouter([
   {
     path: '/playbooks/:slug',
     element: <PlaybookDetailPage />,
+  },
+  {
+    path: '/onboarding',
+    element: <OnboardingView />,
   },
 
   // ── Authenticated routes (with shell) ─────────────────────────

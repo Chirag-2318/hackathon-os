@@ -5,6 +5,7 @@ import type { RoomMember } from '@/services/types';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
+import { UserAvatar } from '@/components/ui/user-avatar';
 
 export type GroupByOption = 'none' | 'assignee' | 'phase';
 
@@ -78,16 +79,18 @@ export function BoardFilterBar({
               }}
               title={member.name}
               className={cn(
-                'relative size-7 rounded-full bg-neutral-200 dark:bg-neutral-800 text-[10px] font-bold flex items-center justify-center transition-all duration-150 border-2 border-background',
+                'relative size-7 rounded-full overflow-hidden flex items-center justify-center transition-all duration-150 border-2 border-background',
                 isSelected && 'ring-2 ring-blue-600 scale-105 z-10',
                 isDimmed && 'opacity-60 hover:opacity-100'
               )}
             >
-              {member.avatar ? (
-                <img src={member.avatar} alt={member.name || 'Member'} className="size-full rounded-full object-cover" />
-              ) : (
-                (member.name || 'TM').slice(0, 2).toUpperCase()
-              )}
+              <UserAvatar
+                user={{
+                  ...member,
+                  avatarUrl: (member as any).avatarUrl || (member as any).avatar,
+                }}
+                size={24}
+              />
             </button>
           );
         })}

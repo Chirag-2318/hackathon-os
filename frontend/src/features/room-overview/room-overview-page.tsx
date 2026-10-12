@@ -22,6 +22,8 @@ import {
   Users, BarChart2, Layers, Clock, Zap, X, Circle, Download,
 } from 'lucide-react';
 import { TagChip, TimeChip, InlineHighlight, Checkbox, PairedBarRow, type ChartHue } from '../home/components/HomeDesignSystem';
+import { UserAvatar } from '@/components/ui/user-avatar';
+import { UserName } from '@/components/ui/user-name';
 import type { Task, BoardPhase } from '@/services/types';
 
 export interface RoomMember {
@@ -160,17 +162,16 @@ function Avatar({
     : '#B4B4B8';
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
-      <div
-        className="rounded-full flex items-center justify-center text-white font-[600] select-none"
-        style={{
-          width: size, height: size,
-          background: member.avatarColor,
-          fontSize: size === 24 ? 9 : 11,
+      <UserAvatar
+        user={{
+          id: member.id,
+          displayName: `${member.firstName || ''} ${member.lastName || ''}`.trim() || member.name,
+          avatarUrl: (member as any).avatarUrl,
+          initials: member.initials,
+          username: (member as any).username,
         }}
-        title={`${member.firstName} ${member.lastName}`}
-      >
-        {member.initials}
-      </div>
+        size={size}
+      />
       {showDot && (
         <span
           className="absolute -bottom-px -right-px rounded-full ring-2 ring-white"

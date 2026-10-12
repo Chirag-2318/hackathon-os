@@ -5,6 +5,8 @@ import { Users, BarChart2, Plus, Shield, User as UserIcon } from 'lucide-react';
 import { Dropdown, PairedBarRow, type ChartHue, TagChip } from './HomeDesignSystem';
 import { HomeContext } from '../home-page';
 import { useOverlay } from '@/app/providers/overlay-store';
+import { UserAvatar } from '@/components/ui/user-avatar';
+import { UserName } from '@/components/ui/user-name';
 
 interface MemberWorkload {
   userId: string;
@@ -63,12 +65,13 @@ export function TeamWorkload() {
             members.map((m) => (
               <div key={m.id} className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="size-8 rounded-full bg-[var(--color-home-tray)] flex items-center justify-center font-bold text-xs text-[var(--color-home-text-primary)] shrink-0">
-                    {m.name.charAt(0).toUpperCase()}
-                  </div>
+                  <UserAvatar
+                    user={{ name: m.name, avatarUrl: m.avatarUrl, username: (m as any).username }}
+                    size={32}
+                  />
                   <div className="flex flex-col min-w-0">
                     <span className="text-[14px] font-semibold text-[var(--color-home-text-primary)] truncate">
-                      {m.name}
+                      <UserName user={{ name: m.name, username: (m as any).username, displayName: m.name }} />
                     </span>
                     <span className="text-[12px] text-[var(--color-home-text-secondary)]">
                       {m.role}
@@ -175,7 +178,13 @@ export function TeamWorkload() {
                 onMouseMove={(e) => handleMouseMove(e, member.userId)}
               >
                 <PairedBarRow
-                  label={member.name}
+                  label={
+                    (member as any).username
+                      ? `@${(member as any).username}`
+                      : member.name && member.name.length > 12 && /^[0-9A-Z_]+$/i.test(member.name)
+                      ? `@${member.name.slice(0, 8).toLowerCase()}`
+                      : member.name
+                  }
                   status={member.status as any}
                   hue={hueMap[idx % hueMap.length]}
                   doneValue={member.done * multiplier}
@@ -198,7 +207,12 @@ export function TeamWorkload() {
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-[var(--color-home-chip-red-fg)]" />
             <span className="text-[15px] font-[500] text-[var(--color-home-text-primary)]">
-              {blockedMember.name} is currently blocked
+              {(blockedMember as any).username
+                ? `@${(blockedMember as any).username}`
+                : blockedMember.name && blockedMember.name.length > 12 && /^[0-9A-Z_]+$/i.test(blockedMember.name)
+                ? `@${blockedMember.name.slice(0, 8).toLowerCase()}`
+                : blockedMember.name}{' '}
+              is currently blocked
             </span>
           </div>
           <button

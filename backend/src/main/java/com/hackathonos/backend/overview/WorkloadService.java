@@ -25,8 +25,22 @@ public class WorkloadService {
             String avatarUrl,
             String status,
             int done,
-            int expected
-    ) {}
+            int expected,
+            String username,
+            com.hackathonos.backend.users.dto.UserSummaryDto user
+    ) {
+        public MemberWorkloadDto(
+                UUID userId,
+                String name,
+                String avatarUrl,
+                String status,
+                int done,
+                int expected
+        ) {
+            this(userId, name, avatarUrl, status, done, expected, null,
+                    userId != null ? new com.hackathonos.backend.users.dto.UserSummaryDto(userId, null, name, avatarUrl) : null);
+        }
+    }
 
     public record WorkloadResponseDto(
             List<MemberWorkloadDto> members
@@ -99,8 +113,14 @@ public class WorkloadService {
                 continue;
             }
             User u = userMap.get(m.getUserId());
-            String name = u != null && u.getName() != null ? u.getName() : "Member";
+            String username = u != null ? u.getUsername() : null;
+            String name = u != null && u.getName() != null && !u.getName().isBlank()
+                    ? u.getName()
+                    : (username != null ? "@" + username : "Member");
             String avatarUrl = u != null ? u.getAvatarUrl() : null;
+            com.hackathonos.backend.users.dto.UserSummaryDto userSummary = u != null
+                    ? com.hackathonos.backend.users.dto.UserSummaryDto.from(u, name)
+                    : null;
 
             List<Task> userTasks = tasksByUser.getOrDefault(m.getUserId(), Collections.emptyList());
             MemberStatusCalculator.MemberStatusResult statusResult =
@@ -120,7 +140,7 @@ public class WorkloadService {
                 }
             }
 
-            result.add(new MemberWorkloadDto(m.getUserId(), name, avatarUrl, statusResult.status(), done, expected));
+            result.add(new MemberWorkloadDto(m.getUserId(), name, avatarUrl, statusResult.status(), done, expected, username, userSummary));
         }
 
         return new WorkloadResponseDto(result);

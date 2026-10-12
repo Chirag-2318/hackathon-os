@@ -1,6 +1,7 @@
 package com.hackathonos.backend.users.dto;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public record UserDetailDto(
@@ -16,5 +17,14 @@ public record UserDetailDto(
         String theme,
         String plan,
         Instant createdAt,
-        long unreadNotifications
+        long unreadNotifications,
+        String username,
+        String avatarType,
+        Integer avatarPreset,
+        List<String> roleTags,
+        String experienceLevel,
+        String goal,
+        List<String> techStack,
+        boolean onboardingCompleted,
+        Instant onboardedAt
 ) {}

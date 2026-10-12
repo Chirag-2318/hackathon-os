@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { UserAvatar } from '@/components/primitives/avatar-stack';
+import { UserAvatar } from '@/components/ui/user-avatar';
+import { UserName } from '@/components/ui/user-name';
 import { useParams } from 'react-router-dom';
 import { useOverlay } from '@/app/providers/overlay-store';
 import { Button } from '@/components/ui/button';
@@ -49,9 +50,11 @@ export function TeamList({ members }: TeamListProps) {
         {displayMembers.map(member => (
           <div key={member.id} className="flex items-center justify-between py-4 min-w-0">
             <div className="flex items-center gap-3 min-w-0 flex-1">
-              <UserAvatar initials={member.avatarId} size="md" />
+              <UserAvatar user={member} size={36} />
               <div className="flex flex-col min-w-0">
-                <span className="text-body-strong truncate">{member.name}</span>
+                <span className="text-body-strong truncate">
+                  <UserName user={member} showDisplayName={true} />
+                </span>
                 <div className="flex gap-1 flex-wrap mt-1">
                   {isLeaderOrCaptain && member.id !== String(user?.id) ? (
                     <Select 

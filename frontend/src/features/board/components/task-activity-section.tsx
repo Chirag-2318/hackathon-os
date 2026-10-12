@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
+import { UserAvatar } from '@/components/ui/user-avatar';
+import { UserName } from '@/components/ui/user-name';
 import type { Task, RoomMember } from '@/services/types';
 
 export interface TaskActivitySectionProps {
@@ -92,16 +94,25 @@ export function TaskActivitySection({
             const author = members.find((m) => m.id === c.authorId);
             return (
               <div key={c.id} className="flex items-start gap-2.5 text-xs">
-                <div
-                  className="size-6 rounded-full text-white text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5"
-                  style={{ backgroundColor: author?.avatarColor || '#6366F1' }}
-                >
-                  {author?.initials || 'TM'}
+                <div className="size-6 rounded-full overflow-hidden shrink-0 mt-0.5">
+                  <UserAvatar
+                    user={{
+                      ...author,
+                      avatarUrl: (author as any)?.avatarUrl || (author as any)?.avatar,
+                    }}
+                    size={24}
+                  />
                 </div>
                 <div className="flex-1 bg-muted/40 p-2.5 rounded-xl border border-border/40">
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <span className="font-semibold text-foreground">
-                      {author?.displayName || 'Team Member'}
+                      <UserName
+                        user={{
+                          ...author,
+                          name: author?.name || (author as any)?.displayName,
+                        }}
+                        showDisplayName={true}
+                      />
                     </span>
                     <span className="text-muted-foreground text-[10px]">
                       {c.createdAt ? formatDistanceToNow(new Date(c.createdAt), { addSuffix: true }) : ''}

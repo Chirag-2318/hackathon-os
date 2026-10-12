@@ -13,6 +13,15 @@ export interface CurrentUserDto {
   theme?: string;
   plan?: string;
   unreadNotifications?: number;
+  username?: string;
+  avatarType?: 'PRESET' | 'CUSTOM';
+  avatarPreset?: number;
+  roleTags?: string[];
+  experienceLevel?: 'FIRST' | 'LOW' | 'MID' | 'HIGH';
+  goal?: 'WIN' | 'LEARN' | 'PORTFOLIO' | 'ALL';
+  techStack?: string[];
+  onboardingCompleted?: boolean;
+  onboardedAt?: string;
 }
 
 export const authApi = {

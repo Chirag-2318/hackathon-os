@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
+import { UserAvatar } from '@/components/ui/user-avatar';
 
 export interface JiraCardProps {
   task: Task;
@@ -210,14 +211,16 @@ export function JiraCard({
           {/* Assignee Avatar (24px) */}
           {assignee ? (
             <div
-              className="size-6 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 flex items-center justify-center text-[10px] font-bold shrink-0 border border-border/40"
+              className="size-6 rounded-full overflow-hidden shrink-0 border border-border/40"
               title={assignee.name}
             >
-              {assignee.avatar ? (
-                <img src={assignee.avatar} alt={assignee.name || 'Assignee'} className="size-full rounded-full object-cover" />
-              ) : (
-                (assignee.name || 'TM').slice(0, 2).toUpperCase()
-              )}
+              <UserAvatar
+                user={{
+                  ...assignee,
+                  avatarUrl: (assignee as any).avatarUrl || (assignee as any).avatar,
+                }}
+                size={24}
+              />
             </div>
           ) : (
             <div

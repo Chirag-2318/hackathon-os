@@ -1,5 +1,7 @@
 package com.hackathonos.backend.users;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hackathonos.backend.users.dto.ApiKeyDto;
 import com.hackathonos.backend.users.dto.UserDetailDto;
 import com.hackathonos.backend.users.dto.UserSettingsDto;
@@ -11,6 +13,23 @@ import java.util.List;
 
 @Component
 public class UserMapper {
+
+    private final ObjectMapper objectMapper;
+
+    public UserMapper(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
+    }
+
+    public List<String> parseJsonList(String json) {
+        if (json == null || json.isBlank() || json.equals("[]")) {
+            return Collections.emptyList();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
+    }
 
     public UserDetailDto toDetailDto(User user, UserSettings settings, long unreadCount) {
         String effectiveName = (settings != null && settings.getDisplayName() != null && !settings.getDisplayName().isBlank())
@@ -36,7 +55,16 @@ public class UserMapper {
                 theme,
                 plan,
                 user.getCreatedAt(),
-                unreadCount
+                unreadCount,
+                user.getUsername(),
+                user.getAvatarType(),
+                user.getAvatarPreset(),
+                parseJsonList(user.getRoleTags()),
+                user.getExperienceLevel(),
+                user.getGoal(),
+                parseJsonList(user.getTechStack()),
+                user.isOnboardingCompleted(),
+                user.getOnboardedAt()
         );
     }
 

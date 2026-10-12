@@ -5,6 +5,8 @@ import com.hackathonos.backend.common.config.AppProperties;
 import com.hackathonos.backend.common.error.BadRequestException;
 import com.hackathonos.backend.common.error.ConflictException;
 import com.hackathonos.backend.common.error.NotFoundException;
+import com.hackathonos.backend.common.error.PayloadTooLargeException;
+import com.hackathonos.backend.common.error.TooManyRequestsException;
 import com.hackathonos.backend.common.security.SecretCipher;
 import com.hackathonos.backend.members.RoomMember;
 import com.hackathonos.backend.members.RoomMemberRepository;
@@ -18,14 +20,17 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class UserService {
@@ -380,5 +385,157 @@ public class UserService {
         user.setLogin(null);
         user.setDeletedAt(Instant.now());
         userRepository.save(user);
+    }
+
+    private final Map<UUID, List<Long>> usernameRateLimits = new ConcurrentHashMap<>();
+
+    private void checkRateLimit(UUID userId) {
+        if (userId == null) return;
+        long now = System.currentTimeMillis();
+        long window = now - 60_000L;
+        List<Long> timestamps = usernameRateLimits.compute(userId, (k, list) -> {
+            if (list == null) list = new ArrayList<>();
+            list.removeIf(t -> t < window);
+            list.add(now);
+            return list;
+        });
+        if (timestamps.size() > 30) {
+            throw new TooManyRequestsException("Too many username checks. Please wait a moment.");
+        }
+    }
+
+    public UsernameAvailableResponse checkUsernameAvailability(String username, UUID currentUserId) {
+        if (currentUserId != null) {
+            checkRateLimit(currentUserId);
+        }
+        if (username == null || username.isBlank()) {
+            return UsernameAvailableResponse.fail("Username cannot be empty");
+        }
+        String normalized = username.trim().toLowerCase();
+        if (normalized.length() < 3 || normalized.length() > 20) {
+            return UsernameAvailableResponse.fail("Must be between 3 and 20 characters");
+        }
+        if (!Character.isLetter(normalized.charAt(0))) {
+            return UsernameAvailableResponse.fail("Must start with a letter");
+        }
+        if (!normalized.matches("^[a-z0-9_.]+$")) {
+            return UsernameAvailableResponse.fail("Only letters, numbers, underscores and dots");
+        }
+        if (normalized.contains("..") || normalized.contains("__") || normalized.contains("._") || normalized.contains("_.")) {
+            return UsernameAvailableResponse.fail("No consecutive separators");
+        }
+
+        Set<String> reserved = Set.of(
+                "admin", "root", "support", "system", "hackathonos", "api", "help",
+                "null", "undefined", "me", "team", "rooms", "auth", "settings",
+                "login", "signup", "user", "users", "bot", "mod", "moderator",
+                "security", "staff", "official"
+        );
+        if (reserved.contains(normalized)) {
+            return UsernameAvailableResponse.fail("That handle is reserved");
+        }
+
+        Optional<User> existing = userRepository.findByUsernameIgnoreCase(normalized);
+        if (existing.isPresent() && (currentUserId == null || !existing.get().getId().equals(currentUserId))) {
+            return UsernameAvailableResponse.fail("Someone's already using that");
+        }
+
+        return UsernameAvailableResponse.ok();
+    }
+
+    public AvatarUploadResponse uploadAvatar(User user, MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("EMPTY_FILE", "Please choose an image file to upload");
+        }
+        if (file.getSize() > 2 * 1024 * 1024) {
+            throw new PayloadTooLargeException("PAYLOAD_TOO_LARGE", "Avatar file exceeds 2MB limit");
+        }
+
+        byte[] bytes;
+        try {
+            bytes = file.getBytes();
+        } catch (IOException e) {
+            throw new BadRequestException("FILE_READ_ERROR", "Could not read uploaded file");
+        }
+
+        boolean isPng = bytes.length >= 8 &&
+                (bytes[0] & 0xFF) == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47;
+        boolean isJpeg = bytes.length >= 3 &&
+                (bytes[0] & 0xFF) == 0xFF && (bytes[1] & 0xFF) == 0xD8 && (bytes[2] & 0xFF) == 0xFF;
+        boolean isWebp = bytes.length >= 12 &&
+                bytes[0] == 'R' && bytes[1] == 'I' && bytes[2] == 'F' && bytes[3] == 'F' &&
+                bytes[8] == 'W' && bytes[9] == 'E' && bytes[10] == 'B' && bytes[11] == 'P';
+
+        if (!isPng && !isJpeg && !isWebp) {
+            throw new BadRequestException("INVALID_IMAGE_TYPE", "Only PNG, JPEG, and WebP images are allowed. SVG and GIF are rejected.");
+        }
+
+        File uploadDir = new File(appProperties.getUploadDir(), "avatars");
+        if (!uploadDir.exists() && !uploadDir.mkdirs()) {
+            // directory creation failed or already exists
+        }
+
+        String filename = UUID.randomUUID().toString() + ".webp";
+        File dest = new File(uploadDir, filename);
+        try {
+            Files.write(dest.toPath(), bytes);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to save avatar image", e);
+        }
+
+        String avatarUrl = "/uploads/avatars/" + filename;
+        user.setAvatarUrl(avatarUrl);
+        user.setAvatarType("CUSTOM");
+        userRepository.save(user);
+
+        return new AvatarUploadResponse(avatarUrl);
+    }
+
+    @Transactional
+    public UserDetailDto completeOnboarding(User user, OnboardingRequest request) {
+        if (request == null || request.username() == null || request.username().isBlank()) {
+            throw new BadRequestException("INVALID_ONBOARDING", "Username is required");
+        }
+        String normalizedUsername = request.username().trim().toLowerCase();
+        UsernameAvailableResponse check = checkUsernameAvailability(normalizedUsername, user.getId());
+        if (!check.available()) {
+            throw new ConflictException("USERNAME_UNAVAILABLE", check.reason());
+        }
+
+        List<String> roleTags = request.roleTags() != null ? request.roleTags() : List.of();
+        if (roleTags.size() > 3) {
+            throw new BadRequestException("TOO_MANY_ROLES", "You can pick at most 3 roles");
+        }
+
+        List<String> techStack = request.techStack() != null ? request.techStack() : List.of();
+        if (techStack.size() > 8) {
+            throw new BadRequestException("TOO_MANY_SKILLS", "You can pick at most 8 stack items");
+        }
+
+        user.setUsername(normalizedUsername);
+        user.setAvatarType(request.avatarType() != null ? request.avatarType() : "PRESET");
+        user.setAvatarPreset(request.avatarPreset());
+        if (request.avatarUrl() != null && !request.avatarUrl().isBlank()) {
+            user.setAvatarUrl(request.avatarUrl());
+        }
+        try {
+            user.setRoleTags(objectMapper.writeValueAsString(roleTags));
+            user.setTechStack(objectMapper.writeValueAsString(techStack));
+        } catch (Exception e) {
+            user.setRoleTags("[]");
+            user.setTechStack("[]");
+        }
+        user.setExperienceLevel(request.experienceLevel());
+        user.setGoal(request.goal());
+        user.setOnboardingCompleted(true);
+        user.setOnboardedAt(Instant.now());
+
+        try {
+            user = userRepository.saveAndFlush(user);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            throw new ConflictException("USERNAME_TAKEN", "That handle was just claimed by someone else. Please choose another one.");
+        }
+
+        return getMe(user);
     }
 }

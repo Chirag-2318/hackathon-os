@@ -1,6 +1,8 @@
 package com.hackathonos.backend.crowdcheck;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.util.UUID;
 
 @Entity
@@ -20,6 +22,7 @@ public class CrowdRow {
     @Column(name = "title", nullable = false, length = 120)
     private String title;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "competitors", columnDefinition = "jsonb")
     private String competitors; // JSON list
 
