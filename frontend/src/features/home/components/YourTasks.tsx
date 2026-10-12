@@ -1,5 +1,8 @@
+
 import React, { useState, useContext, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { FileText, Plus, CheckCircle2, ArrowRight } from 'lucide-react';
 import { TagChip, TimeChip, TrayCard, Checkbox } from './HomeDesignSystem';
 import { HomeContext } from '../home-page';
 import { boardService } from '@/services/boardService';
@@ -148,10 +151,85 @@ function CompactTaskRow({
 }
 
 export function YourTasks() {
+  const navigate = useNavigate();
   const { homeData } = useContext(HomeContext);
-  const roomId = homeData?.selected?.roomId;
-  const rawItems = homeData?.selected?.myTasks?.items || [];
+  const selected = homeData?.selected;
+  const stage = (selected?.stage || '').toLowerCase();
+  const isPlanning = selected?.variant === 'planning' || ['brief', 'ideate', 'plan'].includes(stage);
+  const roomId = selected?.roomId || selected?.id;
 
+  // In Planning mode, render Brief card
+  if (isPlanning) {
+    const brief = selected?.brief;
+    const isConfirmed = Boolean(selected?.briefDone || brief?.confirmed);
+    const problemStatement = brief?.fields?.problemStatement || brief?.problemStatement || '';
+
+    return (
+      <TrayCard
+        footerLeftLabel="Source of truth"
+        footerRightLabel=""
+        footerRightValue={isConfirmed ? 'Confirmed' : 'Pending brief'}
+        progressPercent={isConfirmed ? 100 : 25}
+      >
+        <div className="p-6 pb-2 border-b border-[var(--color-home-hairline)] flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FileText className="w-5 h-5 text-[var(--color-home-text-secondary)]" />
+            <h2 className="text-[20px] font-[600] text-[var(--color-home-text-primary)]">
+              Brief
+            </h2>
+          </div>
+          {isConfirmed ? (
+            <TagChip label="CONFIRMED" color="green" />
+          ) : (
+            <TagChip label="REQUIRED" color="amber" />
+          )}
+        </div>
+
+        <div className="flex flex-col min-h-[180px] p-6 justify-center">
+          {isConfirmed && problemStatement ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2 text-emerald-600 text-xs font-semibold">
+                <CheckCircle2 className="size-4" /> Confirmed brief active
+              </div>
+              <p className="text-[14px] text-[var(--color-home-text-primary)] line-clamp-3 leading-relaxed">
+                {problemStatement}
+              </p>
+              <button
+                type="button"
+                onClick={() => roomId && navigate(`/app/room/${roomId}/brief`)}
+                className="mt-2 text-xs font-semibold text-[var(--color-home-accent)] hover:underline inline-flex items-center gap-1 cursor-pointer self-start"
+              >
+                View full brief <ArrowRight className="size-3" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center text-center gap-3 py-2">
+              <div className="size-10 rounded-full bg-[var(--color-home-tray)] flex items-center justify-center text-[var(--color-home-accent)]">
+                <FileText className="size-5" />
+              </div>
+              <div>
+                <p className="text-[16px] font-[600] text-[var(--color-home-text-primary)] mb-1">
+                  Add the hackathon brief
+                </p>
+                <p className="text-[13px] text-[var(--color-home-text-secondary)] max-w-xs">
+                  Import the hackathon rules, rubric weights, and submission requirements.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => roomId && navigate(`/app/room/${roomId}/brief`)}
+                className="mt-1 h-9 px-5 rounded-[var(--radius-home-btn)] bg-[var(--color-home-text-primary)] text-white text-xs font-semibold hover:opacity-90 transition-opacity inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="size-3.5" /> Add brief
+              </button>
+            </div>
+          )}
+        </div>
+      </TrayCard>
+    );
+  }
+
+  const rawItems = selected?.myTasks?.items || [];
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
 
   const tasks: HomeTaskItem[] = rawItems

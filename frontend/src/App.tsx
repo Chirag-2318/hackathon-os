@@ -19,6 +19,7 @@ function showThrottledErrorToast(requestType: string, message: string) {
 const queryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: (error: any, query) => {
+      if (error?.name === 'AbortError') return;
       const queryType = Array.isArray(query.queryKey) ? String(query.queryKey[0]) : 'query';
       const status = error?.status ?? error?.response?.status;
       if (status !== 401) {

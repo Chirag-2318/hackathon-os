@@ -13,6 +13,7 @@ import java.util.UUID;
 @Repository
 public interface IdeaRepository extends JpaRepository<Idea, UUID> {
     List<Idea> findByRoomIdOrderByCreatedAtDesc(UUID roomId);
+    List<Idea> findByRoomIdAndStatus(UUID roomId, String status);
     List<Idea> findByRoomIdAndStatusOrderByCreatedAtDesc(UUID roomId, String status);
     Optional<Idea> findByIdAndRoomId(UUID id, UUID roomId);
     Optional<Idea> findByRoomIdAndPrimaryTrue(UUID roomId);

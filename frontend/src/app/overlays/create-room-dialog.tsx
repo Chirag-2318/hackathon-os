@@ -188,6 +188,8 @@ export function CreateRoomDialogOverlay() {
     }) => roomService.createRoom(payload),
     onSuccess: (newRoom) => {
       setIsSuccess(true);
+      queryClient.setQueryData(['room', newRoom.id], newRoom);
+      queryClient.setQueryData(['room', String(newRoom.id)], newRoom);
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       queryClient.invalidateQueries({ queryKey: ['home'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });

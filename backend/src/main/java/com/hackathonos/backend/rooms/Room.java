@@ -48,6 +48,12 @@ public class Room {
     @Column(name = "plan_done", nullable = false)
     private boolean planDone = false;
 
+    @Column(name = "plan_started_at")
+    private Instant planStartedAt;
+
+    @Column(name = "plan_notes", columnDefinition = "TEXT")
+    private String planNotes;
+
     @Column(name = "build_started_at")
     private Instant buildStartedAt;
 
@@ -131,6 +137,12 @@ public class Room {
 
     public boolean isPlanDone() { return planDone; }
     public void setPlanDone(boolean planDone) { this.planDone = planDone; }
+
+    public Instant getPlanStartedAt() { return planStartedAt; }
+    public void setPlanStartedAt(Instant planStartedAt) { this.planStartedAt = planStartedAt; }
+
+    public String getPlanNotes() { return planNotes; }
+    public void setPlanNotes(String planNotes) { this.planNotes = planNotes; }
 
     public Instant getBuildStartedAt() { return buildStartedAt; }
     public void setBuildStartedAt(Instant buildStartedAt) { this.buildStartedAt = buildStartedAt; }

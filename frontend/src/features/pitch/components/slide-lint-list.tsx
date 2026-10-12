@@ -23,9 +23,9 @@ interface SlideLintListProps {
   onSelectSlide?: (slideId: string) => void;
 }
 
-export function SlideLintList({ issues, onSelectSlide }: SlideLintListProps) {
+export function SlideLintList({ issues = [], onSelectSlide }: SlideLintListProps) {
   // Filter to only known lint types
-  const validIssues = issues.filter((i) => i.type in LINT_LABELS);
+  const validIssues = (Array.isArray(issues) ? issues : []).filter((i) => i && i.type in LINT_LABELS);
 
   return (
     <Card className="p-4">

@@ -142,7 +142,7 @@ public class TeamService {
             roles.add(new RoleDistributionDto(entry.getKey(), entry.getValue()));
         }
 
-        TeamCharterSummaryDto charter = computeCharterSummary(roomId, members.size(), viewer.getId());
+        TeamCharterSummaryDto charter = computeCharterSummary(roomId, members.size(), viewer != null ? viewer.getId() : null);
         return new TeamResponseDto(memberDtos, coverage, roles, charter, clock.instant());
     }
 
@@ -212,7 +212,7 @@ public class TeamService {
         MyCharterDto mine = null;
 
         for (TeamCharterResponse r : responses) {
-            String g = r.getGoal().toUpperCase();
+            String g = r.getGoal() != null ? r.getGoal().toUpperCase() : "WIN";
             if ("WIN".equals(g)) win++;
             else if ("LEARN".equals(g)) learn++;
             else if ("PORTFOLIO".equals(g)) portfolio++;
@@ -221,7 +221,7 @@ public class TeamService {
             totalHours += r.getHoursAvailable();
             if (r.isNormsAcknowledged()) normsAck++;
 
-            if (r.getUserId().equals(currentUserId)) {
+            if (currentUserId != null && currentUserId.equals(r.getUserId())) {
                 mine = new MyCharterDto(r.getGoal(), r.getHoursAvailable(), r.isNormsAcknowledged());
             }
         }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertCircle, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { githubService } from '@/services/githubService';
 import type {
@@ -18,6 +19,7 @@ import { NotConnectedView } from './components/not-connected-view';
 export function GithubPage() {
   const { roomId = '' } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [data, setData] = useState<GithubDataComputed | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,6 +45,24 @@ export function GithubPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const ghStatus = searchParams.get('github');
+    if (ghStatus === 'connected') {
+      toast.success('GitHub account connected successfully!');
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('github');
+      setSearchParams(nextParams, { replace: true });
+      loadData();
+    } else if (ghStatus === 'error') {
+      const reason = searchParams.get('reason') || 'unknown';
+      toast.error(`Failed to connect GitHub account (${reason})`);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('github');
+      nextParams.delete('reason');
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, loadData]);
 
   // Handlers
   const handleSync = async () => {
@@ -179,7 +199,7 @@ export function GithubPage() {
   if (!data?.repo?.connected) {
     return (
       <div className="flex-1 overflow-y-auto bg-background p-6">
-        <NotConnectedView onConnect={handleConnectRepo} />
+        <NotConnectedView roomId={roomId} onConnect={handleConnectRepo} />
       </div>
     );
   }

@@ -7,7 +7,9 @@ interface ShotListTableProps {
   shots: DemoShot[];
 }
 
-export function ShotListTable({ shots }: ShotListTableProps) {
+export function ShotListTable({ shots = [] }: ShotListTableProps) {
+  const safeShots = Array.isArray(shots) ? shots : [];
+
   return (
     <TooltipProvider>
       <Card className="overflow-hidden">
@@ -22,28 +24,41 @@ export function ShotListTable({ shots }: ShotListTableProps) {
               </tr>
             </thead>
             <tbody>
-              {shots.map((shot) => (
-                <tr key={shot.id} className="border-b last:border-b-0 hover:bg-lav-50 dark:hover:bg-slate-800/30">
-                  <td className="px-4 py-3 font-medium tabular-nums">{shot.shot}</td>
-                  <td className="px-4 py-3">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="truncate block max-w-[200px]">{shot.screen}</span>
-                      </TooltipTrigger>
-                      <TooltipContent>{shot.screen}</TooltipContent>
-                    </Tooltip>
+              {safeShots.map((shot: any, idx: number) => {
+                const shotNum = shot.shot ?? shot.position ?? idx + 1;
+                const screen = shot.screen ?? shot.title ?? `Shot ${shotNum}`;
+                const narration = shot.narration ?? shot.notes ?? '—';
+                const duration = shot.lengthSeconds ?? shot.durationSec ?? 0;
+                return (
+                  <tr key={shot.id || idx} className="border-b last:border-b-0 hover:bg-lav-50 dark:hover:bg-slate-800/30">
+                    <td className="px-4 py-3 font-medium tabular-nums">{shotNum}</td>
+                    <td className="px-4 py-3">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="truncate block max-w-[200px]">{screen}</span>
+                        </TooltipTrigger>
+                        <TooltipContent>{screen}</TooltipContent>
+                      </Tooltip>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="truncate block max-w-[200px] text-slate-500">{narration}</span>
+                        </TooltipTrigger>
+                        <TooltipContent>{narration}</TooltipContent>
+                      </Tooltip>
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">{duration}s</td>
+                  </tr>
+                );
+              })}
+              {safeShots.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-4 text-center text-xs text-slate-400">
+                    No shots added yet.
                   </td>
-                  <td className="px-4 py-3">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="truncate block max-w-[200px] text-slate-500">{shot.narration}</span>
-                      </TooltipTrigger>
-                      <TooltipContent>{shot.narration}</TooltipContent>
-                    </Tooltip>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">{shot.lengthSeconds}s</td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

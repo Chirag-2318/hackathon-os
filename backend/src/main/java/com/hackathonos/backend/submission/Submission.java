@@ -1,6 +1,8 @@
 package com.hackathonos.backend.submission;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -15,9 +17,11 @@ public class Submission {
     @Column(name = "status", nullable = false, length = 30)
     private String status; // 'DRAFT', 'VERIFIED', 'SUBMITTED'
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "draft", columnDefinition = "jsonb")
     private String draft; // JSON object: whatItDoes, whyItMatters, howBuilt, challenges, whatsNext
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "form_fields", columnDefinition = "jsonb")
     private String formFields; // JSON list
 

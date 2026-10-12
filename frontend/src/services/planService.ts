@@ -21,6 +21,17 @@ export const planService = {
     return apiFetch<PlanData>(`/api/v1/rooms/${roomId}/plan`);
   },
 
+  async startPlan(roomId: string): Promise<void> {
+    await apiFetch<void>(`/api/v1/rooms/${roomId}/plan/start`, { method: 'POST' });
+  },
+
+  async updatePlanNotes(roomId: string, notes: string): Promise<void> {
+    await apiFetch<void>(`/api/v1/rooms/${roomId}/plan/notes`, {
+      method: 'PUT',
+      body: JSON.stringify({ notes }),
+    });
+  },
+
   async getPlanState(roomId: string): Promise<PlanState> {
     const plan = await this.getPlan(roomId);
     const stepsMap: any = {

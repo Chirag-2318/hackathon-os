@@ -60,7 +60,7 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
   });
 
   const { data: planState } = useQuery({
-    queryKey: ['plan', roomId],
+    queryKey: ['plan-state', roomId],
     queryFn: () => planService.getPlanState(roomId),
   });
 
@@ -94,11 +94,24 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
   });
 
   // Calculate metrics
-  const approvedIdeas = ideas.filter(i => i.status === 'approved');
-  const pendingIdeas = ideas.filter(i => i.status === 'pending');
-  const rejectedIdeas = ideas.filter(i => i.status === 'rejected');
-  const prepDoneCount = prepItems.filter(p => p.done).length;
-  const prepTotalCount = prepItems.length;
+  const ideaList = Array.isArray(ideas)
+    ? ideas
+    : Array.isArray((ideas as any)?.ideas)
+    ? (ideas as any).ideas
+    : Array.isArray((ideas as any)?.items)
+    ? (ideas as any).items
+    : [];
+  const approvedIdeas = ideaList.filter((i: any) => i.status === 'approved');
+  const pendingIdeas = ideaList.filter((i: any) => i.status === 'pending');
+  const rejectedIdeas = ideaList.filter((i: any) => i.status === 'rejected');
+
+  const prepList = Array.isArray(prepItems)
+    ? prepItems
+    : Array.isArray((prepItems as any)?.checklist)
+    ? (prepItems as any).checklist
+    : [];
+  const prepDoneCount = (prepItems as any)?.progress?.done ?? prepList.filter((p: any) => p.done).length;
+  const prepTotalCount = (prepItems as any)?.progress?.total ?? (prepList.length || 6);
 
   const validatedSteps = ['prd', 'tech', 'phases', 'tasks', 'demo'].filter(
     k => planState?.steps?.[k as keyof typeof planState.steps]?.validated

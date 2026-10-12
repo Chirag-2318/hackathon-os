@@ -63,16 +63,28 @@ export function BoardPage() {
   const loadData = async (silent = false) => {
     if (!roomId) return;
     try {
-      const [boardData, roomData] = await Promise.all([
+      const [boardData, memberList] = await Promise.all([
         boardService.getBoard(roomId),
-        roomService.getRoom(roomId),
+        roomService.getMembers(roomId).catch(() => []),
       ]);
       setTasks(boardData.tasks || []);
       setPhases(boardData.phases || []);
       setBoardSummary(boardData.summary || null);
       if (typeof boardData.hoursLeft === 'number') setHoursLeft(boardData.hoursLeft);
       if (boardData.currentPhase?.name) setCurrentPhaseName(boardData.currentPhase.name);
-      setMembers((roomData as any)?.members || []);
+
+      const resolvedMembers: RoomMember[] = (memberList && memberList.length > 0)
+        ? memberList
+        : (boardData.members || []).map((m: any, idx: number) => ({
+            id: String(m.userId || m.id || ''),
+            displayName: m.name || m.displayName || 'Team Member',
+            initials: m.initials || (m.name || 'TM').slice(0, 2).toUpperCase(),
+            avatarColor: ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#6366f1'][idx % 6],
+            role: 'member' as const,
+            roleTags: [],
+            avatarUrl: m.avatarUrl,
+          }));
+      setMembers(resolvedMembers);
     } catch (err) {
       console.error('Failed to load board data:', err);
     } finally {
@@ -168,6 +180,21 @@ export function BoardPage() {
         toast.error(err?.message || 'Failed to update status');
       }
     }
+  };
+
+  // Double-click shortcut to quickly advance a task: To Do -> In Progress -> Done
+  const handleAdvanceStatus = async (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const nextStatus: TaskStatus = task.status === 'todo' ? 'inprogress' : task.status === 'inprogress' ? 'done' : 'todo';
+    await handleStatusChange(taskId, nextStatus);
+  };
+
+  // Drag-and-drop on column
+  const handleDropTask = async (taskId: string, targetStatus: TaskStatus) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task || task.status === targetStatus) return;
+    await handleStatusChange(taskId, targetStatus);
   };
 
   // Assign to me
@@ -475,6 +502,10 @@ export function BoardPage() {
                 onToggleBlock={handleToggleBlock}
                 onInlineCreate={handleInlineCreate}
                 onPointerDownDrag={handlePointerDownDrag}
+                onDropTask={handleDropTask}
+                onAdvanceTaskStatus={handleAdvanceStatus}
+                onDragStartTask={setDraggingTaskId}
+                onDragEndTask={() => setDraggingTaskId(null)}
               />
             </div>
 
@@ -494,6 +525,10 @@ export function BoardPage() {
                 onToggleBlock={handleToggleBlock}
                 onInlineCreate={handleInlineCreate}
                 onPointerDownDrag={handlePointerDownDrag}
+                onDropTask={handleDropTask}
+                onAdvanceTaskStatus={handleAdvanceStatus}
+                onDragStartTask={setDraggingTaskId}
+                onDragEndTask={() => setDraggingTaskId(null)}
               />
             </div>
 
@@ -513,6 +548,10 @@ export function BoardPage() {
                 onToggleBlock={handleToggleBlock}
                 onInlineCreate={handleInlineCreate}
                 onPointerDownDrag={handlePointerDownDrag}
+                onDropTask={handleDropTask}
+                onAdvanceTaskStatus={handleAdvanceStatus}
+                onDragStartTask={setDraggingTaskId}
+                onDragEndTask={() => setDraggingTaskId(null)}
               />
             </div>
           </div>

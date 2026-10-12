@@ -122,16 +122,16 @@ public class BriefService {
         if (req.rawText() != null) brief.setRawText(req.rawText());
 
         if (fields != null) {
-            brief.setProblemStatement(fields.problemStatement());
-            brief.setTargetAudience(fields.targetAudience());
+            brief.setProblemStatement(fields.problemStatement() != null ? fields.problemStatement() : "");
+            brief.setTargetAudience(fields.targetAudience() != null ? fields.targetAudience() : "");
             brief.setDeadlines(briefMapper.toJson(fields.deadlines()));
-            brief.setEligibility(fields.eligibility());
-            brief.setTechRules(fields.techRules());
-            brief.setAiPolicy(fields.aiPolicy());
-            brief.setJudgingFormat(fields.judgingFormat());
-            brief.setDeliverables(briefMapper.toJson(fields.deliverables()));
-            brief.setTracksAndPrizes(briefMapper.toJson(fields.tracksAndPrizes()));
-            brief.setRisks(briefMapper.toJson(fields.risks()));
+            brief.setEligibility(fields.eligibility() != null ? fields.eligibility() : "");
+            brief.setTechRules(fields.techRules() != null ? fields.techRules() : "");
+            brief.setAiPolicy(fields.aiPolicy() != null ? fields.aiPolicy() : "");
+            brief.setJudgingFormat(fields.judgingFormat() != null ? fields.judgingFormat() : "");
+            brief.setDeliverables(briefMapper.toJson(fields.deliverables() != null ? fields.deliverables() : Collections.emptyList()));
+            brief.setTracksAndPrizes(briefMapper.toJson(fields.tracksAndPrizes() != null ? fields.tracksAndPrizes() : Collections.emptyList()));
+            brief.setRisks(briefMapper.toJson(fields.risks() != null ? fields.risks() : Collections.emptyList()));
         } else if (req.risks() != null) {
             brief.setRisks(briefMapper.toJson(req.risks()));
         }
@@ -187,8 +187,8 @@ public class BriefService {
     public BriefResponseDto setLinkSource(UUID roomId, String url, User user) {
         roomAccess.requireLeader(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
-        if (room.getBuildStartedAt() != null || room.isIdeateDone()) {
-            throw new ConflictException("BRIEF_LOCKED", "Cannot modify brief source once ideation or build has started");
+        if (room.getBuildStartedAt() != null || room.getPlanStartedAt() != null) {
+            throw new ConflictException("BRIEF_LOCKED", "Cannot modify brief source once planning or build has started");
         }
 
         String rawText = ssrfGuard.fetchReadableText(url);
@@ -213,8 +213,8 @@ public class BriefService {
     public BriefResponseDto setPdfSource(UUID roomId, MultipartFile file, User user) {
         roomAccess.requireLeader(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
-        if (room.getBuildStartedAt() != null || room.isIdeateDone()) {
-            throw new ConflictException("BRIEF_LOCKED", "Cannot modify brief source once ideation or build has started");
+        if (room.getBuildStartedAt() != null || room.getPlanStartedAt() != null) {
+            throw new ConflictException("BRIEF_LOCKED", "Cannot modify brief source once planning or build has started");
         }
 
         byte[] bytes;
@@ -264,6 +264,118 @@ public class BriefService {
     }
 
     /**
+     * Ingests up to 5 images (PNG, JPG, JPEG, WEBP) up to 10MB each, calls vision AI to extract text, and saves files.
+     */
+    @Transactional
+    public BriefResponseDto setImagesSource(UUID roomId, List<MultipartFile> files, User user) {
+        roomAccess.requireLeader(roomId, user);
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        if (room.getBuildStartedAt() != null || room.getPlanStartedAt() != null) {
+            throw new ConflictException("BRIEF_LOCKED", "Cannot modify brief source once planning or build has started");
+        }
+
+        if (files == null || files.isEmpty()) {
+            throw new BadRequestException("INVALID_FILES", "Please upload at least one image");
+        }
+        if (files.size() > 5) {
+            throw new BadRequestException("TOO_MANY_FILES", "Cannot upload more than 5 images");
+        }
+
+        List<String> allowedTypes = List.of("image/png", "image/jpeg", "image/jpg", "image/webp");
+        long maxSizeBytes = 10 * 1024 * 1024; // 10MB
+        StringBuilder combinedText = new StringBuilder();
+
+        for (MultipartFile file : files) {
+            if (file.isEmpty()) continue;
+            String contentType = file.getContentType();
+            if (contentType == null || !allowedTypes.contains(contentType.toLowerCase())) {
+                throw new BadRequestException("INVALID_FILE_TYPE", "Only PNG, JPG, JPEG, and WEBP images are supported");
+            }
+            if (file.getSize() > maxSizeBytes) {
+                throw new BadRequestException("FILE_TOO_LARGE", "Each image must be at most 10MB");
+            }
+
+            byte[] bytes;
+            try {
+                bytes = file.getBytes();
+            } catch (Exception e) {
+                throw new BadRequestException("READ_FAILED", "Failed to read uploaded image");
+            }
+
+            String extracted = aiService.completeImage(
+                    user.getId(),
+                    "Extract all text from this image in reading order as plain text.",
+                    contentType,
+                    bytes
+            );
+            if (extracted != null && !extracted.isBlank()) {
+                if (!combinedText.isEmpty()) combinedText.append("\n\n");
+                combinedText.append(extracted.trim());
+            }
+
+            String randomName = UUID.randomUUID() + "_" + (file.getOriginalFilename() != null ? file.getOriginalFilename() : "image");
+            File roomUploadDir = new File(uploadDir, "rooms/" + roomId);
+            if (!roomUploadDir.exists()) {
+                roomUploadDir.mkdirs();
+            }
+            File targetFile = new File(roomUploadDir, randomName);
+            try (FileOutputStream fos = new FileOutputStream(targetFile)) {
+                fos.write(bytes);
+            } catch (Exception ignored) {}
+
+            UploadedFile uploadedFile = new UploadedFile(
+                    roomId,
+                    user.getId(),
+                    file.getOriginalFilename(),
+                    contentType,
+                    file.getSize(),
+                    targetFile.getAbsolutePath(),
+                    "brief"
+            );
+            uploadedFileRepository.save(uploadedFile);
+        }
+
+        String rawText = combinedText.toString();
+        Brief brief = briefRepository.findByRoomId(roomId).orElseGet(() -> new Brief(roomId, "image"));
+        brief.setSource("image");
+        brief.setFileName(files.size() == 1 ? files.get(0).getOriginalFilename() : files.size() + " images");
+        brief.setRawText(rawText);
+        brief.setConfirmed(false);
+        brief.setConfirmedFields(null);
+        brief.setUpdatedAt(Instant.now());
+        brief = briefRepository.save(brief);
+
+        List<BriefRubricItem> rubric = rubricRepository.findByBriefIdOrderByPositionAsc(brief.getId());
+        return briefMapper.toDto(brief, rubric, true, true);
+    }
+
+    /**
+     * Ingests manual text source (50 to 200,000 chars) as raw_text with source "manual".
+     */
+    @Transactional
+    public BriefResponseDto setTextSource(UUID roomId, String text, User user) {
+        roomAccess.requireLeader(roomId, user);
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        if (room.getBuildStartedAt() != null || room.getPlanStartedAt() != null) {
+            throw new ConflictException("BRIEF_LOCKED", "Cannot modify brief source once planning or build has started");
+        }
+        if (text == null || text.trim().length() < 50 || text.trim().length() > 200000) {
+            throw new BadRequestException("INVALID_TEXT", "Text must be between 50 and 200000 characters");
+        }
+
+        Brief brief = briefRepository.findByRoomId(roomId).orElseGet(() -> new Brief(roomId, "manual"));
+        brief.setSource("manual");
+        brief.setRawText(text.trim());
+        brief.setConfirmed(false);
+        brief.setConfirmedFields(null);
+        brief.setUpdatedAt(Instant.now());
+        brief = briefRepository.save(brief);
+
+        List<BriefRubricItem> rubric = rubricRepository.findByBriefIdOrderByPositionAsc(brief.getId());
+        return briefMapper.toDto(brief, rubric, true, true);
+    }
+
+    /**
      * Returns the Prompt Bridge extraction prompt incorporating existing raw text.
      */
     @Transactional(readOnly = true)
@@ -271,6 +383,9 @@ public class BriefService {
         roomAccess.requireMember(roomId, user);
         Brief brief = briefRepository.findByRoomId(roomId).orElse(null);
         String rawText = brief != null && brief.getRawText() != null ? brief.getRawText() : "";
+        if (rawText.length() > 12000) {
+            rawText = rawText.substring(0, 12000);
+        }
 
         String prompt = "You are reading a hackathon announcement. From the text below, extract the details and reply ONLY with valid JSON with these keys: problemStatement (string), targetAudience (string), rubric (array of {criterion, weight} with weights summing to 100), deadlines ({start, freeze, submission} ISO strings or null), eligibility (string), techRules (string), aiPolicy (string), deliverables (array of strings), tracksAndPrizes (array of strings), judgingFormat (string). Use null when the text does not say. Text: " + rawText;
         return new ExtractionPromptResponse(prompt);
@@ -398,48 +513,30 @@ public class BriefService {
                 .orElseThrow(() -> new NotFoundException("BRIEF_NOT_FOUND", "Brief not found"));
         List<BriefRubricItem> rubric = rubricRepository.findByBriefIdOrderByPositionAsc(brief.getId());
 
-        List<String> unconfirmedOrMissing = new ArrayList<>();
         if (brief.getProblemStatement() == null || brief.getProblemStatement().isBlank()) {
-            unconfirmedOrMissing.add("problemStatement");
-        }
-
-        Map<String, Boolean> confirmedFields = briefMapper.parseMap(brief.getConfirmedFields());
-
-        checkFieldConfirmed(unconfirmedOrMissing, confirmedFields, "problemStatement", brief.getProblemStatement());
-        checkFieldConfirmed(unconfirmedOrMissing, confirmedFields, "targetAudience", brief.getTargetAudience());
-        checkFieldConfirmed(unconfirmedOrMissing, confirmedFields, "eligibility", brief.getEligibility());
-        checkFieldConfirmed(unconfirmedOrMissing, confirmedFields, "techRules", brief.getTechRules());
-        checkFieldConfirmed(unconfirmedOrMissing, confirmedFields, "aiPolicy", brief.getAiPolicy());
-        checkFieldConfirmed(unconfirmedOrMissing, confirmedFields, "judgingFormat", brief.getJudgingFormat());
-
-        if (brief.getDeadlines() != null && !brief.getDeadlines().isBlank()) {
-            DeadlinesDto dl = briefMapper.parseDeadlines(brief.getDeadlines());
-            if (dl.start() != null || dl.submission() != null) {
-                if (!Boolean.TRUE.equals(confirmedFields.get("deadlines"))) {
-                    unconfirmedOrMissing.add("deadlines");
-                }
-            }
-        }
-
-        if (brief.getDeliverables() != null && !briefMapper.parseStringList(brief.getDeliverables()).isEmpty()) {
-            if (!Boolean.TRUE.equals(confirmedFields.get("deliverables"))) {
-                unconfirmedOrMissing.add("deliverables");
-            }
+            throw new BadRequestException("BRIEF_INCOMPLETE", "Add the problem statement to continue");
         }
 
         if (!rubric.isEmpty()) {
-            if (!Boolean.TRUE.equals(confirmedFields.get("rubric"))) {
-                unconfirmedOrMissing.add("rubric");
-            }
             int totalWeight = rubric.stream().mapToInt(BriefRubricItem::getWeight).sum();
             if (totalWeight != 100) {
-                unconfirmedOrMissing.add("rubric_sum_not_100");
+                throw new BadRequestException("INVALID_RUBRIC", "Rubric weights must sum to 100% (currently " + totalWeight + "%)");
             }
         }
 
-        if (!unconfirmedOrMissing.isEmpty()) {
-            throw new BadRequestException("BRIEF_INCOMPLETE", "Brief is incomplete or contains unconfirmed fields", unconfirmedOrMissing);
-        }
+        Map<String, Boolean> confirmedMap = new HashMap<>();
+        if (brief.getProblemStatement() != null && !brief.getProblemStatement().isBlank()) confirmedMap.put("problemStatement", true);
+        if (brief.getTargetAudience() != null && !brief.getTargetAudience().isBlank()) confirmedMap.put("targetAudience", true);
+        if (brief.getEligibility() != null && !brief.getEligibility().isBlank()) confirmedMap.put("eligibility", true);
+        if (brief.getTechRules() != null && !brief.getTechRules().isBlank()) confirmedMap.put("techRules", true);
+        if (brief.getAiPolicy() != null && !brief.getAiPolicy().isBlank()) confirmedMap.put("aiPolicy", true);
+        if (brief.getJudgingFormat() != null && !brief.getJudgingFormat().isBlank()) confirmedMap.put("judgingFormat", true);
+        if (brief.getDeadlines() != null && !brief.getDeadlines().isBlank()) confirmedMap.put("deadlines", true);
+        if (brief.getDeliverables() != null && !briefMapper.parseStringList(brief.getDeliverables()).isEmpty()) confirmedMap.put("deliverables", true);
+        if (brief.getTracksAndPrizes() != null && !briefMapper.parseStringList(brief.getTracksAndPrizes()).isEmpty()) confirmedMap.put("tracksAndPrizes", true);
+        if (brief.getRisks() != null && !briefMapper.parseStringList(brief.getRisks()).isEmpty()) confirmedMap.put("risks", true);
+        if (!rubric.isEmpty()) confirmedMap.put("rubric", true);
+        brief.setConfirmedFields(briefMapper.toJson(confirmedMap));
 
         brief.setConfirmed(true);
         brief.setConfirmedAt(Instant.now());

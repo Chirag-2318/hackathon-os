@@ -94,7 +94,7 @@ export function computeBranchMissing(branch: Branch, nowMs: number = Date.now())
   const lastCommitMs = new Date(branch.lastCommitAt).getTime();
   const hoursSinceLastCommit = (nowMs - lastCommitMs) / (3600 * 1000);
 
-  if (branch.role === 'experiment' && branch.linkedTaskKeys.length === 0) {
+  if (branch.role === 'experiment' && (branch.linkedTaskKeys?.length ?? 0) === 0) {
     missing.push('No linked task');
   }
 
@@ -253,8 +253,8 @@ export function computeAttentionItems(
   }
 
   // 8. Branches with no owner or task
-  for (const b of branches) {
-    if (b.role === 'experiment' && b.linkedTaskKeys.length === 0) {
+  for (const b of (branches || [])) {
+    if (b.role === 'experiment' && (b.linkedTaskKeys?.length ?? 0) === 0) {
       items.push({
         id: `att-notask-${b.name}`,
         severity: 'hygiene',
@@ -287,8 +287,9 @@ export function computeAttentionItems(
 }
 
 // ── 5. Readiness Score ───────────────────────────────────────────────────────
-export function computeReadinessScore(health: HealthItem[]): { passed: number; total: number } {
-  const total = health.length;
-  const passed = health.filter((h) => h.status === 'pass').length;
+export function computeReadinessScore(health?: HealthItem[]): { passed: number; total: number } {
+  const safeHealth = health || [];
+  const total = safeHealth.length;
+  const passed = safeHealth.filter((h) => h.status === 'pass').length;
   return { passed, total };
 }

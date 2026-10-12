@@ -113,3 +113,41 @@ export const fetchTeam = (roomId: string) => apiFetch<any>(`/api/v1/rooms/${room
 export const fetchSubmission = (roomId: string) => apiFetch<any>(`/api/v1/rooms/${roomId}/submission`);
 export const fetchPlaybookDetail = (slug: string) => apiFetch<any>(`/api/v1/playbooks/${slug}`);
 
+// ── PRESENT group: Deck source ──────────────────────────────────────────────
+export const fetchDeckSource = (roomId: string) =>
+  apiFetch<any>(`/api/v1/rooms/${roomId}/pitch/deck/source`);
+export const saveDeckSource = (roomId: string, body: { provider: string; url: string; title: string }) =>
+  apiFetch<any>(`/api/v1/rooms/${roomId}/pitch/deck/source`, { method: 'PUT', body: JSON.stringify(body) });
+export const deleteDeckSource = (roomId: string) =>
+  apiFetch<void>(`/api/v1/rooms/${roomId}/pitch/deck/source`, { method: 'DELETE' });
+
+// ── Pitch script ─────────────────────────────────────────────────────────────
+export const fetchPitchScript = (roomId: string) =>
+  apiFetch<any>(`/api/v1/rooms/${roomId}/pitch/script`);
+export const generatePitchScript = (roomId: string, body: {
+  type: string; speakerCount: number; speakerUserIds?: string[]; instructions?: string;
+}) => apiFetch<any>(`/api/v1/rooms/${roomId}/pitch/generate`, { method: 'POST', body: JSON.stringify(body) });
+export const updatePitchSlide = (roomId: string, n: number, body: { say?: string; show?: string }) =>
+  apiFetch<any>(`/api/v1/rooms/${roomId}/pitch/script/slides/${n}`, { method: 'PUT', body: JSON.stringify(body) });
+export const deletePitchScript = (roomId: string) =>
+  apiFetch<void>(`/api/v1/rooms/${roomId}/pitch/script`, { method: 'DELETE' });
+
+// ── Q&A generate (adds why_asked, risk_point, difficulty) ───────────────────
+export const generateQa = (roomId: string, body: { level: 'friendly'|'mixed'|'grill'; count?: number }) =>
+  apiFetch<any[]>(`/api/v1/rooms/${roomId}/pitch/qa/generate`, { method: 'POST', body: JSON.stringify(body) });
+
+// ── Rehearsal with stats ─────────────────────────────────────────────────────
+export const saveRehearsalRun = (roomId: string, body: {
+  durationSec: number;
+  sectionPaces: Array<{ label: string; targetSec: number; actualSec: number }>;
+  notes?: string;
+  stats?: { wordsPerMinute: number; fillerCount: number; keyPointsHit: number; keyPointsTotal: number };
+}) => apiFetch<any>(`/api/v1/rooms/${roomId}/pitch/rehearse`, { method: 'POST', body: JSON.stringify(body) });
+
+// ── Canva integration ────────────────────────────────────────────────────────
+export const fetchCanvaStatus = (roomId: string) =>
+  apiFetch<{ connected: boolean }>(`/api/v1/integrations/canva/status`);
+export const fetchCanvaDesigns = (q?: string) =>
+  apiFetch<any[]>(`/api/v1/integrations/canva/designs${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+
+

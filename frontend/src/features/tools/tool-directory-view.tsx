@@ -1,7 +1,7 @@
 import { useState, useMemo, createElement } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { SearchX, Wrench } from 'lucide-react';
-import { fetchTools } from '@/features/prep/api/tools-api';
+import { fetchTools, CURATED_TOOLS } from '@/features/prep/api/tools-api';
 import { ToolCard } from './components/tool-card';
 import {
   PageContainer,
@@ -28,19 +28,22 @@ export function ToolDirectoryView() {
     queryFn: () => fetchTools(),
   });
 
-  const allTools = useMemo(() => data?.tools ?? [], [data]);
+  const allTools = useMemo(() => {
+    if (data?.tools && data.tools.length > 0) return data.tools;
+    return CURATED_TOOLS;
+  }, [data]);
 
   // Tools that match non-category filters (used to compute category counts dynamically)
   const nonCategoryFilteredTools = useMemo(() => {
     return allTools.filter((t: Tool) => {
       if (search.trim()) {
         const q = search.trim().toLowerCase();
-        const matchesName = t.name.toLowerCase().includes(q);
-        const matchesDesc = t.oneLineUse.toLowerCase().includes(q);
+        const matchesName = (t.name || '').toLowerCase().includes(q);
+        const matchesDesc = (t.oneLineUse || '').toLowerCase().includes(q);
         if (!matchesName && !matchesDesc) return false;
       }
-      if (selectedCost !== 'all' && t.cost !== selectedCost) return false;
-      if (selectedLicense !== 'all' && t.license !== selectedLicense) return false;
+      if (selectedCost !== 'all' && (t.cost || '').toLowerCase() !== selectedCost.toLowerCase()) return false;
+      if (selectedLicense !== 'all' && (t.license || '').toLowerCase() !== selectedLicense.toLowerCase()) return false;
       if (verifiedOnly && !t.verified) return false;
       return true;
     });
@@ -49,7 +52,7 @@ export function ToolDirectoryView() {
   // Fully filtered tools (including category)
   const filteredTools = useMemo(() => {
     if (selectedCategory === 'all') return nonCategoryFilteredTools;
-    return nonCategoryFilteredTools.filter((t: Tool) => t.category === selectedCategory);
+    return nonCategoryFilteredTools.filter((t: Tool) => (t.category || '').toLowerCase() === selectedCategory.toLowerCase());
   }, [nonCategoryFilteredTools, selectedCategory]);
 
   const hasActiveFilters =
@@ -122,7 +125,7 @@ export function ToolDirectoryView() {
           {/* Individual Category Chips */}
           {TOOL_CATEGORIES.map((cat) => {
             const isSelected = selectedCategory === cat;
-            const count = nonCategoryFilteredTools.filter((t: Tool) => t.category === cat).length;
+            const count = nonCategoryFilteredTools.filter((t: Tool) => (t.category || '').toLowerCase() === cat.toLowerCase()).length;
             return (
               <button
                 key={cat}
@@ -237,14 +240,14 @@ export function ToolDirectoryView() {
           </div>
         )}
 
-        {isError && (
+        {isError && allTools.length === 0 && (
           <ErrorRow
             message="Could not load tools. Please try again."
             onRetry={() => refetch()}
           />
         )}
 
-        {!isLoading && !isError && allTools.length === 0 && (
+        {!isLoading && allTools.length === 0 && (
           <EmptyState
             icon={Wrench}
             title="No tools in directory"
@@ -253,7 +256,6 @@ export function ToolDirectoryView() {
         )}
 
         {!isLoading &&
-          !isError &&
           allTools.length > 0 &&
           filteredTools.length === 0 && (
             <EmptyState
@@ -268,7 +270,7 @@ export function ToolDirectoryView() {
             />
           )}
 
-        {!isLoading && !isError && filteredTools.length > 0 && (
+        {!isLoading && filteredTools.length > 0 && (
           <div
             data-testid="tools-grid"
             className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4"

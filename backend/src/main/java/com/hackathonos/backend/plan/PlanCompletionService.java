@@ -201,6 +201,10 @@ public class PlanCompletionService {
 
         // 5. Complete stage & notification
         room.setPlanDone(true);
+        if (room.getBuildStartedAt() == null) {
+            room.setBuildStartedAt(Instant.now());
+            room.setStage("build");
+        }
         stageService.recompute(room);
         roomRepository.save(room);
 
@@ -250,6 +254,12 @@ public class PlanCompletionService {
 
         // Delete phases
         phaseRepository.deleteByRoomId(roomId);
+
+        // Clean MVP, diagram, demo, and QA for regeneration
+        mvpSeedService.cleanForRoom(roomId);
+        diagramSeedService.cleanForRoom(roomId);
+        demoSeedService.cleanForRoom(roomId);
+        qaSeedService.cleanForRoom(roomId);
     }
 
     private List<Doc> generateDocs(Room room, Map<String, String> answers, List<PhasesValidator.NormalizedPhase> phases) {

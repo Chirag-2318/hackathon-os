@@ -1,5 +1,6 @@
 package com.hackathonos.backend.overview;
 
+import com.hackathonos.backend.common.security.CurrentUser;
 import com.hackathonos.backend.overview.dto.OverviewDtos.NavBadgesDto;
 import com.hackathonos.backend.users.User;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -12,9 +13,11 @@ import java.util.UUID;
 public class OverviewController {
 
     private final OverviewService overviewService;
+    private final CurrentUser currentUser;
 
-    public OverviewController(OverviewService overviewService) {
+    public OverviewController(OverviewService overviewService, CurrentUser currentUser) {
         this.overviewService = overviewService;
+        this.currentUser = currentUser;
     }
 
     @GetMapping("/overview")
@@ -22,7 +25,8 @@ public class OverviewController {
             @PathVariable UUID roomId,
             @AuthenticationPrincipal User user
     ) {
-        return overviewService.getOverview(roomId, user);
+        User resolved = user != null ? user : currentUser.get();
+        return overviewService.getOverview(roomId, resolved);
     }
 
     @GetMapping("/progress")
@@ -30,7 +34,8 @@ public class OverviewController {
             @PathVariable UUID roomId,
             @AuthenticationPrincipal User user
     ) {
-        return overviewService.getProgress(roomId, user);
+        User resolved = user != null ? user : currentUser.get();
+        return overviewService.getProgress(roomId, resolved);
     }
 
     @GetMapping("/workload")
@@ -39,7 +44,8 @@ public class OverviewController {
             @RequestParam(defaultValue = "phase") String scope,
             @AuthenticationPrincipal User user
     ) {
-        return overviewService.getWorkload(roomId, scope, user);
+        User resolved = user != null ? user : currentUser.get();
+        return overviewService.getWorkload(roomId, scope, resolved);
     }
 
     @GetMapping("/nav-badges")
@@ -47,6 +53,7 @@ public class OverviewController {
             @PathVariable UUID roomId,
             @AuthenticationPrincipal User user
     ) {
-        return overviewService.getNavBadges(roomId, user);
+        User resolved = user != null ? user : currentUser.get();
+        return overviewService.getNavBadges(roomId, resolved);
     }
 }

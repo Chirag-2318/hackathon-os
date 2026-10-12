@@ -275,39 +275,25 @@ export function CommandPaletteOverlay() {
                   <span>Diagram studio</span>
                 </CommandItem>
                 <CommandItem
-                  onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/pitch/deck`))}
+                  onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/deck`))}
                   className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
                 >
                   <PitchDeckIcon size={18} className="text-ink-2" />
-                  <span>Pitch deck</span>
+                  <span>Deck</span>
                 </CommandItem>
                 <CommandItem
-                  onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/pitch/rehearse`))}
+                  onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/pitch-kit`))}
                   className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
                 >
                   <RehearseIcon size={18} className="text-ink-2" />
-                  <span>Rehearse & timing</span>
-                </CommandItem>
-                <CommandItem
-                  onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/pitch/qa`))}
-                  className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
-                >
-                  <QaIcon size={18} className="text-ink-2" />
-                  <span>Q&A judge simulator</span>
-                </CommandItem>
-                <CommandItem
-                  onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/demo`))}
-                  className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
-                >
-                  <DemoIcon size={18} className="text-ink-2" />
-                  <span>Video demo studio</span>
+                  <span>Pitch kit</span>
                 </CommandItem>
                 <CommandItem
                   onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/submission`))}
                   className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
                 >
                   <SubmissionIcon size={18} className="text-ink-2" />
-                  <span>Submission locker</span>
+                  <span>Submission</span>
                 </CommandItem>
                 <CommandItem
                   onSelect={() => handleSelect(() => navigate(`/app/room/${roomId}/readiness`))}

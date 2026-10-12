@@ -7,6 +7,7 @@ import com.hackathonos.backend.members.RoomMemberRepository;
 import com.hackathonos.backend.rooms.Room;
 import com.hackathonos.backend.rooms.RoomRepository;
 import com.hackathonos.backend.users.User;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
@@ -16,10 +17,19 @@ public class RoomAccess {
 
     private final RoomRepository roomRepository;
     private final RoomMemberRepository roomMemberRepository;
+    private final CurrentUser currentUser;
 
-    public RoomAccess(RoomRepository roomRepository, RoomMemberRepository roomMemberRepository) {
+    @Autowired
+    public RoomAccess(RoomRepository roomRepository,
+                      RoomMemberRepository roomMemberRepository,
+                      CurrentUser currentUser) {
         this.roomRepository = roomRepository;
         this.roomMemberRepository = roomMemberRepository;
+        this.currentUser = currentUser;
+    }
+
+    public RoomAccess(RoomRepository roomRepository, RoomMemberRepository roomMemberRepository) {
+        this(roomRepository, roomMemberRepository, null);
     }
 
     /**
@@ -27,10 +37,13 @@ public class RoomAccess {
      * Throws NotFoundException if missing or ForbiddenException if not a member.
      */
     public RoomMember requireMember(UUID roomId, User user) {
+        if (user == null && currentUser != null) {
+            user = currentUser.get();
+        }
         Room room = roomRepository.findByIdAndArchivedAtIsNull(roomId)
                 .orElseThrow(() -> new NotFoundException("ROOM_NOT_FOUND", "Room not found or has been archived"));
 
-        return roomMemberRepository.findByRoomIdAndUserId(room.getId(), user.getId())
+        return roomMemberRepository.findByRoomIdAndUserId(room.getId(), user != null ? user.getId() : null)
                 .orElseThrow(() -> new ForbiddenException("NOT_A_MEMBER", "You are not a member of this room"));
     }
 
@@ -39,6 +52,9 @@ public class RoomAccess {
      * Throws NotFoundException if missing or ForbiddenException if not a leader.
      */
     public RoomMember requireLeader(UUID roomId, User user) {
+        if (user == null && currentUser != null) {
+            user = currentUser.get();
+        }
         RoomMember member = requireMember(roomId, user);
         if (!"LEADER".equalsIgnoreCase(member.getRole())) {
             throw new ForbiddenException("LEADER_REQUIRED", "Only the room leader can perform this action");

@@ -60,6 +60,8 @@ const DiagramPage = lazy(() =>
 );
 const PitchPage = lazy(() => import('@/features/pitch/pitch-page').then((m) => ({ default: m.PitchPage })));
 const DemoPage = lazy(() => import('@/features/demo/demo-page').then((m) => ({ default: m.DemoPage })));
+const DeckPage = lazy(() => import('@/features/deck/deck-page').then((m) => ({ default: m.DeckPage })));
+const PitchKitPage = lazy(() => import('@/features/pitch-kit/pitch-kit-page').then((m) => ({ default: m.PitchKitPage })));
 const SubmissionPage = lazy(() =>
   import('@/features/submission/submission-page').then((m) => ({ default: m.SubmissionPage }))
 );
@@ -286,7 +288,7 @@ const router = createBrowserRouter([
           { path: 'appearance', element: <AppearanceSection /> },
           { path: 'notifications', element: <NotificationsSection /> },
           { path: 'integrations', element: <IntegrationsSection /> },
-          { path: 'ai-keys', element: <AiKeysSection /> },
+          { path: 'ai-keys', element: <Navigate to="/app/settings/profile" replace /> },
           { path: 'privacy', element: <PrivacySection /> },
           { path: 'billing', element: <BillingSection /> },
         ],
@@ -323,13 +325,17 @@ const router = createBrowserRouter([
       { path: 'github', element: <GithubPage /> },
       { path: 'apis', element: <ApiPage /> },
       { path: 'diagrams', element: <DiagramPage /> },
-      { path: 'pitch', element: <PitchPage /> },
-      { path: 'pitch/deck', element: <PitchPage /> },
-      { path: 'pitch/rehearse', element: <PitchPage /> },
-      { path: 'pitch/qa', element: <PitchPage /> },
-      { path: 'demo', element: <DemoPage /> },
-      { path: 'submit', element: <SubmissionPage /> },
+      // ── PRESENT group: new canonical routes ──
+      { path: 'deck', element: <DeckPage /> },
+      { path: 'pitch-kit', element: <PitchKitPage /> },
       { path: 'submission', element: <SubmissionPage /> },
+      // ── Legacy redirects (pages kept but unrouted) ──
+      { path: 'pitch', element: <Navigate to={`deck`} replace /> },
+      { path: 'pitch/deck', element: <Navigate to={`../deck`} replace relative="path" /> },
+      { path: 'pitch/rehearse', element: <Navigate to={`../pitch-kit?open=pitch&rehearse=1`} replace relative="path" /> },
+      { path: 'pitch/qa', element: <Navigate to={`../pitch-kit?open=qa`} replace relative="path" /> },
+      { path: 'demo', element: <Navigate to={`pitch-kit?open=demo`} replace /> },
+      { path: 'submit', element: <Navigate to="submission" replace /> },
       { path: 'readiness', element: <ReadinessPage /> },
       { path: 'retro', element: <RetroPage /> },
       { path: 'speed-mode', element: <SpeedModePage /> },

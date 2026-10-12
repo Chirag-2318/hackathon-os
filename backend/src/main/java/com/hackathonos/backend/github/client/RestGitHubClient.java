@@ -29,6 +29,10 @@ public class RestGitHubClient implements GitHubClient {
     }
 
     private JsonNode request(String path, String token) {
+        return request(path, token, false);
+    }
+
+    private JsonNode request(String path, String token, boolean throwOnError) {
         try {
             URL url = URI.create(BASE_URL + path).toURL();
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -47,8 +51,11 @@ public class RestGitHubClient implements GitHubClient {
 
             // Check rate limits
             String remaining = conn.getHeaderField("x-ratelimit-remaining");
+            String resetEpoch = conn.getHeaderField("x-ratelimit-reset");
             if ((status == 403 || status == 429) && "0".equals(remaining)) {
-                String resetEpoch = conn.getHeaderField("x-ratelimit-reset");
+                if (throwOnError) {
+                    throw new GitHubApiException(status, "GitHub rate limit reached", remaining, resetEpoch);
+                }
                 Instant resetAt = Instant.now().plusSeconds(60);
                 if (resetEpoch != null) {
                     try {
@@ -58,19 +65,20 @@ public class RestGitHubClient implements GitHubClient {
                 throw new GitHubRateLimitException(resetAt);
             }
 
-            if (status == 404) {
-                return null;
-            }
-
             if (status >= 400) {
-                log.warn("GitHub API error: status={} path={}", status, path);
+                if (throwOnError) {
+                    throw new GitHubApiException(status, "GitHub API error: " + status, remaining, resetEpoch);
+                }
+                if (status != 404) {
+                    log.warn("GitHub API error: status={} path={}", status, path);
+                }
                 return null;
             }
 
             try (InputStream in = conn.getInputStream()) {
                 return objectMapper.readTree(in);
             }
-        } catch (GitHubRateLimitException e) {
+        } catch (GitHubApiException | GitHubRateLimitException e) {
             throw e;
         } catch (Exception e) {
             log.warn("GitHub request failed: {} -> {}", path, e.getMessage());
@@ -80,7 +88,7 @@ public class RestGitHubClient implements GitHubClient {
 
     @Override
     public Optional<ClientRepo> getRepo(String owner, String repo, String token) {
-        JsonNode node = request("/repos/" + enc(owner) + "/" + enc(repo), token);
+        JsonNode node = request("/repos/" + enc(owner) + "/" + enc(repo), token, true);
         if (node == null) return Optional.empty();
 
         String fullName = node.path("full_name").asText(owner + "/" + repo);

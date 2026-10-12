@@ -130,12 +130,10 @@ public class SubmissionService {
         List<String> requirements = new ArrayList<>();
         if (brief != null) {
             if (brief.getDeliverables() != null && !brief.getDeliverables().isBlank()) {
-                requirements.addAll(Arrays.stream(brief.getDeliverables().split("\\r?\\n"))
-                        .map(String::trim).filter(s -> !s.isBlank()).toList());
+                requirements.addAll(parseRequirementsList(brief.getDeliverables()));
             }
             if (brief.getTracksAndPrizes() != null && !brief.getTracksAndPrizes().isBlank()) {
-                requirements.addAll(Arrays.stream(brief.getTracksAndPrizes().split("\\r?\\n"))
-                        .map(String::trim).filter(s -> !s.isBlank()).toList());
+                requirements.addAll(parseRequirementsList(brief.getTracksAndPrizes()));
             }
         }
 
@@ -187,6 +185,19 @@ public class SubmissionService {
 
         List<SubmissionDtos.ChecklistItemDto> checklistDtos = items.stream().map(this::toChecklistDto).toList();
 
+        boolean isLeader = false;
+        try {
+            RoomMember member = roomAccess.requireMember(roomId, user);
+            isLeader = member != null && "leader".equalsIgnoreCase(member.getRole());
+        } catch (Exception ignored) {}
+
+        String demoUrl = mediaRepository.findByRoomId(roomId).map(DemoMedia::getVideoUrl).orElse(null);
+        String repoUrl = githubRepoRepository.findById(roomId).map(GithubRepo::getUrl).orElse(null);
+        String liveUrl = links.stream()
+                .filter(l -> l.getLabel() != null && (l.getLabel().toLowerCase().contains("live") || l.getLabel().toLowerCase().contains("demo") || l.getLabel().toLowerCase().contains("app")))
+                .map(SubmissionLink::getUrl)
+                .findFirst().orElse(null);
+
         return new SubmissionDtos.SubmissionResponse(
                 sub.getStatus().toLowerCase(Locale.ROOT),
                 deadlineDto,
@@ -201,8 +212,25 @@ public class SubmissionService {
                 canVerify,
                 blockers,
                 lateEdit,
-                now
+                now,
+                isLeader,
+                null,
+                demoUrl,
+                liveUrl,
+                repoUrl
         );
+    }
+
+    private List<String> parseRequirementsList(String val) {
+        if (val == null || val.isBlank()) return Collections.emptyList();
+        try {
+            List<String> list = objectMapper.readValue(val, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+            if (list != null && !list.isEmpty()) {
+                return list.stream().filter(s -> s != null && !s.isBlank()).toList();
+            }
+        } catch (Exception ignored) {}
+        return Arrays.stream(val.split("\\r?\\n"))
+                .map(String::trim).filter(s -> !s.isBlank()).toList();
     }
 
     /**

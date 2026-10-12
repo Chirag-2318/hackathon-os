@@ -1,17 +1,20 @@
 import { useNavigate } from 'react-router-dom';
-import { useHome } from '@/features/home/hooks/use-home';
+import { useQuery } from '@tanstack/react-query';
+import { roomService } from '@/services/roomService';
 import { useOverlay } from '@/app/providers/overlay-store';
 import { Button } from '@/components/ui/button';
-import { Plus, KeyRound, ArrowRight, Users, Clock } from 'lucide-react';
+import { Plus, KeyRound, ArrowRight, Users, Shield, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function MyRoomsPage() {
   const navigate = useNavigate();
-  const { data: homeData, isLoading } = useHome();
   const createRoomModal = useOverlay('create-room-dialog');
   const joinCodeModal = useOverlay('join-code-dialog');
 
-  const rooms = homeData?.roomList ?? [];
+  const { data: rooms = [], isLoading } = useQuery({
+    queryKey: ['rooms'],
+    queryFn: () => roomService.listRooms(),
+  });
 
   return (
     <div className="w-full min-h-screen bg-[var(--shell)] p-8 font-[var(--font-inter)]">
@@ -35,14 +38,14 @@ export function MyRoomsPage() {
             <Button
               variant="outline"
               onClick={() => joinCodeModal.open()}
-              className="h-10 px-4 rounded-[var(--r-control)] gap-2 bg-card border-border hover:bg-hover text-ink text-sm font-medium"
+              className="h-10 px-4 rounded-[var(--r-control)] gap-2 bg-card border-border hover:bg-hover text-ink text-sm font-medium cursor-pointer"
             >
               <KeyRound className="size-4 text-ink-2" />
               Join with code
             </Button>
             <Button
               onClick={() => createRoomModal.open()}
-              className="h-10 px-4 rounded-[var(--r-control)] gap-2 bg-ink text-white hover:bg-ink/90 text-sm font-medium shadow-xs"
+              className="h-10 px-4 rounded-[var(--r-control)] gap-2 bg-ink text-white hover:bg-ink/90 text-sm font-medium shadow-xs cursor-pointer"
             >
               <Plus className="size-4" />
               New room
@@ -64,13 +67,13 @@ export function MyRoomsPage() {
             </div>
             <h3 className="text-xl font-bold text-ink mb-2">No active rooms found</h3>
             <p className="text-sm text-ink-2 max-w-md mb-6">
-              You haven't joined or created any hackathon rooms yet. Start a new sprint or join your team.
+              You haven't joined or created any hackathon rooms yet. Start a new room or join with a code.
             </p>
             <div className="flex items-center gap-3">
-              <Button onClick={() => createRoomModal.open()} className="bg-ink text-white gap-2">
-                <Plus className="size-4" /> Create first room
+              <Button onClick={() => createRoomModal.open()} className="bg-ink text-white gap-2 cursor-pointer">
+                <Plus className="size-4" /> New room
               </Button>
-              <Button variant="outline" onClick={() => joinCodeModal.open()} className="gap-2">
+              <Button variant="outline" onClick={() => joinCodeModal.open()} className="gap-2 cursor-pointer">
                 <KeyRound className="size-4" /> Join with code
               </Button>
             </div>
@@ -78,7 +81,11 @@ export function MyRoomsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {rooms.map((room: any) => {
-              const progress = room.progressPercent ?? 0;
+              const stage = (room.stage || 'brief').toLowerCase();
+              const isLeader = room.isLeader || (room.myRole || '').toLowerCase() === 'leader';
+              const roleLabel = isLeader ? 'Leader' : (room.myRole?.toUpperCase() === 'BUILDER' ? 'Member' : room.myRole || 'Member');
+              const memberCount = room.memberCount ?? 1;
+
               return (
                 <div
                   key={room.id}
@@ -89,45 +96,36 @@ export function MyRoomsPage() {
                   )}
                 >
                   <div className="flex items-start justify-between mb-4">
-                    <span className="text-[12px] font-semibold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                      {room.status ?? 'Active'}
+                    <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                      {stage}
                     </span>
-                    <span className="flex items-center text-xs text-ink-3 gap-1">
-                      <Clock className="size-3.5" /> 9h left
+                    <span className="flex items-center text-xs text-ink-3 gap-1.5">
+                      <Users className="size-3.5" /> {memberCount} {memberCount === 1 ? 'member' : 'members'}
                     </span>
                   </div>
 
                   <h3 className="text-lg font-bold text-ink group-hover:text-blue-600 transition-colors line-clamp-1 mb-2">
-                    {room.title}
+                    {room.name || room.title || 'Untitled room'}
                   </h3>
 
                   <div className="flex items-center gap-2 mb-6">
-                    <div className="size-6 rounded-full bg-surface text-ink-2 border border-border text-xs flex items-center justify-center font-semibold">
-                      {room.meta?.avatarId ?? 'AM'}
-                    </div>
-                    <span className="text-xs text-ink-2 truncate">Led by {room.meta?.name ?? 'Team Lead'}</span>
+                    {isLeader ? (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 text-xs font-semibold flex items-center gap-1">
+                        <Shield className="size-3" /> Leader
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 text-xs font-medium flex items-center gap-1">
+                        <User className="size-3" /> {roleLabel}
+                      </span>
+                    )}
                   </div>
 
-                  <div className="mt-auto flex flex-col gap-3 pt-4 border-t border-border/60">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-ink-2">Sprint progress</span>
-                      <span className="font-semibold text-ink">{progress}%</span>
-                    </div>
-
-                    <div className="w-full h-2 rounded-full bg-surface border border-border/50 overflow-hidden">
-                      <div
-                        className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between pt-2">
-                      <span className="text-xs text-ink-3">
-                        {room.metaIconCounts?.tasks ?? 18} open tasks
-                      </span>
-                      <div className="flex items-center gap-1 text-xs font-semibold text-blue-600 group-hover:translate-x-1 transition-transform">
-                        Open room <ArrowRight className="size-3.5" />
-                      </div>
+                  <div className="mt-auto flex items-center justify-between pt-4 border-t border-border/60">
+                    <span className="text-xs text-ink-3 capitalize">
+                      {room.templateName || (room.templateId ? 'Hackathon' : 'Custom sprint')}
+                    </span>
+                    <div className="flex items-center gap-1 text-xs font-semibold text-blue-600 group-hover:translate-x-1 transition-transform">
+                      Open room <ArrowRight className="size-3.5" />
                     </div>
                   </div>
                 </div>

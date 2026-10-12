@@ -4,9 +4,12 @@ import com.hackathonos.backend.activity.ActivityLogger;
 import com.hackathonos.backend.common.error.*;
 import com.hackathonos.backend.common.http.SafeHttpClient;
 import com.hackathonos.backend.common.security.RoomAccess;
+import com.hackathonos.backend.common.security.SecretCipher;
 import com.hackathonos.backend.github.calc.*;
+import com.hackathonos.backend.github.client.GitHubApiException;
 import com.hackathonos.backend.github.client.GitHubClient;
 import com.hackathonos.backend.github.client.GitHubClientResolver;
+import com.hackathonos.backend.github.client.GitHubRateLimitException;
 import com.hackathonos.backend.github.dto.GithubDtos.*;
 import com.hackathonos.backend.members.RoomMember;
 import com.hackathonos.backend.notifications.NotificationService;
@@ -16,7 +19,11 @@ import com.hackathonos.backend.rooms.RoomRepository;
 import com.hackathonos.backend.tasks.Task;
 import com.hackathonos.backend.tasks.TaskRepository;
 import com.hackathonos.backend.users.User;
+import com.hackathonos.backend.users.UserOAuthToken;
+import com.hackathonos.backend.users.UserOAuthTokenRepository;
 import com.hackathonos.backend.users.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,9 +37,7 @@ import java.util.regex.Pattern;
 @Service
 public class GitHubService {
 
-    private static final Pattern REPO_INPUT_PATTERN = Pattern.compile(
-            "^(?:https?:\\/\\/github\\.com\\/)?([A-Za-z0-9_.-]+)\\/([A-Za-z0-9_.-]+?)(?:\\.git)?(?:\\/.*)?$"
-    );
+    private static final Logger log = LoggerFactory.getLogger(GitHubService.class);
 
     private static final Pattern TAG_PATTERN = Pattern.compile("^[A-Za-z0-9._/-]{1,60}$");
 
@@ -45,6 +50,8 @@ public class GitHubService {
     private final GithubAttentionDismissalRepository dismissalRepository;
     private final TaskRepository taskRepository;
     private final UserRepository userRepository;
+    private final UserOAuthTokenRepository userOAuthTokenRepository;
+    private final SecretCipher secretCipher;
     private final RoomAccess roomAccess;
     private final GitHubSyncService syncService;
     private final GitHubClientResolver clientResolver;
@@ -62,6 +69,8 @@ public class GitHubService {
                          GithubAttentionDismissalRepository dismissalRepository,
                          TaskRepository taskRepository,
                          UserRepository userRepository,
+                         UserOAuthTokenRepository userOAuthTokenRepository,
+                         SecretCipher secretCipher,
                          RoomAccess roomAccess,
                          GitHubSyncService syncService,
                          GitHubClientResolver clientResolver,
@@ -78,6 +87,8 @@ public class GitHubService {
         this.dismissalRepository = dismissalRepository;
         this.taskRepository = taskRepository;
         this.userRepository = userRepository;
+        this.userOAuthTokenRepository = userOAuthTokenRepository;
+        this.secretCipher = secretCipher;
         this.roomAccess = roomAccess;
         this.syncService = syncService;
         this.clientResolver = clientResolver;
@@ -96,7 +107,7 @@ public class GitHubService {
         RoomMember member = roomAccess.requireMember(roomId, user);
         boolean isLeader = "LEADER".equalsIgnoreCase(member.getRole());
         Optional<GithubRepo> repoOpt = repoRepository.findById(roomId);
-        boolean tokenAvailable = clientResolver.resolveToken(user.getId()).token() != null;
+        boolean tokenAvailable = user != null && user.getId() != null && clientResolver.resolveToken(user.getId()).token() != null;
 
         if (repoOpt.isEmpty()) {
             return new GithubPageResponse(
@@ -120,29 +131,82 @@ public class GitHubService {
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
         roomAccess.requireLeader(roomId, user);
 
-        String parsedFullName = parseRepoInput(request.repo());
+        String rawInput = request != null ? request.getEffectiveRepo() : null;
+        String parsedFullName = parseRepoInput(rawInput);
         String[] parts = parsedFullName.split("/");
         String owner = parts[0];
         String repoName = parts[1];
 
         GitHubClient client = clientResolver.resolveClient(parsedFullName);
-        GitHubClientResolver.ResolvedToken token = clientResolver.resolveToken(user.getId());
+        GitHubClientResolver.ResolvedToken resolvedToken = clientResolver.resolveToken(user != null ? user.getId() : null);
 
-        GitHubClient.ClientRepo clientRepo = client.getRepo(owner, repoName, token.token())
-                .orElseThrow(() -> new NotFoundException("REPO_NOT_FOUND", "Repository not found or private. Make sure it is public or connect with token."));
+        String currentToken = resolvedToken.token();
+        String currentTokenSource = resolvedToken.source();
+
+        GitHubClient.ClientRepo clientRepo = null;
+        try {
+            clientRepo = client.getRepo(owner, repoName, currentToken).orElse(null);
+        } catch (GitHubApiException e) {
+            int status = e.getStatusCode();
+            if (status == 401 && currentToken != null) {
+                // If a request made WITH a token returns 401, retry once without a token (public data needs none)
+                // and log one WARN line saying which token source failed (user, app)
+                log.warn("GitHub token invalid from source {}: retrying without token for {}/{}", currentTokenSource, owner, repoName);
+                currentToken = null;
+                currentTokenSource = "none";
+                try {
+                    clientRepo = client.getRepo(owner, repoName, null).orElse(null);
+                } catch (GitHubApiException retryEx) {
+                    handleConnectFailure(retryEx.getStatusCode(), currentTokenSource, owner, repoName, retryEx);
+                } catch (Exception retryEx) {
+                    handleConnectFailure(500, currentTokenSource, owner, repoName, retryEx);
+                }
+            } else {
+                handleConnectFailure(status, currentTokenSource, owner, repoName, e);
+            }
+        } catch (Exception e) {
+            handleConnectFailure(500, currentTokenSource, owner, repoName, e);
+        }
+
+        if (clientRepo == null) {
+            handleConnectFailure(404, currentTokenSource, owner, repoName, null);
+        }
 
         GithubRepo repo = new GithubRepo(
                 roomId, clientRepo.fullName(), clientRepo.url(), clientRepo.visibility(),
-                clientRepo.defaultBranch(), "read-only", user.getId(), clock.instant(),
-                null, "idle", null, null, token.source()
+                clientRepo.defaultBranch(), "read-only", user != null ? user.getId() : null, clock.instant(),
+                null, "idle", null, null, currentTokenSource
         );
         repoRepository.save(repo);
 
         // Run first sync
-        syncService.sync(room, user.getId());
+        syncService.sync(room, user != null ? user.getId() : null);
 
         activityLogger.log(room, user, "GITHUB_CONNECTED", "Connected repository " + repo.getFullName());
         return getPage(roomId, user);
+    }
+
+    private void handleConnectFailure(int status, String tokenSource, String owner, String repo, Exception cause) {
+        log.warn("GitHub connect failed: status={}, tokenSource={}, repo={}/{}", status, tokenSource, owner, repo);
+        if (status == 404) {
+            throw new NotFoundException("REPO_NOT_FOUND", "We cannot find that repository. Check the spelling. If it is private, connect your GitHub account with private access.");
+        }
+        if (status == 401) {
+            throw new UnauthenticatedException("GITHUB_TOKEN_INVALID", "The server's GitHub token is invalid. Check APP_GITHUB_TOKEN in .env.");
+        }
+        if (cause instanceof GitHubApiException apiEx && apiEx.isRateLimit()) {
+            throw new TooManyRequestsException("GITHUB_RATE_LIMIT", "GitHub API rate limit exceeded. Resets at " + apiEx.getResetInstant());
+        }
+        if (cause instanceof GitHubRateLimitException rateEx) {
+            throw new TooManyRequestsException("GITHUB_RATE_LIMIT", "GitHub API rate limit exceeded. Resets at " + rateEx.getResetAt());
+        }
+        if (status == 403) {
+            if (cause instanceof GitHubApiException apiEx && "0".equals(apiEx.getRateLimitRemaining())) {
+                throw new TooManyRequestsException("GITHUB_RATE_LIMIT", "GitHub API rate limit exceeded. Resets at " + apiEx.getResetInstant());
+            }
+            throw new ForbiddenException("GITHUB_FORBIDDEN", "GitHub access forbidden. Check permissions for this repository.");
+        }
+        throw new BadRequestException("GITHUB_ERROR", "GitHub connection failed (" + status + ")");
     }
 
     /**
@@ -370,11 +434,47 @@ public class GitHubService {
         dismissalRepository.save(new GithubAttentionDismissal(roomId, itemKey, user.getId(), clock.instant()));
     }
 
+    @Transactional
+    public void saveLinkedToken(UUID userId, String accessToken, String scope, String githubLogin) {
+        String encryptedToken = secretCipher.encrypt(accessToken);
+        UserOAuthToken token = userOAuthTokenRepository.findByUserIdAndProvider(userId, "GITHUB")
+                .orElse(new UserOAuthToken(userId, "GITHUB", encryptedToken, scope, githubLogin, clock.instant()));
+        token.setAccessTokenEncrypted(encryptedToken);
+        token.setScope(scope);
+        token.setGithubLogin(githubLogin);
+        token.setUpdatedAt(clock.instant());
+        userOAuthTokenRepository.save(token);
+    }
+
+    @Transactional(readOnly = true)
+    public GitHubStatusDto getLinkStatus(User user) {
+        if (user == null || user.getId() == null) {
+            return new GitHubStatusDto(false, null, false);
+        }
+        return userOAuthTokenRepository.findByUserIdAndProvider(user.getId(), "GITHUB")
+                .map(t -> new GitHubStatusDto(
+                        true,
+                        t.getGithubLogin(),
+                        t.getScope() != null && t.getScope().contains("repo")
+                ))
+                .orElse(new GitHubStatusDto(false, null, false));
+    }
+
+    @Transactional
+    public void disconnectLink(User user) {
+        if (user != null && user.getId() != null) {
+            userOAuthTokenRepository.deleteByUserIdAndProvider(user.getId(), "GITHUB");
+        }
+    }
+
     /**
-     * Lists up to 100 repositories accessible with the caller's stored GitHub OAuth token.
+     * Lists up to 100 repositories accessible with the caller's stored GitHub OAuth token, with optional search filter.
      */
     @Transactional(readOnly = true)
-    public List<MyRepoDto> getMyRepos(User user) {
+    public List<MyRepoDto> getMyRepos(User user, String search) {
+        if (user == null || user.getId() == null) {
+            throw new BadRequestException("NO_GITHUB_TOKEN", "No GitHub account connected. Please sign in with GitHub.");
+        }
         GitHubClientResolver.ResolvedToken token = clientResolver.resolveToken(user.getId());
         if (token.token() == null || !"user".equals(token.source())) {
             throw new BadRequestException("NO_GITHUB_TOKEN", "No GitHub account connected. Please sign in with GitHub.");
@@ -383,10 +483,18 @@ public class GitHubService {
         GitHubClient client = clientResolver.resolveClient("");
         List<GitHubClient.UserRepo> repos = client.listUserRepos(token.token());
         List<MyRepoDto> dtos = new ArrayList<>();
+        String query = search != null ? search.trim().toLowerCase() : "";
         for (GitHubClient.UserRepo r : repos) {
-            dtos.add(new MyRepoDto(r.fullName(), r.isPrivate(), r.updatedAt()));
+            if (query.isEmpty() || r.fullName().toLowerCase().contains(query)) {
+                dtos.add(new MyRepoDto(r.fullName(), r.isPrivate(), r.updatedAt()));
+            }
         }
         return dtos;
+    }
+
+    @Transactional(readOnly = true)
+    public List<MyRepoDto> getMyRepos(User user) {
+        return getMyRepos(user, null);
     }
 
     private GithubPageResponse buildPageResponse(Room room, GithubRepo repo, User user, boolean isLeader) {
@@ -437,7 +545,8 @@ public class GitHubService {
         }
 
         // Attention items with dismissals applied
-        List<AttentionDto> attentionDtos = buildAttentionItems(room, user.getId(), rawBranches, healthItems, frozenOpt.orElse(null), preKickoffCount);
+        UUID userId = user != null ? user.getId() : null;
+        List<AttentionDto> attentionDtos = buildAttentionItems(room, userId, rawBranches, healthItems, frozenOpt.orElse(null), preKickoffCount);
 
         // Activity buckets
         ActivityBucketsCalculator.ActivityResult actRes = ActivityBucketsCalculator.calculate(commits, kickoff, null, now);
@@ -449,7 +558,7 @@ public class GitHubService {
                 f.getBranchName(), f.getTag(), f.getSha(), f.getFrozenAt(), f.getCommitsSince()
         )).orElse(null);
 
-        boolean tokenAvailable = clientResolver.resolveToken(user.getId()).token() != null;
+        boolean tokenAvailable = userId != null && clientResolver.resolveToken(userId).token() != null;
 
         return new GithubPageResponse(
                 true, repoDto, band, branchDtos, healthDtos, attentionDtos,
@@ -501,7 +610,9 @@ public class GitHubService {
 
     private List<AttentionDto> buildAttentionItems(Room room, UUID userId, List<GithubBranch> branches,
                                                   List<GithubHealthItem> health, GithubFrozenDemo frozen, long preKickoffCount) {
-        List<GithubAttentionDismissal> dismissals = dismissalRepository.findByRoomIdAndUserId(room.getId(), userId);
+        List<GithubAttentionDismissal> dismissals = userId != null
+                ? dismissalRepository.findByRoomIdAndUserId(room.getId(), userId)
+                : List.of();
         Set<String> dismissedKeys = new HashSet<>();
         for (GithubAttentionDismissal d : dismissals) {
             dismissedKeys.add(d.getItemKey());
@@ -561,15 +672,66 @@ public class GitHubService {
         return list;
     }
 
-    private String parseRepoInput(String input) {
+    public String parseRepoInput(String input) {
         if (input == null || input.isBlank()) {
             throw new BadRequestException("INVALID_REPO", "Repository string is required");
         }
-        Matcher matcher = REPO_INPUT_PATTERN.matcher(input.trim());
-        if (!matcher.matches()) {
+        String s = input.trim();
+        int qIdx = s.indexOf('?');
+        if (qIdx != -1) {
+            s = s.substring(0, qIdx);
+        }
+        int hIdx = s.indexOf('#');
+        if (hIdx != -1) {
+            s = s.substring(0, hIdx);
+        }
+        s = s.trim();
+
+        if (s.startsWith("git@")) {
+            if (!s.startsWith("git@github.com:")) {
+                throw new BadRequestException("INVALID_REPO", "Only github.com repositories are accepted");
+            }
+            s = s.substring("git@github.com:".length());
+        } else {
+            if (s.toLowerCase().startsWith("http://") || s.toLowerCase().startsWith("https://")) {
+                int schemeEnd = s.indexOf("://");
+                String rest = s.substring(schemeEnd + 3);
+                int slashIdx = rest.indexOf('/');
+                String host = slashIdx != -1 ? rest.substring(0, slashIdx) : rest;
+                if (!"github.com".equalsIgnoreCase(host) && !"www.github.com".equalsIgnoreCase(host)) {
+                    throw new BadRequestException("INVALID_REPO", "Only github.com repositories are accepted");
+                }
+                s = slashIdx != -1 ? rest.substring(slashIdx + 1) : "";
+            } else if (s.toLowerCase().startsWith("github.com/")) {
+                s = s.substring("github.com/".length());
+            } else if (s.toLowerCase().startsWith("www.github.com/")) {
+                s = s.substring("www.github.com/".length());
+            } else if (s.contains("://") || (s.contains("/") && s.substring(0, s.indexOf('/')).contains("."))) {
+                throw new BadRequestException("INVALID_REPO", "Only github.com repositories are accepted");
+            }
+        }
+
+        String[] parts = Arrays.stream(s.split("/"))
+                .filter(p -> !p.isBlank())
+                .toArray(String[]::new);
+
+        if (parts.length < 2) {
             throw new BadRequestException("INVALID_REPO", "Invalid repository. Use 'owner/repo' or https://github.com/owner/repo");
         }
-        return matcher.group(1) + "/" + matcher.group(2);
+
+        String owner = parts[0];
+        String repo = parts[1];
+
+        if (repo.endsWith(".git")) {
+            repo = repo.substring(0, repo.length() - 4);
+        }
+
+        Pattern namePattern = Pattern.compile("^[A-Za-z0-9_.-]+$");
+        if (!namePattern.matcher(owner).matches() || !namePattern.matcher(repo).matches() || repo.isEmpty() || owner.isEmpty()) {
+            throw new BadRequestException("INVALID_REPO", "Invalid repository name or owner");
+        }
+
+        return owner + "/" + repo;
     }
 
     private void validateTag(String tag) {

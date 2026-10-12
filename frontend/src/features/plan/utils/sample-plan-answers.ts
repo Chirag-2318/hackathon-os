@@ -181,10 +181,10 @@ Pgvector indexing latency during peak submission bursts. Mitigated with in-memor
   ], null, 2),
 
   4: `# Demo script
-- 0 to 15s (15s): Hook — The common nightmare of mismatched hackathon teams and last-minute dropouts.
-- 15 to 45s (30s): Problem in Action — Builder A shows an empty workspace with no frontend developer.
-- 45 to 75s (30s): The Solution — Instant swipe match with Builder B, auto-scaffolding the repo and room in 2 seconds.
-- 75 to 90s (15s): Impact & Close — Ready to build from minute one with zero wasted planning overhead.
+- 0:00 - 0:15 (15s): Hook — The common nightmare of mismatched hackathon teams and last-minute dropouts.
+- 0:15 - 0:45 (30s): Problem in Action — Builder A shows an empty workspace with no frontend developer.
+- 0:45 - 1:15 (30s): The Solution — Instant swipe match with Builder B, auto-scaffolding the repo and room in 2 seconds.
+- 1:15 - 1:30 (15s): Impact & Close — Ready to build from minute one with zero wasted planning overhead.
 
 # Shot list
 1. Close-up on the hackathon countdown timer at T-36h.

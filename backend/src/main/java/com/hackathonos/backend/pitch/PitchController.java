@@ -1,32 +1,126 @@
 package com.hackathonos.backend.pitch;
 
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.hackathonos.backend.users.User;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.util.List;
 import java.util.UUID;
 
 /**
- * Controller for Pitch Deck, Rehearsals, and Q&A defense.
+ * Controller for Pitch Deck, Rehearsals, Q&A defense, Deck Sources, and Pitch Scripts.
  */
 @RestController
 @RequestMapping("/api/v1/rooms/{roomId}/pitch")
 public class PitchController {
 
     private final PitchDeckService deckService;
+    private final PitchDeckSourceService deckSourceService;
+    private final PitchScriptService scriptService;
     private final PitchRehearsalService rehearsalService;
     private final PitchQaService qaService;
 
     public PitchController(
             PitchDeckService deckService,
+            PitchDeckSourceService deckSourceService,
+            PitchScriptService scriptService,
             PitchRehearsalService rehearsalService,
             PitchQaService qaService
     ) {
         this.deckService = deckService;
+        this.deckSourceService = deckSourceService;
+        this.scriptService = scriptService;
         this.rehearsalService = rehearsalService;
         this.qaService = qaService;
+    }
+
+    // ── DECK SOURCE ──────────────────────────────────────────────────
+
+    @GetMapping("/deck/source")
+    public PitchDtos.PitchDeckSourceDto getDeckSource(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user
+    ) {
+        return deckSourceService.getSource(roomId, user);
+    }
+
+    @PutMapping("/deck/source")
+    public PitchDtos.PitchDeckSourceDto saveDeckSource(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user,
+            @RequestBody PitchDtos.SaveDeckSourceRequest req
+    ) {
+        return deckSourceService.saveSource(roomId, user, req);
+    }
+
+    @DeleteMapping("/deck/source")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteDeckSource(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user
+    ) {
+        deckSourceService.deleteSource(roomId, user);
+    }
+
+    @PostMapping(value = "/deck/source/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public PitchDtos.PitchDeckSourceDto uploadDeckFile(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user,
+            @RequestParam("file") MultipartFile file
+    ) throws IOException {
+        return deckSourceService.uploadFile(roomId, user, file);
+    }
+
+    @GetMapping("/deck/source/file")
+    public ResponseEntity<Resource> getDeckFile(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user
+    ) {
+        return deckSourceService.streamFile(roomId, user);
+    }
+
+    // ── PITCH SCRIPT ─────────────────────────────────────────────────
+
+    @PostMapping("/generate")
+    public PitchDtos.PitchScriptDto generatePitchScript(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user,
+            @RequestBody PitchDtos.GeneratePitchScriptRequest req
+    ) {
+        return scriptService.generateScript(roomId, user, req);
+    }
+
+    @GetMapping("/script")
+    public PitchDtos.PitchScriptDto getPitchScript(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user
+    ) {
+        return scriptService.getScript(roomId, user);
+    }
+
+    @PutMapping("/script/slides/{n}")
+    public PitchDtos.PitchScriptDto updatePitchSlide(
+            @PathVariable UUID roomId,
+            @PathVariable int n,
+            @AuthenticationPrincipal User user,
+            @RequestBody PitchDtos.UpdatePitchSlidePlanRequest req
+    ) {
+        return scriptService.updateSlidePlan(roomId, n, user, req);
+    }
+
+    @DeleteMapping("/script")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deletePitchScript(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user
+    ) {
+        scriptService.deleteScript(roomId, user);
     }
 
     // ── DECK ─────────────────────────────────────────────────────────
@@ -126,7 +220,7 @@ public class PitchController {
         return rehearsalService.getRehearsals(roomId, user);
     }
 
-    @PostMapping("/rehearse/runs")
+    @PostMapping({"/rehearse", "/rehearse/runs"})
     @ResponseStatus(HttpStatus.CREATED)
     public PitchDtos.RehearsalRunDto addRun(
             @PathVariable UUID roomId,
@@ -206,11 +300,12 @@ public class PitchController {
     }
 
     @PostMapping("/qa/generate")
-    public PitchDtos.GenerateQaResponse generateQa(
+    public List<PitchDtos.QaItemDto> generateQa(
             @PathVariable UUID roomId,
-            @AuthenticationPrincipal User user
+            @AuthenticationPrincipal User user,
+            @RequestBody(required = false) PitchDtos.GenerateQaRequest req
     ) {
-        return qaService.generateQa(roomId, user);
+        return qaService.generateQa(roomId, user, req);
     }
 
     @PostMapping("/qa/code-defense")

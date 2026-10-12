@@ -1,55 +1,119 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  GitBranch, ShieldCheck, CheckCircle2, ArrowRight, Loader2,
-  AlertCircle, Sparkles, Pin, Check
+  GitBranch, ShieldCheck, ArrowRight, Loader2,
+  AlertCircle, Pin, Lock, Globe, FolderGit2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  SegmentedControl,
-  SegmentedControlItem,
-} from '@/components/primitives/segmented-control';
+import { API_BASE_URL } from '@/lib/apiClient';
+import { useMeta } from '@/api/useMeta';
+import { githubService } from '@/services/githubService';
+import { toast } from 'sonner';
 
 interface NotConnectedViewProps {
+  roomId?: string;
   onConnect: (repoInput: string) => Promise<void>;
 }
 
-export function NotConnectedView({ onConnect }: NotConnectedViewProps) {
-  const [tab, setTab] = useState<'paste' | 'oauth'>('paste');
+export function NotConnectedView({ roomId, onConnect }: NotConnectedViewProps) {
+  const { data: meta } = useMeta();
+  const githubLinkEnabled = Boolean(meta?.githubLinkEnabled);
+
   const [repoInput, setRepoInput] = useState('');
+  const [includePrivate, setIncludePrivate] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [errorInfo, setErrorInfo] = useState<{ code: string; message: string } | null>(null);
+
+  // Link status
+  const [linkStatus, setLinkStatus] = useState<{ linked: boolean; login: string | null; privateAccess: boolean }>({
+    linked: false,
+    login: null,
+    privateAccess: false,
+  });
+
+  // Repos picker state
+  const [myReposOpen, setMyReposOpen] = useState(false);
+  const [myRepos, setMyRepos] = useState<Array<{ fullName: string; isPrivate: boolean; updatedAt: string }>>([]);
+  const [repoSearch, setRepoSearch] = useState('');
+  const [loadingRepos, setLoadingRepos] = useState(false);
 
   const steps = ['Finding repository...', 'Reading branch heads...', 'Running judge checks...'];
 
-  const sampleRepos = [
-    'octocat/Hello-World',
-    'open-build/sprint-app',
-  ];
+  const refreshLinkStatus = useCallback(async () => {
+    try {
+      const status = await githubService.getLinkStatus();
+      setLinkStatus(status);
+    } catch {
+      // Ignore unauthenticated or fetch errors
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshLinkStatus();
+  }, [refreshLinkStatus]);
+
+  const loadMyRepos = useCallback(async (searchQuery: string) => {
+    try {
+      setLoadingRepos(true);
+      const list = await githubService.getMyRepos(searchQuery);
+      setMyRepos(list);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to fetch repositories');
+    } finally {
+      setLoadingRepos(false);
+    }
+  }, []);
+
+  const handleStartLink = (privateRepos: boolean = includePrivate) => {
+    const url = `${API_BASE_URL}/api/v1/github/link/start?roomId=${encodeURIComponent(roomId || '')}&privateRepos=${privateRepos}`;
+    window.location.href = url;
+  };
+
+  const handleDisconnectLink = async () => {
+    try {
+      await githubService.disconnectLink();
+      setLinkStatus({ linked: false, login: null, privateAccess: false });
+      setMyReposOpen(false);
+      toast.success('GitHub account unlinked');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to disconnect account');
+    }
+  };
 
   const handleConnect = async (targetRepo?: string) => {
     const input = targetRepo || repoInput;
     if (!input.trim()) {
-      setErrorMessage('Please enter a valid owner/repo or GitHub URL');
+      setErrorInfo({ code: 'INVALID_REPO', message: 'Please enter a valid owner/repo or GitHub URL' });
       return;
     }
-    setErrorMessage('');
+    setErrorInfo(null);
     setIsConnecting(true);
     setStepIndex(0);
 
-    // Simulate 3 progress steps over 2 seconds
     const interval = setInterval(() => {
-      setStepIndex((prev) => {
-        if (prev < steps.length - 1) return prev + 1;
-        return prev;
-      });
+      setStepIndex((prev) => (prev < steps.length - 1 ? prev + 1 : prev));
     }, 600);
 
     try {
-      await new Promise((r) => setTimeout(r, 1900));
       await onConnect(input.trim());
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Repository not found or private. Make sure it is public.');
+      let code = err?.code || 'UNKNOWN';
+      let message = err?.message || 'Repository not found or private. Make sure it is public.';
+
+      if (code === 'REPO_NOT_FOUND' || err?.status === 404) {
+        code = 'REPO_NOT_FOUND';
+        message = 'We cannot find that repository. Check the spelling. If it is private, connect your GitHub account with private access.';
+      } else if (code === 'GITHUB_TOKEN_INVALID' || (err?.status === 401 && code !== 'UNAUTHORIZED')) {
+        code = 'GITHUB_TOKEN_INVALID';
+        message = "The server's GitHub token is invalid. Check APP_GITHUB_TOKEN in .env.";
+      } else if (code === 'GITHUB_RATE_LIMIT' || err?.status === 429) {
+        code = 'GITHUB_RATE_LIMIT';
+        message = err?.message || 'GitHub API rate limit reached. Please wait and try again.';
+      } else if (code === 'GITHUB_FORBIDDEN' || err?.status === 403) {
+        code = 'GITHUB_FORBIDDEN';
+        message = 'GitHub access forbidden. Check permissions for this repository.';
+      }
+      setErrorInfo({ code, message });
     } finally {
       clearInterval(interval);
       setIsConnecting(false);
@@ -57,7 +121,7 @@ export function NotConnectedView({ onConnect }: NotConnectedViewProps) {
   };
 
   return (
-    <div className="max-w-[560px] mx-auto py-12 px-4 font-[var(--font-inter)] space-y-8">
+    <div className="max-w-[620px] mx-auto py-12 px-4 font-[var(--font-inter)] space-y-8">
       {/* ── Main Connect Card ── */}
       <div className="rounded-[24px] bg-card border border-border shadow-xs p-6 sm:p-8 space-y-6">
         {/* Large Icon Tile + Title + Subtitle */}
@@ -74,127 +138,192 @@ export function NotConnectedView({ onConnect }: NotConnectedViewProps) {
           </p>
         </div>
 
-        {/* Tab switch */}
-        <div className="flex justify-center">
-          <SegmentedControl>
-            <SegmentedControlItem
-              active={tab === 'paste'}
-              onClick={() => {
-                setTab('paste');
-                setErrorMessage('');
-              }}
-              className="cursor-pointer text-xs"
+        {/* ── Linked As Status Row ── */}
+        {linkStatus.linked && (
+          <div className="flex items-center justify-between text-xs text-muted-foreground p-2 rounded-lg bg-muted/40 border border-border/40">
+            <div className="flex items-center gap-1.5 truncate">
+              <span className="size-2 rounded-full bg-emerald-500 shrink-0" />
+              <span className="truncate">
+                Linked as <strong className="text-foreground">{linkStatus.login || 'GitHub User'}</strong>
+                {linkStatus.privateAccess && ' (private access enabled)'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleDisconnectLink}
+              className="text-xs text-rose-600 hover:text-rose-700 underline font-medium cursor-pointer shrink-0 ml-2"
             >
-              Paste repo
-            </SegmentedControlItem>
-            <SegmentedControlItem
-              active={tab === 'oauth'}
-              onClick={() => {
-                setTab('oauth');
-                setErrorMessage('');
-              }}
-              className="cursor-pointer text-xs"
-            >
-              Sign in with GitHub
-            </SegmentedControlItem>
-          </SegmentedControl>
-        </div>
+              Disconnect
+            </button>
+          </div>
+        )}
 
-        {/* ── Option A: Paste Repo ── */}
-        {tab === 'paste' ? (
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">
-                Repository path or URL
-              </label>
+        {/* ── Paste repo input + Buttons ── */}
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground">
+              Repository path or URL
+            </label>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <input
+                type="text"
+                placeholder="owner/repo or https://github.com/owner/repo"
+                value={repoInput}
+                disabled={isConnecting}
+                onChange={(e) => setRepoInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
+                className="flex-1 h-10 px-3 rounded-lg border border-border bg-surface text-xs font-mono text-foreground placeholder:text-muted-foreground/60 outline-none focus:ring-1 focus:ring-ring"
+              />
+              <Button
+                onClick={() => handleConnect()}
+                disabled={isConnecting}
+                className="h-10 px-4 bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 cursor-pointer text-xs font-medium"
+              >
+                {isConnecting ? <Loader2 className="size-4 animate-spin" /> : <span>Connect</span>}
+              </Button>
+              {linkStatus.linked && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const next = !myReposOpen;
+                    setMyReposOpen(next);
+                    if (next) loadMyRepos(repoSearch);
+                  }}
+                  className="h-10 px-3 text-xs font-medium cursor-pointer"
+                >
+                  <FolderGit2 className="size-3.5 mr-1.5" />
+                  <span>Pick from my repositories</span>
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* ── My Repos Picker Dropdown / Panel ── */}
+          {linkStatus.linked && myReposOpen && (
+            <div className="p-3 rounded-xl border border-border bg-surface space-y-3 animate-in fade-in-50">
               <div className="flex items-center gap-2">
                 <input
                   type="text"
-                  placeholder="owner/repo or https://github.com/owner/repo"
-                  value={repoInput}
-                  disabled={isConnecting}
-                  onChange={(e) => setRepoInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
-                  className="flex-1 h-10 px-3 rounded-lg border border-border bg-surface text-xs font-mono text-foreground placeholder:text-muted-foreground/60 outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="Filter your repositories..."
+                  value={repoSearch}
+                  onChange={(e) => {
+                    setRepoSearch(e.target.value);
+                    loadMyRepos(e.target.value);
+                  }}
+                  className="flex-1 h-8 px-2.5 rounded-md border border-border bg-background text-xs text-foreground placeholder:text-muted-foreground/60 outline-none focus:ring-1 focus:ring-ring"
                 />
-                <Button
-                  onClick={() => handleConnect()}
-                  disabled={isConnecting}
-                  className="h-10 px-4 bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 cursor-pointer text-xs font-medium"
-                >
-                  {isConnecting ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <span>Connect</span>
-                  )}
-                </Button>
+                {loadingRepos && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+              </div>
+
+              <div className="max-h-48 overflow-y-auto space-y-1">
+                {myRepos.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-2 text-center">
+                    {loadingRepos ? 'Loading repositories...' : 'No repositories found.'}
+                  </p>
+                ) : (
+                  myRepos.map((r) => (
+                    <button
+                      key={r.fullName}
+                      type="button"
+                      disabled={isConnecting}
+                      onClick={() => {
+                        setRepoInput(r.fullName);
+                        setMyReposOpen(false);
+                        handleConnect(r.fullName);
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-md hover:bg-muted/60 text-left text-xs font-mono text-foreground flex items-center justify-between cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        {r.isPrivate ? (
+                          <Lock className="size-3 text-amber-500 shrink-0" />
+                        ) : (
+                          <Globe className="size-3 text-muted-foreground shrink-0" />
+                        )}
+                        <span className="truncate">{r.fullName}</span>
+                      </div>
+                      <ArrowRight className="size-3 text-muted-foreground shrink-0" />
+                    </button>
+                  ))
+                )}
               </div>
             </div>
+          )}
 
-            {/* Connecting progress state */}
-            {isConnecting && (
-              <div className="p-3 rounded-xl bg-muted/30 border border-border/50 text-xs text-foreground flex items-center gap-2">
-                <Loader2 className="size-3.5 animate-spin text-primary" />
-                <span>{steps[stepIndex]}</span>
+          {/* Connecting progress state */}
+          {isConnecting && (
+            <div className="p-3 rounded-xl bg-muted/30 border border-border/50 text-xs text-foreground flex items-center gap-2">
+              <Loader2 className="size-3.5 animate-spin text-primary" />
+              <span>{steps[stepIndex]}</span>
+            </div>
+          )}
+
+          {/* ── Error message & Friendly Mappings ── */}
+          {errorInfo && (
+            <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900 text-xs flex items-start gap-2.5">
+              <AlertCircle className="size-4 shrink-0 mt-0.5" />
+              <div className="space-y-2 flex-1">
+                <p className="font-semibold leading-relaxed">{errorInfo.message}</p>
+                {/* Only REPO_NOT_FOUND shows the "Connect GitHub account" button */}
+                {errorInfo.code === 'REPO_NOT_FOUND' && (
+                  <div>
+                    {githubLinkEnabled ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleStartLink(true)}
+                        className="h-8 px-3 text-xs bg-rose-700 hover:bg-rose-800 text-white dark:bg-rose-600 dark:hover:bg-rose-700 cursor-pointer"
+                      >
+                        <GitBranch className="size-3.5 mr-1.5" />
+                        Connect GitHub account
+                      </Button>
+                    ) : (
+                      <p className="text-[11px] text-rose-600 dark:text-rose-400 italic">
+                        GitHub linking is not configured on the server
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Error message */}
-            {errorMessage && (
-              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900 text-xs flex items-start gap-2">
-                <AlertCircle className="size-4 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold">{errorMessage}</p>
-                  <p className="mt-0.5">
-                    For private repositories, use{' '}
-                    <button
+          {/* ── Account Linking Section (When not linked) ── */}
+          {!linkStatus.linked && (
+            <div className="pt-3 border-t border-border/50 space-y-2.5">
+              {githubLinkEnabled ? (
+                <div className="space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <Button
                       type="button"
-                      onClick={() => setTab('oauth')}
-                      className="underline font-bold hover:text-rose-900"
+                      onClick={() => handleStartLink(includePrivate)}
+                      className="h-9 px-4 bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 text-xs font-medium cursor-pointer gap-2"
                     >
-                      Sign in with GitHub
-                    </button>
-                    .
+                      <GitBranch className="size-4" />
+                      <span>Log in through GitHub</span>
+                    </Button>
+                    <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={includePrivate}
+                        onChange={(e) => setIncludePrivate(e.target.checked)}
+                        className="rounded border-border text-primary focus:ring-primary size-3.5"
+                      />
+                      <span>Include private repositories</span>
+                    </label>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    GitHub gives this app broader access for private repos. We only read.
                   </p>
                 </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          /* ── Option B: Sign in with GitHub ── */
-          <div className="space-y-4 text-center">
-            <Button
-              onClick={() => handleConnect('octocat/Hello-World')}
-              disabled={isConnecting}
-              className="w-full h-10 bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 gap-2 cursor-pointer text-xs font-medium"
-            >
-              <GitBranch className="size-4" />
-              <span>Continue with GitHub OAuth</span>
-            </Button>
-            <p className="text-[11px] text-muted-foreground">
-              Read-only access to repositories you choose
-            </p>
-
-            {/* Sample Repos to Pick */}
-            <div className="pt-2 text-left border-t border-border/50 space-y-1.5">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
-                Or pick a demo repository
-              </span>
-              {sampleRepos.map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  disabled={isConnecting}
-                  onClick={() => handleConnect(r)}
-                  className="w-full p-2 rounded-lg hover:bg-muted/50 border border-border/40 text-left font-mono text-xs text-foreground flex items-center justify-between cursor-pointer transition-colors"
-                >
-                  <span>{r}</span>
-                  <ArrowRight className="size-3 text-muted-foreground" />
-                </button>
-              ))}
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  GitHub linking is not configured on the server
+                </p>
+              )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* ── 3-Item Preview Row ── */}

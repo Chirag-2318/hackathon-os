@@ -33,9 +33,16 @@ public class PitchRehearsal {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
+    @Column(name = "stats", columnDefinition = "jsonb")
+    private String stats;
+
     public PitchRehearsal() {}
 
     public PitchRehearsal(UUID roomId, Instant runAt, int durationSec, UUID presenterId, UUID operatorId, String sectionPaces, String notes) {
+        this(roomId, runAt, durationSec, presenterId, operatorId, sectionPaces, notes, null);
+    }
+
+    public PitchRehearsal(UUID roomId, Instant runAt, int durationSec, UUID presenterId, UUID operatorId, String sectionPaces, String notes, String stats) {
         this.roomId = roomId;
         this.runAt = runAt != null ? runAt : Instant.now();
         this.durationSec = durationSec;
@@ -43,6 +50,7 @@ public class PitchRehearsal {
         this.operatorId = operatorId;
         this.sectionPaces = sectionPaces != null ? sectionPaces : "[]";
         this.notes = notes;
+        this.stats = stats;
     }
 
     public UUID getId() { return id; }
@@ -68,4 +76,7 @@ public class PitchRehearsal {
 
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
+
+    public String getStats() { return stats; }
+    public void setStats(String stats) { this.stats = stats; }
 }

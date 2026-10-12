@@ -54,6 +54,20 @@ public class BriefController {
         return briefService.setPdfSource(roomId, file, currentUser.get());
     }
 
+    @PostMapping(value = "/source/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public BriefResponseDto setImagesSource(
+            @PathVariable UUID roomId,
+            @RequestParam("files") java.util.List<MultipartFile> files) {
+        return briefService.setImagesSource(roomId, files, currentUser.get());
+    }
+
+    @PostMapping("/source/text")
+    public BriefResponseDto setTextSource(
+            @PathVariable UUID roomId,
+            @jakarta.validation.Valid @RequestBody TextSourceRequest request) {
+        return briefService.setTextSource(roomId, request.text(), currentUser.get());
+    }
+
     @GetMapping("/extraction-prompt")
     public ExtractionPromptResponse getExtractionPrompt(@PathVariable UUID roomId) {
         return briefService.getExtractionPrompt(roomId, currentUser.get());

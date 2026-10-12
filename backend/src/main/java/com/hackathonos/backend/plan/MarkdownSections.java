@@ -22,7 +22,7 @@ public class MarkdownSections {
 
         for (String line : lines) {
             String trimmed = line.trim();
-            if (trimmed.startsWith("# ") || trimmed.startsWith("## ")) {
+            if (trimmed.matches("^#{1,6}\\s+.*")) {
                 if (currentHeading != null) {
                     result.sections.put(currentHeading, currentBody.toString().trim());
                 }
@@ -44,11 +44,24 @@ public class MarkdownSections {
     }
 
     public boolean hasHeading(String heading) {
-        return sections.containsKey(heading);
+        if (sections.containsKey(heading)) return true;
+        String normalized = normalizeHeading(heading);
+        return sections.keySet().stream().anyMatch(k -> normalizeHeading(k).equalsIgnoreCase(normalized));
     }
 
     public String getSection(String heading) {
-        return sections.getOrDefault(heading, "");
+        if (sections.containsKey(heading)) return sections.get(heading);
+        String normalized = normalizeHeading(heading);
+        return sections.entrySet().stream()
+                .filter(e -> normalizeHeading(e.getKey()).equalsIgnoreCase(normalized))
+                .map(Map.Entry::getValue)
+                .findFirst()
+                .orElse("");
+    }
+
+    private static String normalizeHeading(String h) {
+        if (h == null) return "";
+        return h.replaceAll("^#+\\s*", "").replaceAll("[*#:_`]", "").trim();
     }
 
     public Map<String, String> getSections() {

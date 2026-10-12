@@ -30,6 +30,16 @@ public class PlanController {
         return planService.getPlan(roomId, currentUser.get());
     }
 
+    @PostMapping("/plan/start")
+    public PlanDto startPlan(@PathVariable UUID roomId) {
+        return planService.startPlan(roomId, currentUser.get());
+    }
+
+    @PutMapping("/plan/notes")
+    public void updatePlanNotes(@PathVariable UUID roomId, @RequestBody PlanNotesRequest request) {
+        planService.updatePlanNotes(roomId, request.notes(), currentUser.get());
+    }
+
     @PutMapping("/plan/steps/{stepKey}")
     public void saveStepDraft(
             @PathVariable UUID roomId,

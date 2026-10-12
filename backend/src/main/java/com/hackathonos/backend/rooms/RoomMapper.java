@@ -16,7 +16,7 @@ public class RoomMapper {
                 room.isPlanDone()
         );
 
-        String visibleJoinCode = isLeader ? room.getJoinCode() : null;
+        String visibleJoinCode = room.getJoinCode();
 
         return new RoomDetailDto(
                 room.getId(),

@@ -55,12 +55,9 @@ export function BriefPage() {
       setIncompleteErrors([]);
       queryClient.invalidateQueries({ queryKey: ['brief', activeRoomId] });
       queryClient.invalidateQueries({ queryKey: ['room', activeRoomId] });
-      toast('Brief confirmed!', {
-        action: {
-          label: 'Start ideating',
-          onClick: () => navigate(`/app/room/${activeRoomId}/ideate`),
-        },
-      });
+      queryClient.invalidateQueries({ queryKey: ['home'] });
+      toast.success('Brief confirmed');
+      navigate(`/app/room/${activeRoomId}/ideate`);
     },
     onError: (err: any) => {
       if (err instanceof ApiError && err.code === 'BRIEF_INCOMPLETE') {
@@ -92,6 +89,10 @@ export function BriefPage() {
 
   const handleFieldsChange = (newFields: BriefFields) => {
     if (!brief || !canEdit) return;
+    queryClient.setQueryData(['brief', activeRoomId], (old: Brief | null | undefined) => {
+      if (!old) return old;
+      return { ...old, fields: newFields };
+    });
     setSaveStatus('saving');
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
 
@@ -100,8 +101,30 @@ export function BriefPage() {
     }, 800);
   };
 
-  const rubricSum = brief?.fields?.rubric?.reduce((acc, r) => acc + (Number(r.weight) || 0), 0) ?? 0;
-  const allRulesConfirmed = RULE_KEYS.every((k) => confirmedChecks[k]);
+  const handleExtracted = (extractedFields: any, updatedBrief?: any) => {
+    if (updatedBrief) {
+      queryClient.setQueryData(['brief', activeRoomId], updatedBrief);
+    } else if (brief) {
+      const mergedFields = {
+        ...brief.fields,
+        ...extractedFields,
+      };
+      const newBrief = {
+        ...brief,
+        fields: mergedFields,
+        needsStructuring: false,
+      };
+      queryClient.setQueryData(['brief', activeRoomId], newBrief);
+      saveBriefMutation.mutate(newBrief);
+    }
+    queryClient.invalidateQueries({ queryKey: ['brief', activeRoomId] });
+  };
+
+  const rubricList = brief?.fields?.rubric ?? [];
+  const rubricSum = rubricList.reduce((acc, r) => acc + (Number(r.weight) || 0), 0);
+  const rubricValid = rubricList.length === 0 || rubricSum === 100;
+  const hasProblemStatement = Boolean(brief?.fields?.problemStatement?.trim());
+  const canConfirm = isLeader && hasProblemStatement && rubricValid;
   const hasDates = Boolean(brief?.fields?.deadlines?.start && brief?.fields?.deadlines?.submission);
 
   return (
@@ -115,7 +138,7 @@ export function BriefPage() {
               <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 text-[11px] font-bold">
                 CONFIRMED
               </span>
-            ) : brief?.fields?.problemStatement ? (
+            ) : hasProblemStatement ? (
               <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-[11px] font-bold">
                 NEEDS CONFIRMATION
               </span>
@@ -132,7 +155,7 @@ export function BriefPage() {
           </p>
         </div>
 
-        {brief?.fields?.problemStatement && canEdit && (
+        {brief?.hasSource && canEdit && (
           <Button
             variant="outline"
             size="sm"
@@ -144,22 +167,25 @@ export function BriefPage() {
         )}
       </div>
 
-      {/* Intake Section (when brief is empty) */}
-      {(!brief || !brief.fields?.problemStatement) && (
+      {/* Intake Section (when brief has no source) */}
+      {!brief?.hasSource && (
         <BriefIntake
           roomId={activeRoomId}
           isLeader={isLeader}
-          onSuccess={() => queryClient.invalidateQueries({ queryKey: ['brief', activeRoomId] })}
+          onSuccess={(b) => {
+            queryClient.setQueryData(['brief', activeRoomId], b);
+            queryClient.invalidateQueries({ queryKey: ['brief', activeRoomId] });
+          }}
         />
       )}
 
       {/* Review Section */}
-      {brief && brief.fields?.problemStatement && (
+      {brief?.hasSource && (
         <div className="flex flex-col gap-6">
           {brief.needsStructuring && (
             <StructuringBanner
               roomId={activeRoomId}
-              onExtracted={(fields) => handleFieldsChange(fields)}
+              onExtracted={handleExtracted}
             />
           )}
 
@@ -201,13 +227,16 @@ export function BriefPage() {
       )}
 
       {/* Sticky Bottom Bar */}
-      {brief && brief.fields?.problemStatement && !brief.confirmed && (
+      {brief?.hasSource && !brief.confirmed && (
         <div className="fixed bottom-0 left-[232px] right-0 h-16 bg-card/95 backdrop-blur-md border-t border-border px-8 flex items-center justify-between z-20">
           <div className="flex items-center gap-4">
             <span className="text-xs font-semibold text-foreground">
               {RULE_KEYS.filter((k) => confirmedChecks[k]).length} of 9 rules confirmed
-              {rubricSum !== 100 && (
-                <span className="text-red-500 ml-2 font-normal">(Rubric must sum to 100%)</span>
+              {rubricList.length > 0 && rubricSum !== 100 && (
+                <span className="text-red-500 ml-2 font-normal">(Rubric weights sum to {rubricSum}%, must be 100%)</span>
+              )}
+              {!hasProblemStatement && (
+                <span className="text-amber-500 ml-2 font-normal">(Problem statement required)</span>
               )}
             </span>
 
@@ -230,7 +259,7 @@ export function BriefPage() {
             )}
             <Button
               onClick={() => confirmBriefMutation.mutate()}
-              disabled={!allRulesConfirmed || rubricSum !== 100 || !isLeader || confirmBriefMutation.isPending}
+              disabled={!canConfirm || confirmBriefMutation.isPending}
               className="h-9 px-6 rounded-[12px] text-xs font-semibold"
             >
               {confirmBriefMutation.isPending ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : null}

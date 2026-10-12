@@ -114,25 +114,19 @@ export function PlanLockedView({
                 <p className="text-xs text-muted-foreground mt-0.5">Your workspace is ready.</p>
               </div>
 
-              {isLeader ? (
-                <Button
-                  onClick={onEnterBuild}
-                  disabled={isEnteringBuild}
-                  className="h-10 px-6 rounded-xl bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 font-semibold text-xs shadow-xs animate-pulse"
-                >
-                  {isEnteringBuild ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="size-3.5 animate-spin" /> Unlocking build phase...
-                    </span>
-                  ) : (
-                    'Enter build phase →'
-                  )}
-                </Button>
-              ) : (
-                <div className="px-4 py-2 rounded-xl bg-muted text-xs text-muted-foreground font-medium">
-                  Waiting for the leader to unlock build phase
-                </div>
-              )}
+              <Button
+                onClick={onEnterBuild}
+                disabled={isEnteringBuild}
+                className="h-10 px-6 rounded-xl bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 font-semibold text-xs shadow-xs animate-pulse"
+              >
+                {isEnteringBuild ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="size-3.5 animate-spin" /> Opening build phase...
+                  </span>
+                ) : (
+                  'Open build workspace \u2192'
+                )}
+              </Button>
             </motion.div>
           )}
         </AnimatePresence>

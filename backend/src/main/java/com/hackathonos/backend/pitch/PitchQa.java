@@ -35,6 +35,15 @@ public class PitchQa {
     @Column(name = "owner_id")
     private UUID ownerId;
 
+    @Column(name = "why_asked", columnDefinition = "TEXT")
+    private String whyAsked;
+
+    @Column(name = "risk_point", columnDefinition = "TEXT")
+    private String riskPoint;
+
+    @Column(name = "difficulty", nullable = false)
+    private int difficulty = 1;
+
     public PitchQa() {}
 
     public PitchQa(UUID roomId, int position, String question, String answer, String category, String source, boolean practiced, UUID ownerId) {
@@ -46,6 +55,7 @@ public class PitchQa {
         this.source = source != null ? source : "MANUAL";
         this.practiced = practiced;
         this.ownerId = ownerId;
+        this.difficulty = 1;
     }
 
     public UUID getId() { return id; }
@@ -74,4 +84,13 @@ public class PitchQa {
 
     public UUID getOwnerId() { return ownerId; }
     public void setOwnerId(UUID ownerId) { this.ownerId = ownerId; }
+
+    public String getWhyAsked() { return whyAsked; }
+    public void setWhyAsked(String whyAsked) { this.whyAsked = whyAsked; }
+
+    public String getRiskPoint() { return riskPoint; }
+    public void setRiskPoint(String riskPoint) { this.riskPoint = riskPoint; }
+
+    public int getDifficulty() { return difficulty; }
+    public void setDifficulty(int difficulty) { this.difficulty = difficulty; }
 }

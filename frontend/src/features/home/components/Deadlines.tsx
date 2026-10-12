@@ -1,6 +1,7 @@
 import React, { useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { CalendarRange, Check } from 'lucide-react';
+import { CalendarRange, Check, CheckCircle2, Circle, ListOrdered } from 'lucide-react';
 import { TagChip, TimeChip, TrayCard } from './HomeDesignSystem';
 import { HomeContext } from '../home-page';
 import { formatDuration, getServerNowMs } from '@/utils/time';
@@ -71,8 +72,108 @@ function DeadlineRow({ deadline }: { deadline: DeadlineItem }) {
 }
 
 export function Deadlines() {
+  const navigate = useNavigate();
   const { homeData } = useContext(HomeContext);
-  const rawDeadlines: DeadlineItem[] = homeData?.selected?.deadlines || [];
+  const selected = homeData?.selected;
+  const stage = (selected?.stage || '').toLowerCase();
+  const isPlanning = selected?.variant === 'planning' || ['brief', 'ideate', 'plan'].includes(stage);
+  const roomId = selected?.roomId || selected?.id;
+
+  if (isPlanning) {
+    const steps = [
+      {
+        id: 'brief',
+        title: 'Brief',
+        helper: 'Add hackathon brief and invite team',
+        path: `/app/room/${roomId}/brief`,
+        status: stage === 'brief' ? (selected?.briefDone ? 'done' : 'current') : 'done',
+      },
+      {
+        id: 'ideate',
+        title: 'Ideate',
+        helper: 'Collect ideas and pick winners',
+        path: `/app/room/${roomId}/ideate`,
+        status: stage === 'brief' ? 'upcoming' : stage === 'ideate' ? (selected?.ideationDone ? 'done' : 'current') : 'done',
+      },
+      {
+        id: 'plan',
+        title: 'Plan',
+        helper: 'Turn idea into tasks & architecture',
+        path: `/app/room/${roomId}/plan`,
+        status: ['brief', 'ideate'].includes(stage) ? 'upcoming' : stage === 'plan' ? 'current' : 'done',
+      },
+      {
+        id: 'build',
+        title: 'Build',
+        helper: 'Start build sprint and track board',
+        path: `/app/room/${roomId}/build`,
+        status: stage === 'build' ? 'current' : 'upcoming',
+      },
+    ];
+
+    const doneCount = steps.filter((s) => s.status === 'done').length;
+    const progressPercent = Math.round((doneCount / steps.length) * 100);
+
+    return (
+      <div className="w-full h-full flex flex-col min-w-0">
+        <TrayCard
+          footerLeftLabel="Planning journey"
+          footerRightLabel=""
+          footerRightValue={`${doneCount} of 4 complete`}
+          progressPercent={progressPercent}
+        >
+          <div className="p-6 pb-2">
+            <div className="flex items-center gap-2 mb-2">
+              <ListOrdered className="w-5 h-5 text-[var(--color-home-text-secondary)]" />
+              <h2 className="text-[20px] font-[600] text-[var(--color-home-text-primary)]">
+                Next steps
+              </h2>
+            </div>
+          </div>
+
+          <div className="flex flex-col min-h-[140px]">
+            {steps.map((st) => (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => roomId && navigate(st.path)}
+                className="w-full flex items-start gap-4 px-6 py-3.5 border-b border-[var(--color-home-hairline)] last:border-b-0 text-left transition-colors hover:bg-black/[0.02] cursor-pointer"
+              >
+                <div className="mt-1 shrink-0">
+                  {st.status === 'done' ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  ) : st.status === 'current' ? (
+                    <div className="w-5 h-5 rounded-full border-2 border-[var(--color-home-accent)] flex items-center justify-center">
+                      <div className="w-2 h-2 rounded-full bg-[var(--color-home-accent)]" />
+                    </div>
+                  ) : (
+                    <Circle className="w-5 h-5 text-neutral-300" />
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className={cn(
+                      'text-[15px] font-[500]',
+                      st.status === 'done' ? 'text-[var(--color-home-text-secondary)] line-through' : 'text-[var(--color-home-text-primary)] font-[600]'
+                    )}>
+                      {st.title}
+                    </span>
+                    {st.status === 'current' && <TagChip label="CURRENT" color="blue" />}
+                  </div>
+                  <div className="text-[13px] text-[var(--color-home-text-secondary)]">
+                    {st.helper}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </TrayCard>
+      </div>
+    );
+  }
+
+  const rawDeadlines: DeadlineItem[] = selected?.deadlines || [];
 
   const sortedDeadlines = [...rawDeadlines].sort((a, b) => {
     if (a.done === b.done) return 0;
@@ -84,14 +185,7 @@ export function Deadlines() {
   const progressPercent = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 100;
 
   return (
-    <div
-      style={{
-        transform: 'scale(0.85)',
-        transformOrigin: 'top right',
-        marginTop: '-180px',
-        marginBottom: '0px',
-      }}
-    >
+    <div className="w-full h-full flex flex-col min-w-0">
       <TrayCard
         footerLeftLabel="Submission checklist"
         footerRightLabel=""

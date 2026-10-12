@@ -6,17 +6,36 @@ import type { PrepItem } from './types';
 
 export const prepService = {
   async getPrepItems(roomId: string): Promise<PrepItem[]> {
-    return apiFetch<PrepItem[]>(`/api/v1/rooms/${roomId}/prep`);
+    const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/prep`);
+    if (Array.isArray(res)) {
+      return res;
+    }
+    if (res && Array.isArray(res.checklist)) {
+      return res.checklist.map((item: any) => ({
+        id: item.id,
+        roomId,
+        title: item.label || item.title || '',
+        done: Boolean(item.done),
+        dueDate: item.dueAt || item.dueDate,
+        category: item.category || 'General',
+      }));
+    }
+    return [];
   },
 
-  async togglePrepItem(roomId: string, itemId: string): Promise<PrepItem> {
-    return apiFetch<PrepItem>(`/api/v1/rooms/${roomId}/prep/${itemId}/toggle`, { method: 'POST' });
+  async togglePrepItem(roomId: string, itemId: string, done?: boolean): Promise<any> {
+    return apiFetch<any>(`/api/v1/rooms/${roomId}/prep/checklist/${itemId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ done }),
+    });
   },
 
-  async addPrepItem(roomId: string, title: string, category = 'General'): Promise<PrepItem> {
-    return apiFetch<PrepItem>(`/api/v1/rooms/${roomId}/prep`, {
+  async addPrepItem(roomId: string, title: string, category = 'General'): Promise<any> {
+    return apiFetch<any>(`/api/v1/rooms/${roomId}/prep`, {
       method: 'POST',
-      body: JSON.stringify({ title, category }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: title }),
     });
   },
 };

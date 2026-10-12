@@ -20,7 +20,9 @@ export function ReadinessBand({
   onScrollToSection,
   onOpenFreeze,
 }: ReadinessBandProps) {
-  const { health, ruleCheck, historyHealth, frozenDemo, commitsSinceFreeze, commits } = data;
+  const { ruleCheck, historyHealth, frozenDemo, commitsSinceFreeze } = data;
+  const health = data.health || [];
+  const commits = data.commits || [];
   const passedCount = health.filter((h) => h.status === 'pass').length;
   const totalCount = health.length;
   const missingItems = health.filter((h) => h.status === 'fail');

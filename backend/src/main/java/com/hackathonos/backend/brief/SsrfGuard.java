@@ -7,8 +7,11 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -16,7 +19,10 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.URL;
 import java.net.UnknownHostException;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.InflaterInputStream;
 
 /**
  * SSRF-protected safe HTTP fetcher with loopback, private and link-local IP blocking.
@@ -24,6 +30,7 @@ import java.nio.charset.StandardCharsets;
 @Component
 public class SsrfGuard {
 
+    private static final Logger log = LoggerFactory.getLogger(SsrfGuard.class);
     private static final int TIMEOUT_MS = 8000;
     private static final int MAX_BODY_BYTES = 2 * 1024 * 1024; // 2 MB
     private static final int MAX_REDIRECTS = 3;
@@ -121,8 +128,9 @@ public class SsrfGuard {
                 conn.setConnectTimeout(TIMEOUT_MS);
                 conn.setReadTimeout(TIMEOUT_MS);
                 conn.setInstanceFollowRedirects(false);
-                conn.setRequestProperty("User-Agent", "HackathonOS-Bot/1.0");
-                conn.setRequestProperty("Accept", "text/html, text/plain, application/pdf");
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,text/plain,application/pdf");
+                conn.setRequestProperty("Accept-Language", "en");
 
                 int statusCode = conn.getResponseCode();
 
@@ -150,11 +158,24 @@ public class SsrfGuard {
                 }
 
                 String contentType = conn.getContentType();
-                byte[] bodyBytes = readBodyLimited(conn.getInputStream(), MAX_BODY_BYTES);
+                String contentEncoding = conn.getContentEncoding();
+                InputStream in = conn.getInputStream();
+                if (contentEncoding != null) {
+                    if ("gzip".equalsIgnoreCase(contentEncoding)) {
+                        in = new GZIPInputStream(in);
+                    } else if ("deflate".equalsIgnoreCase(contentEncoding)) {
+                        in = new InflaterInputStream(in);
+                    }
+                }
+
+                byte[] bodyBytes = readBodyLimited(in, MAX_BODY_BYTES);
                 conn.disconnect();
 
                 if (bodyBytes.length == 0) {
-                    throw new UnprocessableEntityException("EMPTY_PAGE", "Page returned empty response");
+                    log.warn("Brief link fetch returned <200 chars: host={}, status={}, contentType={}, bytes={}, extractedLength=0",
+                            host, statusCode, contentType, 0);
+                    throw new UnprocessableEntityException("EMPTY_PAGE",
+                            "This page builds its content with JavaScript or blocks automatic reading, so we cannot read it. Copy the text from the page and paste it, or upload the PDF.");
                 }
 
                 // If PDF content-type or starts with %PDF
@@ -163,16 +184,21 @@ public class SsrfGuard {
                     return pdfParser.extractText(bodyBytes);
                 }
 
+                Charset charset = resolveCharset(contentType);
+
                 if (contentType != null && contentType.toLowerCase().contains("text/plain")) {
-                    String plainText = new String(bodyBytes, StandardCharsets.UTF_8).trim();
-                    if (plainText.isEmpty()) {
-                        throw new UnprocessableEntityException("EMPTY_PAGE", "Plain text page is empty");
+                    String plainText = new String(bodyBytes, charset).trim();
+                    if (plainText.length() < 200) {
+                        log.warn("Brief link fetch returned <200 chars: host={}, status={}, contentType={}, bytes={}, extractedLength={}",
+                                host, statusCode, contentType, bodyBytes.length, plainText.length());
+                        throw new UnprocessableEntityException("EMPTY_PAGE",
+                                "This page builds its content with JavaScript or blocks automatic reading, so we cannot read it. Copy the text from the page and paste it, or upload the PDF.");
                     }
                     return plainText;
                 }
 
                 // Default HTML parsing with Jsoup
-                return extractTextFromHtml(bodyBytes, currentUrl);
+                return extractTextFromHtml(bodyBytes, charset, currentUrl, host, statusCode, contentType);
 
             } catch (BadRequestException | BadGatewayException | UnprocessableEntityException e) {
                 throw e;
@@ -180,6 +206,21 @@ public class SsrfGuard {
                 throw new BadGatewayException("FETCH_FAILED", "Network error: " + e.getMessage());
             }
         }
+    }
+
+    private Charset resolveCharset(String contentType) {
+        if (contentType != null) {
+            String[] parts = contentType.split(";");
+            for (String part : parts) {
+                String trimmed = part.trim();
+                if (trimmed.toLowerCase().startsWith("charset=")) {
+                    try {
+                        return Charset.forName(trimmed.substring("charset=".length()).trim());
+                    } catch (Exception ignored) {}
+                }
+            }
+        }
+        return StandardCharsets.UTF_8;
     }
 
     private void validateScheme(String url) {
@@ -223,28 +264,73 @@ public class SsrfGuard {
         return buffer.toByteArray();
     }
 
-    private String extractTextFromHtml(byte[] bytes, String baseUri) {
-        String html = new String(bytes, StandardCharsets.UTF_8);
-        Document doc = Jsoup.parse(html, baseUri);
-        doc.select("script, style, nav, footer, noscript, svg, header, form, iframe").remove();
+    private String extractTextFromHtml(byte[] bytes, Charset defaultCharset, String baseUri, String host, int statusCode, String contentType) {
+        Document doc;
+        try {
+            doc = Jsoup.parse(new ByteArrayInputStream(bytes), defaultCharset.name(), baseUri);
+        } catch (java.io.IOException e) {
+            log.warn("Failed to parse HTML: host={}, error={}", host, e.getMessage());
+            throw new UnprocessableEntityException("PARSE_FAILED", "Failed to parse HTML content: " + e.getMessage());
+        }
+        doc.select("script, style, noscript, svg, iframe").remove();
 
+        Element mainOrArticle = doc.selectFirst("main, article");
+        String text = "";
+        if (mainOrArticle != null) {
+            text = extractFormattedText(mainOrArticle);
+        }
+        if (text.length() < 200) {
+            text = doc.body() != null ? extractFormattedText(doc.body()) : "";
+        }
+
+        if (text.length() < 200) {
+            StringBuilder metaSb = new StringBuilder(text);
+            String title = doc.title();
+            if (title != null && !title.isBlank()) {
+                if (metaSb.length() > 0) metaSb.append("\n\n");
+                metaSb.append(title.trim());
+            }
+            Element metaDesc = doc.selectFirst("meta[name=description]");
+            if (metaDesc != null && metaDesc.hasAttr("content") && !metaDesc.attr("content").isBlank()) {
+                if (metaSb.length() > 0) metaSb.append("\n\n");
+                metaSb.append(metaDesc.attr("content").trim());
+            }
+            Element ogTitle = doc.selectFirst("meta[property=og:title]");
+            if (ogTitle != null && ogTitle.hasAttr("content") && !ogTitle.attr("content").isBlank()) {
+                if (metaSb.length() > 0) metaSb.append("\n\n");
+                metaSb.append(ogTitle.attr("content").trim());
+            }
+            Element ogDesc = doc.selectFirst("meta[property=og:description]");
+            if (ogDesc != null && ogDesc.hasAttr("content") && !ogDesc.attr("content").isBlank()) {
+                if (metaSb.length() > 0) metaSb.append("\n\n");
+                metaSb.append(ogDesc.attr("content").trim());
+            }
+            text = metaSb.toString().trim();
+        }
+
+        if (text.length() < 200) {
+            log.warn("Brief link fetch returned <200 chars: host={}, status={}, contentType={}, bytes={}, extractedLength={}",
+                    host, statusCode, contentType, bytes.length, text.length());
+            throw new UnprocessableEntityException("EMPTY_PAGE",
+                    "This page builds its content with JavaScript or blocks automatic reading, so we cannot read it. Copy the text from the page and paste it, or upload the PDF.");
+        }
+
+        return text;
+    }
+
+    private String extractFormattedText(Element container) {
         StringBuilder sb = new StringBuilder();
-        Elements elements = doc.select("h1, h2, h3, h4, h5, h6, p, li");
-        for (Element el : elements) {
-            String text = el.text().trim();
-            if (!text.isEmpty()) {
-                sb.append(text).append("\n\n");
+        Elements blocks = container.select("h1, h2, h3, h4, h5, h6, p, li, blockquote");
+        for (Element el : blocks) {
+            String blockText = el.text().replaceAll("[ \\t\\x0B\\f]+", " ").trim();
+            if (!blockText.isEmpty()) {
+                sb.append(blockText).append("\n\n");
             }
         }
-
-        String result = sb.toString().trim();
-        if (result.isEmpty()) {
-            result = doc.body() != null ? doc.body().text().trim() : "";
+        String res = sb.toString().trim();
+        if (res.isEmpty()) {
+            res = container.text().replaceAll("\\s+", " ").trim();
         }
-
-        if (result.isEmpty()) {
-            throw new UnprocessableEntityException("EMPTY_PAGE", "Page contains no readable text");
-        }
-        return result;
+        return res;
     }
 }

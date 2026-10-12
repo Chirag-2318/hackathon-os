@@ -12,6 +12,7 @@ import com.hackathonos.backend.common.error.BadRequestException;
 import com.hackathonos.backend.common.error.ConflictException;
 import com.hackathonos.backend.common.security.RoomAccess;
 import com.hackathonos.backend.docs.DocRepository;
+import com.hackathonos.backend.ideas.Idea;
 import com.hackathonos.backend.ideas.IdeaRepository;
 import com.hackathonos.backend.ideas.IdeasService;
 import com.hackathonos.backend.members.RoomMember;
@@ -133,6 +134,32 @@ public class PlanService {
     /**
      * Retrieves full plan state, steps, prompts, readiness indicators, and completion metrics.
      */
+    @Transactional
+    public PlanDto startPlan(UUID roomId, User user) {
+        roomAccess.requireLeader(roomId, user);
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        if (!room.isIdeateDone()) {
+            throw new BadRequestException("IDEATION_NOT_DONE", "Ideation must be complete before planning can begin");
+        }
+        room.setPlanStartedAt(Instant.now());
+        roomRepository.save(room);
+        return getPlan(roomId, user);
+    }
+
+    @Transactional
+    public void updatePlanNotes(UUID roomId, String notes, User user) {
+        roomAccess.requireLeader(roomId, user);
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        if (notes != null && notes.length() > 4000) {
+            throw new BadRequestException("NOTES_TOO_LONG", "Plan notes cannot exceed 4000 characters");
+        }
+        room.setPlanNotes(notes);
+        roomRepository.save(room);
+    }
+
+    /**
+     * Retrieves the 5 planning steps, prompt text, context pack readiness, and completion summary.
+     */
     @Transactional(readOnly = true)
     public PlanDto getPlan(UUID roomId, User user) {
         RoomMember member = roomAccess.requireMember(roomId, user);
@@ -144,6 +171,21 @@ public class PlanService {
         List<RoomMember> members = memberRepository.findByRoomId(roomId);
         Map<UUID, User> memberUsers = userRepository.findAllById(members.stream().map(RoomMember::getUserId).filter(Objects::nonNull).toList())
                 .stream().collect(Collectors.toMap(User::getId, u -> u));
+
+        List<Idea> approvedIdeas = ideaRepository.findByRoomIdAndStatus(roomId, "APPROVED");
+        Set<UUID> ideaAuthorIds = approvedIdeas.stream().map(Idea::getAuthorId).collect(Collectors.toSet());
+        Map<UUID, String> authorNamesMap = userRepository.findAllById(ideaAuthorIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u.getName() != null && !u.getName().isBlank() ? u.getName() : "Team Member"));
+
+        Map<UUID, List<String>> memberSkillsMap = new HashMap<>();
+        Set<String> allSkills = new LinkedHashSet<>();
+        int membersWithSkills = 0;
+        for (RoomMember m : members) {
+            List<String> skills = skillRepository.findByMemberId(m.getId()).stream().map(RoomMemberSkill::getSkill).toList();
+            memberSkillsMap.put(m.getId(), skills);
+            allSkills.addAll(skills);
+            if (!skills.isEmpty()) membersWithSkills++;
+        }
 
         List<PlanStep> existingSteps = stepRepository.findByRoomId(roomId);
         Map<String, PlanStep> stepMap = existingSteps.stream().collect(Collectors.toMap(PlanStep::getStepKey, s -> s));
@@ -178,7 +220,10 @@ public class PlanService {
             List<String> errors = parseStringList(step != null ? step.getErrors() : null);
             List<String> warnings = parseStringList(step != null ? step.getWarnings() : null);
 
-            String promptText = promptBuilder.buildPromptForStep(key, room, brief, rubric, members, memberUsers, validatedAnswers);
+            String promptText = promptBuilder.buildPromptForStep(
+                    key, room, brief, rubric, members, memberUsers,
+                    memberSkillsMap, approvedIdeas, authorNamesMap, validatedAnswers
+            );
             String expectedFormat = getExpectedFormat(key);
             int charCount = answer != null ? answer.length() : 0;
 
@@ -204,15 +249,8 @@ public class PlanService {
         }
 
         // Context Pack readiness
-        long approvedCount = ideaRepository.countByRoomIdAndStatus(roomId, "APPROVED");
+        long approvedCount = approvedIdeas.size();
         boolean rubricOk = brief != null && brief.isConfirmed() && !rubric.isEmpty();
-
-        int membersWithSkills = 0;
-        for (RoomMember m : members) {
-            List<RoomMemberSkill> skills = skillRepository.findByMemberId(m.getId());
-            boolean hasSkills = !skills.isEmpty();
-            if (hasSkills) membersWithSkills++;
-        }
 
         ContextPackDto contextPack = new ContextPackDto(
                 new ContextPackDto.IdeaContextDto(approvedCount >= 1, approvedCount),
@@ -236,7 +274,31 @@ public class PlanService {
 
         PlanPermissionsDto permissions = new PlanPermissionsDto(!planLocked, isLeader && canEnterBuild);
 
-        return new PlanDto(stepDtos, contextPack, completion, planLocked, canEnterBuild, permissions);
+        String statementPreview = (brief != null && brief.getProblemStatement() != null && !brief.getProblemStatement().isBlank())
+                ? brief.getProblemStatement()
+                : (brief != null && brief.getRawText() != null ? brief.getRawText().substring(0, Math.min(500, brief.getRawText().length())) : "");
+
+        List<ApprovedIdeaSummaryDto> approvedIdeaDtos = approvedIdeas.stream()
+                .map(i -> new ApprovedIdeaSummaryDto(i.getId(), i.getText(), authorNamesMap.getOrDefault(i.getAuthorId(), "Team Member"), i.isPrimary()))
+                .toList();
+
+        PlanContextSummaryDto contextSummary = new PlanContextSummaryDto(
+                statementPreview,
+                approvedIdeaDtos,
+                new ArrayList<>(allSkills)
+        );
+
+        return new PlanDto(
+                stepDtos,
+                contextPack,
+                completion,
+                planLocked,
+                canEnterBuild,
+                permissions,
+                room.getPlanStartedAt() != null,
+                room.getPlanNotes(),
+                contextSummary
+        );
     }
 
     /**
@@ -246,6 +308,9 @@ public class PlanService {
     public void saveStepDraft(UUID roomId, String stepKey, SaveStepRequest req, User user) {
         roomAccess.requireMember(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        if (room.getPlanStartedAt() == null) {
+            throw new ConflictException("PLAN_NOT_STARTED", "Planning has not started yet. Complete the 'Before we plan' setup first.");
+        }
         if (room.getBuildStartedAt() != null) {
             throw new ConflictException("PLAN_LOCKED", "Plan cannot be modified once build phase has started");
         }
@@ -306,6 +371,9 @@ public class PlanService {
     public ValidatePlanResponse validateStep(UUID roomId, ValidatePlanRequest req, User user) {
         roomAccess.requireMember(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        if (room.getPlanStartedAt() == null) {
+            throw new ConflictException("PLAN_NOT_STARTED", "Planning has not started yet. Complete the 'Before we plan' setup first.");
+        }
         if (room.getBuildStartedAt() != null) {
             throw new ConflictException("PLAN_LOCKED", "Plan is locked");
         }
@@ -379,6 +447,9 @@ public class PlanService {
     public GenerateStepResponse generateStep(UUID roomId, String stepKey, User user) {
         roomAccess.requireMember(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        if (room.getPlanStartedAt() == null) {
+            throw new ConflictException("PLAN_NOT_STARTED", "Planning has not started yet. Complete the 'Before we plan' setup first.");
+        }
         if (room.getBuildStartedAt() != null) {
             throw new ConflictException("PLAN_LOCKED", "Plan is locked");
         }
@@ -390,13 +461,27 @@ public class PlanService {
         Map<UUID, User> memberUsers = userRepository.findAllById(members.stream().map(RoomMember::getUserId).filter(Objects::nonNull).toList())
                 .stream().collect(Collectors.toMap(User::getId, u -> u));
 
+        List<Idea> approvedIdeas = ideaRepository.findByRoomIdAndStatus(roomId, "APPROVED");
+        Set<UUID> ideaAuthorIds = approvedIdeas.stream().map(Idea::getAuthorId).collect(Collectors.toSet());
+        Map<UUID, String> authorNamesMap = userRepository.findAllById(ideaAuthorIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u.getName() != null && !u.getName().isBlank() ? u.getName() : "Team Member"));
+
+        Map<UUID, List<String>> memberSkillsMap = new HashMap<>();
+        for (RoomMember m : members) {
+            List<String> skills = skillRepository.findByMemberId(m.getId()).stream().map(RoomMemberSkill::getSkill).toList();
+            memberSkillsMap.put(m.getId(), skills);
+        }
+
         List<PlanStep> existingSteps = stepRepository.findByRoomId(roomId);
         Map<String, String> validatedAnswers = new HashMap<>();
         for (PlanStep s : existingSteps) {
             if (s.isValidated() && s.getAnswer() != null) validatedAnswers.put(s.getStepKey(), s.getAnswer());
         }
 
-        String prompt = promptBuilder.buildPromptForStep(stepKey, room, brief, rubric, members, memberUsers, validatedAnswers);
+        String prompt = promptBuilder.buildPromptForStep(
+                stepKey, room, brief, rubric, members, memberUsers,
+                memberSkillsMap, approvedIdeas, authorNamesMap, validatedAnswers
+        );
         String fullPrompt = prompt + "\n\nContext files:\n" + contextMarkdown;
 
         String answer = aiService.complete(user.getId(), fullPrompt);
@@ -409,6 +494,10 @@ public class PlanService {
     @Transactional(readOnly = true)
     public String getContextMarkdown(UUID roomId, String stepKey, User user) {
         roomAccess.requireMember(roomId, user);
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        if (room.getPlanStartedAt() == null) {
+            throw new ConflictException("PLAN_NOT_STARTED", "Planning has not started yet. Complete the 'Before we plan' setup first.");
+        }
         String ideasMd = ideasService.exportIdeasMarkdown(roomId, user);
         if ("prd".equalsIgnoreCase(stepKey)) {
             return ideasMd;
@@ -435,7 +524,7 @@ public class PlanService {
      */
     @Transactional
     public void enterBuild(UUID roomId, User user) {
-        roomAccess.requireLeader(roomId, user);
+        roomAccess.requireMember(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
         if (!room.isPlanDone()) {
             throw new BadRequestException("PLAN_NOT_COMPLETE", "Plan must be completed before entering build phase");

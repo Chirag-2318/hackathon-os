@@ -19,6 +19,9 @@ export interface MetaResponse {
   timezones: string[];
   noteTypes: string[];
   limits: MetaLimits;
+  aiEnabled?: boolean;
+  githubLinkEnabled?: boolean;
+  canvaEnabled?: boolean;
 }
 
 let cachedMeta: MetaResponse | null = null;

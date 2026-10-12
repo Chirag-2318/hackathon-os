@@ -4,22 +4,41 @@ import { Chip } from '@/components/primitives/chip';
 import type { SkillGapRadarPoint } from '@/api/client';
 
 export interface SkillGapRadarProps {
-  data: SkillGapRadarPoint[];
+  data?: any[];
 }
 
-export function SkillGapRadar({ data }: SkillGapRadarProps) {
-  // Map data for recharts
-  const chartData = data.map(d => ({
-    subject: d.capability.charAt(0).toUpperCase() + d.capability.slice(1),
-    A: d.coverage,
-    fullMark: 100,
-  }));
+export function SkillGapRadar({ data = [] }: SkillGapRadarProps) {
+  const safeData = Array.isArray(data) ? data : [];
+  
+  // Map data for recharts (support both capability/coverage and skill/count/isGap)
+  const chartData = safeData.map(d => {
+    const rawSubject = d.capability || d.skill || '';
+    const subject = rawSubject ? rawSubject.charAt(0).toUpperCase() + rawSubject.slice(1) : 'Skill';
+    const coverageVal = typeof d.coverage === 'number' 
+      ? d.coverage 
+      : typeof d.count === 'number' 
+        ? (d.count > 0 ? 100 : 0) 
+        : 50;
+
+    return {
+      subject,
+      A: coverageVal,
+      fullMark: 100,
+    };
+  });
+
+  const missingSkill = safeData.find(d => d.isGap || d.count === 0 || d.coverage === 0);
+  const missingLabel = missingSkill ? (missingSkill.skill || missingSkill.capability) : null;
 
   return (
     <div className="flex flex-col p-5 bg-surface border border-border shadow-e0 rounded-card">
       <header className="flex items-center justify-between mb-4">
         <h3 className="text-h3 text-ink">Skill Gap Radar</h3>
-        <Chip fill="danger" className="text-danger font-bold text-caption">Missing: Design</Chip>
+        {missingLabel ? (
+          <Chip fill="danger" className="text-danger font-bold text-caption">Missing: {missingLabel}</Chip>
+        ) : (
+          <Chip fill="mint" className="text-ink font-bold text-caption">Full coverage</Chip>
+        )}
       </header>
       <div className="w-full aspect-square max-h-[220px] p-3 min-w-0">
         <ResponsiveContainer width="100%" height="100%">

@@ -89,4 +89,10 @@ export const roomService = {
   async getNavBadges(roomId: string): Promise<{ openTasks: number; attentionCount: number; github?: number }> {
     return apiFetch<{ openTasks: number; attentionCount: number; github?: number }>(`/api/v1/rooms/${roomId}/nav-badges`);
   },
+
+  async regenerateJoinCode(roomId: string): Promise<{ joinCode: string }> {
+    return apiFetch<{ joinCode: string }>(`/api/v1/rooms/${roomId}/join-code/regenerate`, {
+      method: 'POST',
+    });
+  },
 };

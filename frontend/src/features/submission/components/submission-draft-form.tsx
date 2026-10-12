@@ -19,26 +19,31 @@ interface SubmissionDraftFormProps {
 }
 
 export function SubmissionDraftForm({ draft, onChange, disabled }: SubmissionDraftFormProps) {
+  const safeDraft = draft || ({} as SubmissionDraft);
+
   return (
     <Card className="p-5 space-y-5">
       <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Submission draft</h3>
-      {FIELDS.map(({ key, label }) => (
-        <div key={String(key)}>
-          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
-            {label}
-          </label>
-          <textarea
-            value={draft[key]}
-            onChange={(e) => onChange(key, e.target.value)}
-            disabled={disabled}
-            rows={3}
-            className="w-full rounded-lg border px-3 py-2 text-sm bg-white dark:bg-[#1C1C1E] disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-lav-600 resize-y"
-          />
-          <p className="text-xs text-slate-400 mt-1">
-            {draft[key].length} {COPY_TODO_CHAR_COUNT}
-          </p>
-        </div>
-      ))}
+      {FIELDS.map(({ key, label }) => {
+        const val = (safeDraft[key] ?? (key === 'howWeBuiltIt' ? (safeDraft as any).howBuilt : '')) || '';
+        return (
+          <div key={String(key)}>
+            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
+              {label}
+            </label>
+            <textarea
+              value={val}
+              onChange={(e) => onChange(key, e.target.value)}
+              disabled={disabled}
+              rows={3}
+              className="w-full rounded-lg border px-3 py-2 text-sm bg-white dark:bg-[#1C1C1E] disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-lav-600 resize-y"
+            />
+            <p className="text-xs text-slate-400 mt-1">
+              {val.length} {COPY_TODO_CHAR_COUNT}
+            </p>
+          </div>
+        );
+      })}
     </Card>
   );
 }

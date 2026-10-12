@@ -25,16 +25,24 @@ public class UserOAuthToken {
     @Column(name = "scope")
     private String scope;
 
+    @Column(name = "github_login", length = 100)
+    private String githubLogin;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     public UserOAuthToken() {}
 
     public UserOAuthToken(UUID userId, String provider, String accessTokenEncrypted, String scope, Instant updatedAt) {
+        this(userId, provider, accessTokenEncrypted, scope, null, updatedAt);
+    }
+
+    public UserOAuthToken(UUID userId, String provider, String accessTokenEncrypted, String scope, String githubLogin, Instant updatedAt) {
         this.userId = userId;
         this.provider = provider;
         this.accessTokenEncrypted = accessTokenEncrypted;
         this.scope = scope;
+        this.githubLogin = githubLogin;
         this.updatedAt = updatedAt != null ? updatedAt : Instant.now();
     }
 
@@ -68,6 +76,14 @@ public class UserOAuthToken {
 
     public void setScope(String scope) {
         this.scope = scope;
+    }
+
+    public String getGithubLogin() {
+        return githubLogin;
+    }
+
+    public void setGithubLogin(String githubLogin) {
+        this.githubLogin = githubLogin;
     }
 
     public Instant getUpdatedAt() {

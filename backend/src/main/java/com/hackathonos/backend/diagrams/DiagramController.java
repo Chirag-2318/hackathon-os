@@ -1,5 +1,6 @@
 package com.hackathonos.backend.diagrams;
 
+import com.hackathonos.backend.common.security.CurrentUser;
 import com.hackathonos.backend.users.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -15,9 +16,15 @@ import java.util.UUID;
 public class DiagramController {
 
     private final DiagramService diagramService;
+    private final CurrentUser currentUser;
 
-    public DiagramController(DiagramService diagramService) {
+    public DiagramController(DiagramService diagramService, CurrentUser currentUser) {
         this.diagramService = diagramService;
+        this.currentUser = currentUser;
+    }
+
+    private User resolveUser(User user) {
+        return user != null ? user : currentUser.get();
     }
 
     @GetMapping
@@ -25,7 +32,7 @@ public class DiagramController {
             @PathVariable UUID roomId,
             @AuthenticationPrincipal User user
     ) {
-        return diagramService.getDiagrams(roomId, user);
+        return diagramService.getDiagrams(roomId, resolveUser(user));
     }
 
     @PostMapping
@@ -35,7 +42,7 @@ public class DiagramController {
             @AuthenticationPrincipal User user,
             @RequestBody DiagramDtos.CreateDiagramRequest request
     ) {
-        return diagramService.createDiagram(roomId, user, request);
+        return diagramService.createDiagram(roomId, resolveUser(user), request);
     }
 
     @PutMapping("/{id}")
@@ -45,7 +52,7 @@ public class DiagramController {
             @AuthenticationPrincipal User user,
             @RequestBody DiagramDtos.UpdateDiagramRequest request
     ) {
-        return diagramService.updateDiagram(roomId, id, user, request);
+        return diagramService.updateDiagram(roomId, id, resolveUser(user), request);
     }
 
     @DeleteMapping("/{id}")
@@ -55,6 +62,6 @@ public class DiagramController {
             @PathVariable UUID id,
             @AuthenticationPrincipal User user
     ) {
-        diagramService.deleteDiagram(roomId, id, user);
+        diagramService.deleteDiagram(roomId, id, resolveUser(user));
     }
 }

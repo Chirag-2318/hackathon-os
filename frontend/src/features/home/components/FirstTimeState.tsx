@@ -1,4 +1,5 @@
-import { Plus, KeyRound } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Plus, KeyRound, BookOpen } from 'lucide-react';
 import { useOverlay } from '@/app/providers/overlay-store';
 
 export function FirstTimeState() {
@@ -13,28 +14,36 @@ export function FirstTimeState() {
         </svg>
       </div>
       <h1 className="text-[32px] font-[600] text-[var(--color-home-text-primary)] tracking-tight mb-3">
-        Welcome to Hackathon OS
+        Start your journey
       </h1>
       <p className="text-[16px] text-[var(--color-home-text-secondary)] max-w-md mx-auto mb-10">
-        You aren't in any active rooms right now. Create a new event room to start planning, or join an existing one using a code.
+        You aren't in any active rooms right now. Create a new team room to start planning, or join an existing one using a code.
       </p>
       
-      <div className="flex flex-col sm:flex-row items-center gap-4">
+      <div className="flex flex-col sm:flex-row items-center gap-4 mb-6">
         <button
           onClick={() => createRoomModal.open()}
           className="h-[48px] px-8 rounded-[var(--radius-home-btn)] bg-[var(--color-home-text-primary)] text-white text-[15px] font-[600] flex items-center gap-2 hover:opacity-90 transition-opacity focus-visible:outline-[var(--color-home-accent)] cursor-pointer"
         >
           <Plus className="w-5 h-5" />
-          Create your first room
+          Create a team room
         </button>
         <button
           onClick={() => joinCodeModal.open()}
           className="h-[48px] px-8 rounded-[var(--radius-home-btn)] bg-white border-2 border-[var(--color-home-hairline)] text-[var(--color-home-text-primary)] text-[15px] font-[600] flex items-center gap-2 hover:border-[#D0D0D0] transition-colors focus-visible:outline-[var(--color-home-accent)] shadow-sm cursor-pointer"
         >
           <KeyRound className="w-5 h-5 text-[var(--color-home-text-secondary)]" />
-          Join with a code
+          Join with code
         </button>
       </div>
+
+      <Link
+        to="/playbooks"
+        className="text-[14px] font-medium text-[var(--color-home-accent)] hover:underline inline-flex items-center gap-1.5"
+      >
+        <BookOpen className="w-4 h-4" />
+        Browse playbooks
+      </Link>
     </div>
   );
 }

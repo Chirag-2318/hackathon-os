@@ -88,46 +88,60 @@ export function HomePage() {
   return (
     <HomeContext.Provider value={{ homeData }}>
       <div className="w-full min-h-screen bg-[var(--shell)]">
-        {/* Responsive container: px-4 on mobile, px-8 on tablet+ */}
-        <div className="max-w-[1180px] mx-auto px-4 md:px-[32px] py-[32px] flex flex-col gap-[24px]">
-        {/* Row 0 */}
-        <SmartHeader />
-        
-        {/* Row 1: Left 8 cols, Right 4 cols (on lg screens) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-[24px]">
-          <div className="lg:col-span-8 flex flex-col min-w-0">
-            <HackathonClock />
-          </div>
-          <div className="lg:col-span-4 flex flex-col min-w-0">
-            <Deadlines />
-          </div>
-        </div>
+        <div className="max-w-[1240px] mx-auto px-4 md:px-8 py-8">
+          <div className="home-grid">
+            <div style={{ gridArea: 'header' }} className="min-w-0">
+              <SmartHeader />
+            </div>
 
-        {/* Container for Row 2 and Row 3 to allow absolute positioning */}
-        <div className="relative">
-          {/* Row 2: Left 6 cols, Right 6 cols */}
-          <div 
-            className="grid grid-cols-1 lg:grid-cols-12 gap-[24px]"
-            style={{ transform: 'scale(0.80)', transformOrigin: 'top left', marginTop: '-80px', marginBottom: '-110px' }}
-          >
-            <div className="lg:col-span-6 flex flex-col min-w-0">
+            <div style={{ gridArea: 'clock' }} className="min-w-0">
+              <HackathonClock />
+            </div>
+
+            <div style={{ gridArea: 'side' }} className="min-w-0">
+              <Deadlines />
+            </div>
+
+            <div style={{ gridArea: 'bottom1' }} className="min-w-0">
               <YourTasks />
             </div>
-            <div className="lg:col-span-6 flex flex-col min-w-0" style={{ width: '85%' }}>
+
+            <div style={{ gridArea: 'bottom2' }} className="min-w-0">
               <TeamWorkload />
             </div>
-          </div>
 
-          {/* Row 3: Absolute positioned to the right of Row 2 */}
-          <div 
-            className="absolute right-0"
-            style={{ top: '-80px', width: '28%', transform: 'scale(0.85)', transformOrigin: 'top right' }}
-          >
-            <OtherRooms />
+            <div style={{ gridArea: 'other' }} className="min-w-0">
+              <OtherRooms />
+            </div>
           </div>
         </div>
+
+        <style>{`
+          .home-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            grid-template-areas:
+              "header"
+              "clock"
+              "side"
+              "bottom1"
+              "bottom2"
+              "other";
+            gap: 24px;
+            align-items: start;
+          }
+          @media (min-width: 1100px) {
+            .home-grid {
+              grid-template-columns: 7fr 5fr;
+              grid-template-areas:
+                "header header"
+                "clock side"
+                "bottom1 bottom2"
+                "other other";
+            }
+          }
+        `}</style>
       </div>
-    </div>
     </HomeContext.Provider>
   );
 }

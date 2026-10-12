@@ -1,18 +1,33 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import { briefService } from '@/services';
-import { fetchSettings } from '@/features/prep/api/settings-api';
+import { useMeta } from '@/api/useMeta';
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from '@/components/ui/dialog';
-import { Sparkles, Copy, Check, Loader2, Key } from 'lucide-react';
+import {
+  Tooltip, TooltipContent, TooltipTrigger, TooltipProvider
+} from '@/components/ui/tooltip';
+import { Sparkles, Copy, Check, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface StructuringBannerProps {
   roomId: string;
-  onExtracted: (fields: any) => void;
+  onExtracted: (fields: any, briefDto?: any) => void;
+}
+
+export function formatAiError(err: any): string {
+  const code = err?.code;
+  if (code === 'AI_NOT_CONFIGURED') {
+    return 'The AI key is missing or invalid on the server.';
+  }
+  if (code === 'AI_RATE_LIMIT') {
+    return 'AI rate limit reached (30 calls/hr). Try again later.';
+  }
+  if (code === 'AI_FAILED') {
+    return err.message ? `AI generation failed: ${err.message}` : 'AI generation failed.';
+  }
+  return err?.message || 'Operation failed.';
 }
 
 export function StructuringBanner({ roomId, onExtracted }: StructuringBannerProps) {
@@ -23,12 +38,8 @@ export function StructuringBanner({ roomId, onExtracted }: StructuringBannerProp
   const [isExtracting, setIsExtracting] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const { data: settings } = useQuery({
-    queryKey: ['settings'],
-    queryFn: fetchSettings,
-  });
-
-  const hasApiKey = (settings?.aiAndKeys?.providers?.length || 0) > 0;
+  const { data: meta } = useMeta();
+  const aiEnabled = Boolean(meta?.aiEnabled);
 
   const handleCopyPrompt = async () => {
     try {
@@ -48,10 +59,10 @@ export function StructuringBanner({ roomId, onExtracted }: StructuringBannerProp
     setValidationErrors([]);
     try {
       const res = await briefService.validateExtract(roomId, pastedJson.trim());
-      if (res.valid && res.fields) {
+      if (res.valid) {
         toast.success('Fields extracted successfully!');
         setDialogOpen(false);
-        onExtracted(res.fields);
+        onExtracted(res.fields, (res as any).brief);
       } else {
         setValidationErrors(res.errors || ['Validation failed']);
       }
@@ -63,103 +74,112 @@ export function StructuringBanner({ roomId, onExtracted }: StructuringBannerProp
   };
 
   const handleAutoExtract = async () => {
+    if (!aiEnabled) return;
     setIsExtracting(true);
     try {
       const res = await briefService.autoExtract(roomId);
-      if (res.valid && res.fields) {
-        toast.success('Extracted fields using your API key!');
-        onExtracted(res.fields);
+      if (res.valid) {
+        toast.success('Extracted fields with AI!');
+        onExtracted(res.fields, (res as any).brief);
       } else {
         toast.error('AI extraction could not structure all fields');
       }
     } catch (err: any) {
-      toast.error(err.message || 'Auto extraction failed');
+      toast.error(formatAiError(err));
     } finally {
       setIsExtracting(false);
     }
   };
 
+  const extractButton = (
+    <Button
+      size="sm"
+      onClick={handleAutoExtract}
+      disabled={isExtracting || !aiEnabled}
+      className="text-xs h-8 gap-1.5"
+    >
+      {isExtracting ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+      Extract with AI
+    </Button>
+  );
+
   return (
-    <div className="p-4 rounded-2xl bg-muted/40 border border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
-      <div className="flex-1">
-        <p className="text-xs text-foreground font-medium">
-          We read the page but could not fill the fields. Fill them from the source, or extract them with an AI chat.
-        </p>
-      </div>
+    <TooltipProvider>
+      <div className="p-4 rounded-2xl bg-muted/40 border border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex-1">
+          <p className="text-xs text-foreground font-medium">
+            We read the file. Fill the fields from the source, or extract them with an AI chat
+          </p>
+        </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleCopyPrompt}
-          className="text-xs h-8 gap-1.5"
-        >
-          {copied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
-          {copied ? 'Copied prompt' : 'Copy extraction prompt'}
-        </Button>
-
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="text-xs h-8">
-              Paste AI reply & Validate
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle className="text-sm font-bold">Paste AI Extraction Result</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-3 py-2">
-              <p className="text-xs text-muted-foreground">
-                Paste the JSON returned by ChatGPT, Claude, or Gemini below:
-              </p>
-              <textarea
-                rows={6}
-                value={pastedJson}
-                onChange={(e) => setPastedJson(e.target.value)}
-                placeholder='{"problemStatement": "...", "targetAudience": "...", "rubric": [...]}'
-                className="w-full p-3 rounded-xl bg-muted font-mono text-xs border border-border focus:ring-1 focus:ring-primary outline-none"
-              />
-              {validationErrors.length > 0 && (
-                <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-600 space-y-1">
-                  {validationErrors.map((err, i) => (
-                    <div key={i}>&bull; {err}</div>
-                  ))}
-                </div>
-              )}
-              <div className="flex justify-end gap-2 mt-2">
-                <Button
-                  size="sm"
-                  onClick={handleValidate}
-                  disabled={!pastedJson.trim() || isValidating}
-                  className="text-xs"
-                >
-                  {isValidating ? <Loader2 className="size-3.5 animate-spin mr-1" /> : null}
-                  Validate & Apply
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {hasApiKey ? (
+        <div className="flex flex-wrap items-center gap-2">
           <Button
+            variant="outline"
             size="sm"
-            onClick={handleAutoExtract}
-            disabled={isExtracting}
+            onClick={handleCopyPrompt}
             className="text-xs h-8 gap-1.5"
           >
-            {isExtracting ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-            Extract with my API key
+            {copied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+            {copied ? 'Copied prompt' : 'Copy extraction prompt'}
           </Button>
-        ) : (
-          <Link
-            to="/settings"
-            className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1 underline underline-offset-2 ml-1"
-          >
-            <Key className="size-3" /> Add API key in Settings to auto-extract
-          </Link>
-        )}
+
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="text-xs h-8">
+                Paste AI reply & Validate
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="text-sm font-bold">Paste AI Extraction Result</DialogTitle>
+              </DialogHeader>
+              <div className="flex flex-col gap-3 py-2">
+                <p className="text-xs text-muted-foreground">
+                  Paste the JSON returned by your AI model below:
+                </p>
+                <textarea
+                  rows={6}
+                  value={pastedJson}
+                  onChange={(e) => setPastedJson(e.target.value)}
+                  placeholder='{"problemStatement": "...", "targetAudience": "...", "rubric": [...]}'
+                  className="w-full p-3 rounded-xl bg-muted font-mono text-xs border border-border focus:ring-1 focus:ring-primary outline-none"
+                />
+                {validationErrors.length > 0 && (
+                  <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-600 space-y-1">
+                    {validationErrors.map((err, i) => (
+                      <div key={i}>&bull; {err}</div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex justify-end gap-2 mt-2">
+                  <Button
+                    size="sm"
+                    onClick={handleValidate}
+                    disabled={!pastedJson.trim() || isValidating}
+                    className="text-xs"
+                  >
+                    {isValidating ? <Loader2 className="size-3.5 animate-spin mr-1" /> : null}
+                    Validate & Apply
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {!aiEnabled ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>{extractButton}</span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>AI is not configured on the server</p>
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            extractButton
+          )}
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }

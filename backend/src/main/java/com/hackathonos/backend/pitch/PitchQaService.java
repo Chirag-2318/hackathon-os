@@ -112,6 +112,10 @@ public class PitchQaService {
                 false,
                 req.ownerId()
         );
+        if (req.whyAsked() != null) item.setWhyAsked(req.whyAsked());
+        if (req.riskPoint() != null) item.setRiskPoint(req.riskPoint());
+        if (req.difficulty() != null) item.setDifficulty(Math.max(1, Math.min(3, req.difficulty())));
+
         PitchQa saved = qaRepository.save(item);
         return toQaDto(saved);
     }
@@ -130,6 +134,9 @@ public class PitchQaService {
         if (req.answer() != null) item.setAnswer(req.answer().trim());
         if (req.category() != null) item.setCategory(req.category().trim().toUpperCase(Locale.ROOT));
         if (req.ownerId() != null) item.setOwnerId(req.ownerId());
+        if (req.whyAsked() != null) item.setWhyAsked(req.whyAsked());
+        if (req.riskPoint() != null) item.setRiskPoint(req.riskPoint());
+        if (req.difficulty() != null) item.setDifficulty(Math.max(1, Math.min(3, req.difficulty())));
 
         PitchQa saved = qaRepository.save(item);
         return toQaDto(saved);
@@ -164,44 +171,88 @@ public class PitchQaService {
     }
 
     /**
-     * Proposes 6 challenging judge Q&A questions with model answers using AI.
+     * Generates rich Q&A defense questions using project context and level, saves as GENERATED, ensures required questions.
      */
-    @Transactional(readOnly = true)
-    public PitchDtos.GenerateQaResponse generateQa(UUID roomId, User user) {
+    @Transactional
+    public List<PitchDtos.QaItemDto> generateQa(UUID roomId, User user, PitchDtos.GenerateQaRequest req) {
         roomAccess.requireMember(roomId, user);
+
+        String level = (req != null && req.level() != null && !req.level().isBlank()) ? req.level().toLowerCase() : "mixed";
+        int targetCount = (req != null && req.count() != null && req.count() >= 8 && req.count() <= 16) ? req.count() : 10;
 
         String prd = getDocContent(roomId, "PRD.md");
         String tech = getDocContent(roomId, "TECH_STACK.md");
-        List<BriefRubricItem> rubrics = briefRepository.findByRoomId(roomId)
-                .map(b -> rubricRepository.findByBriefIdOrderByPositionAsc(b.getId()))
-                .orElse(Collections.emptyList());
+        Brief brief = briefRepository.findByRoomId(roomId).orElse(null);
+        String briefText = brief != null ? brief.getRawText() : "";
+        List<BriefRubricItem> rubrics = brief != null
+                ? rubricRepository.findByBriefIdOrderByPositionAsc(brief.getId())
+                : Collections.emptyList();
         String rubricSummary = rubrics.stream().map(r -> r.getCriterion() + " (weight: " + r.getWeight() + ")").toList().toString();
 
         String prompt = "You are a seasoned hackathon judge and venture mentor.\n" +
-                "Project PRD:\n" + prd + "\n\n" +
-                "Tech Stack:\n" + tech + "\n\n" +
-                "Judging Rubric:\n" + rubricSummary + "\n\n" +
-                "Propose 6 incisive, challenging judge questions and concise winning answers.\n" +
-                "Return ONLY a JSON array of objects with keys: \"question\", \"answer\", and \"category\" (one of: PRODUCT, TECH, IMPACT, TEAM, PROCESS).\n" +
-                "Example format: [{\"question\": \"...\", \"answer\": \"...\", \"category\": \"TECH\"}]";
+                "Hackathon Project Context:\n" +
+                "Brief: " + (briefText.length() > 2000 ? briefText.substring(0, 2000) : briefText) + "\n" +
+                "PRD: " + (prd.length() > 2000 ? prd.substring(0, 2000) : prd) + "\n" +
+                "Tech Stack: " + (tech.length() > 1000 ? tech.substring(0, 1000) : tech) + "\n" +
+                "Rubric: " + rubricSummary + "\n\n" +
+                "Grill Level: " + level + " (friendly = constructive; mixed = realistic competition; grill = tough, adversarial probing edge cases and failures).\n" +
+                "Generate exactly " + targetCount + " judge questions with counter answers, rationale, risk points, category (one of: PRODUCT, TECH, IMPACT, TEAM, RISK), and difficulty (1 to 3).\n" +
+                "Return ONLY a JSON array of objects with keys: \"question\", \"whyAsked\", \"riskPoint\", \"counterAnswer\", \"category\", \"difficulty\".";
 
         String json = aiService.complete(user.getId(), prompt);
-        List<PitchDtos.GeneratedQaProposalDto> proposals = new ArrayList<>();
+        List<Map<String, Object>> parsed = new ArrayList<>();
         if (json != null && !json.isBlank()) {
             try {
                 String cleaned = extractJsonArray(json);
-                proposals = objectMapper.readValue(cleaned, new TypeReference<>() {});
+                parsed = objectMapper.readValue(cleaned, new TypeReference<>() {});
             } catch (Exception ignored) {}
         }
 
-        if (proposals.isEmpty()) {
-            proposals = List.of(
-                    new PitchDtos.GeneratedQaProposalDto("What was the hardest technical bug you solved this weekend?", "We had synchronization latency on our realtime updates which we mitigated with local optimistic updates.", "TECH"),
-                    new PitchDtos.GeneratedQaProposalDto("How will you acquire your first 50 pilot users next week?", "We partnered with our campus department head to test directly in Monday classes.", "IMPACT")
-            );
+        // Delete previous GENERATED questions that are not practiced
+        qaRepository.deleteByRoomIdAndSourceAndPracticedFalse(roomId, "GENERATED");
+
+        List<PitchQa> current = qaRepository.findByRoomIdOrderByPositionAsc(roomId);
+        int pos = current.size();
+
+        // Save new generated questions
+        List<PitchQa> toSave = new ArrayList<>();
+        for (Map<String, Object> map : parsed) {
+            String question = String.valueOf(map.getOrDefault("question", "")).trim();
+            if (question.isBlank()) continue;
+            String whyAsked = String.valueOf(map.getOrDefault("whyAsked", ""));
+            String riskPoint = String.valueOf(map.getOrDefault("riskPoint", ""));
+            String answer = String.valueOf(map.getOrDefault("counterAnswer", map.getOrDefault("answer", "")));
+            String category = String.valueOf(map.getOrDefault("category", "PRODUCT")).toUpperCase(Locale.ROOT);
+            int difficulty = 1;
+            Object diffObj = map.get("difficulty");
+            if (diffObj instanceof Number n) {
+                difficulty = Math.max(1, Math.min(3, n.intValue()));
+            }
+
+            PitchQa q = new PitchQa(roomId, pos++, question, answer, category, "GENERATED", false, null);
+            q.setWhyAsked(whyAsked);
+            q.setRiskPoint(riskPoint);
+            q.setDifficulty(difficulty);
+            toSave.add(q);
         }
 
-        return new PitchDtos.GenerateQaResponse(proposals);
+        // Always include the three required questions if not already present
+        for (String reqQ : REQUIRED_QUESTIONS) {
+            boolean present = current.stream().anyMatch(q -> q.getQuestion().equalsIgnoreCase(reqQ))
+                    || toSave.stream().anyMatch(q -> q.getQuestion().equalsIgnoreCase(reqQ));
+            if (!present) {
+                PitchQa reqItem = new PitchQa(roomId, pos++, reqQ, "Prepare a clear and convincing response.", "PRODUCT", "GENERATED", false, null);
+                reqItem.setWhyAsked("Judges assess basic clarity and risk awareness.");
+                reqItem.setRiskPoint("Failing to state what was built and what breaks signals lack of engineering depth.");
+                reqItem.setDifficulty(2);
+                toSave.add(reqItem);
+            }
+        }
+
+        if (!toSave.isEmpty()) {
+            qaRepository.saveAll(toSave);
+        }
+        return qaRepository.findByRoomIdOrderByPositionAsc(roomId).stream().map(this::toQaDto).toList();
     }
 
     /**
@@ -272,7 +323,10 @@ public class PitchQaService {
                 q.getSource(),
                 q.isPracticed(),
                 q.isPracticed() ? "answered" : "needs_work",
-                ownerSummary
+                ownerSummary,
+                q.getWhyAsked(),
+                q.getRiskPoint(),
+                q.getDifficulty()
         );
     }
 

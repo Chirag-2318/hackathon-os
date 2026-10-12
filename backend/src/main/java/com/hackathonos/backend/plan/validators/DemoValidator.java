@@ -27,19 +27,36 @@ public class DemoValidator {
 
         MarkdownSections sections = MarkdownSections.parse(answer);
 
-        if (!sections.hasHeading("# Demo script")) {
+        boolean hasDemoScript = sections.hasHeading("# Demo script")
+                || sections.hasHeading("Demo script")
+                || sections.hasHeading("Demo Script")
+                || sections.hasHeading("Demo");
+        if (!hasDemoScript) {
             errors.add("Missing required heading: \"# Demo script\"");
         }
-        if (!sections.hasHeading("# Likely judge Q&A")) {
+
+        boolean hasQaHeading = sections.hasHeading("# Likely judge Q&A")
+                || sections.hasHeading("Likely judge Q&A")
+                || sections.hasHeading("Judge Q&A")
+                || sections.hasHeading("Likely Judge Q&A")
+                || sections.hasHeading("Q&A")
+                || sections.hasHeading("Questions & Answers");
+        if (!hasQaHeading) {
             errors.add("Missing required heading: \"# Likely judge Q&A\"");
         }
 
-        if (!sections.hasHeading("# Shot list")) {
+        boolean hasShotList = sections.hasHeading("# Shot list")
+                || sections.hasHeading("Shot list")
+                || sections.hasHeading("Shot List")
+                || sections.hasHeading("Shots");
+        if (!hasShotList) {
             warnings.add("Missing recommended heading: \"# Shot list\"");
         }
 
         // Script timing check
         String scriptBody = sections.getSection("# Demo script");
+        if (scriptBody.isBlank()) scriptBody = sections.getSection("Demo script");
+        if (scriptBody.isBlank()) scriptBody = sections.getSection("Demo");
         int totalSeconds = extractTotalScriptSeconds(scriptBody);
         if (totalSeconds > 0 && (totalSeconds < 60 || totalSeconds > 120)) {
             warnings.add("Demo script total timing is " + totalSeconds + "s, recommended between 60s and 120s");
@@ -47,9 +64,13 @@ public class DemoValidator {
 
         // Parse Q&A pairs
         String qaBody = sections.getSection("# Likely judge Q&A");
+        if (qaBody.isBlank()) qaBody = sections.getSection("Likely judge Q&A");
+        if (qaBody.isBlank()) qaBody = sections.getSection("Judge Q&A");
+        if (qaBody.isBlank()) qaBody = sections.getSection("Q&A");
+        if (qaBody.isBlank()) qaBody = answer;
         List<QaPair> qaPairs = parseQaPairs(qaBody);
 
-        if (sections.hasHeading("# Likely judge Q&A") && qaPairs.size() < 3) {
+        if (hasQaHeading && qaPairs.size() < 3) {
             errors.add("Found " + qaPairs.size() + " Q&A pairs, minimum required is 3");
         } else if (qaPairs.size() < 8) {
             warnings.add("Found " + qaPairs.size() + " Q&A pairs, recommended at least 8");
@@ -93,8 +114,14 @@ public class DemoValidator {
         }
 
         List<QaPair> pairs = new ArrayList<>();
-        // Matches e.g.: "1. Q: ...", "Q1: ...", "**Q:** ...", "- Q: ...", "Q. ..."
-        Pattern qPattern = Pattern.compile("^(?:[-*]\\s+|\\d+[.)]\\s+)?(?i:\\*\\*Q(?:\\d+)?[:.]?\\*\\*|Q(?:\\d+)?[:.]?)\\s*(.*)$");
+        // Matches e.g.:
+        // "**Q1: What did you build this weekend?**"
+        // "**Q1:** What did you build this weekend?"
+        // "Q1: What did you build this weekend?"
+        // "1. **Q: What did you build this weekend?**"
+        // "### Q1: What did you build this weekend?"
+        // "Question 1: What did you build this weekend?"
+        Pattern qPattern = Pattern.compile("^(?:[-*#]+\\s+|\\d+[.)]\\s+)?\\*{0,2}(?i:question\\s*\\d*|q\\s*\\d*)[:.]?\\*{0,2}\\s*(.*)$");
 
         String[] lines = text.split("\\r?\\n");
         String currentQuestion = null;
@@ -102,21 +129,31 @@ public class DemoValidator {
 
         for (String line : lines) {
             String trimmed = line.trim();
-            Matcher matcher = qPattern.matcher(trimmed);
+            if (trimmed.isEmpty()) continue;
 
-            if (matcher.matches()) {
+            Matcher matcher = qPattern.matcher(trimmed);
+            boolean isNumberedQuestion = trimmed.matches("^(?:[-*#]+\\s+|\\*{0,2})?\\d+[.)]\\s+.*\\?.*$");
+
+            if (matcher.matches() || isNumberedQuestion) {
                 if (currentQuestion != null) {
                     pairs.add(new QaPair(currentQuestion, currentAnswer.toString().trim()));
                 }
-                currentQuestion = matcher.group(1).trim();
+                String qText;
+                if (matcher.matches() && matcher.group(1) != null && !matcher.group(1).isBlank()) {
+                    qText = matcher.group(1).trim();
+                } else {
+                    qText = trimmed.replaceFirst("^(?:[-*#]+\\s+|\\*{0,2})?\\d+[.)]\\s+", "").trim();
+                }
+                // Strip markdown bold wrappers if the question was fully wrapped
+                qText = qText.replaceAll("^\\*\\*", "").replaceAll("\\*\\*$", "").trim();
+                currentQuestion = qText;
                 currentAnswer = new StringBuilder();
             } else {
                 if (currentQuestion != null) {
                     // Strip "A:" prefix if present
                     String ansLine = trimmed;
-                    if (ansLine.matches("^(?:[-*]\\s+|\\d+[.)]\\s+)?(?i:\\*\\*A(?:\\d+)?[:.]?\\*\\*|A(?:\\d+)?[:.]?)\\s*(.*)$")) {
-                        ansLine = ansLine.replaceFirst("^(?:[-*]\\s+|\\d+[.)]\\s+)?(?i:\\*\\*A(?:\\d+)?[:.]?\\*\\*|A(?:\\d+)?[:.]?)\\s*", "");
-                    }
+                    ansLine = ansLine.replaceFirst("^(?:[-*#]+\\s+|\\d+[.)]\\s+)?\\*{0,2}(?i:answer\\s*\\d*|a\\s*\\d*)[:.]?\\*{0,2}\\s*", "");
+                    ansLine = ansLine.replaceAll("^\\*\\*", "").replaceAll("\\*\\*$", "").trim();
                     currentAnswer.append(ansLine).append("\n");
                 }
             }
@@ -131,6 +168,28 @@ public class DemoValidator {
 
     private int extractTotalScriptSeconds(String text) {
         if (text == null) return 0;
+        // Check for explicit total / duration first, e.g. "Total: 90s", "Total timing: 90s", "Duration: 90s"
+        Pattern totalPattern = Pattern.compile("(?:total|duration)[^\\n\\d]*(\\d+)\\s*(?:s|sec|seconds)\\b", Pattern.CASE_INSENSITIVE);
+        Matcher tm = totalPattern.matcher(text);
+        if (tm.find()) {
+            try {
+                return Integer.parseInt(tm.group(1));
+            } catch (Exception ignored) {}
+        }
+
+        // Check for bracketed or parenthesized durations, e.g. "(15s)", "[20s]"
+        Pattern bracketPattern = Pattern.compile("[\\[(](\\d+)\\s*(?:s|sec|seconds)[\\])]", Pattern.CASE_INSENSITIVE);
+        Matcher bm = bracketPattern.matcher(text);
+        int bracketTotal = 0;
+        while (bm.find()) {
+            try {
+                bracketTotal += Integer.parseInt(bm.group(1));
+            } catch (Exception ignored) {}
+        }
+        if (bracketTotal > 0) {
+            return bracketTotal;
+        }
+
         // Match numbers followed by s or sec (e.g. "20s", "40 sec", "[0-20s]", "30 seconds")
         Pattern p = Pattern.compile("(\\d+)\\s*(?:s|sec|seconds)\\b", Pattern.CASE_INSENSITIVE);
         Matcher m = p.matcher(text);

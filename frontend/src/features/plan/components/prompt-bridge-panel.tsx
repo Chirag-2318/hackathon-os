@@ -11,6 +11,8 @@ import type { ValidationResult } from '@/services/planService';
 import { planService } from '@/services/planService';
 import { SAMPLE_PLAN_ANSWERS } from '../utils/sample-plan-answers';
 import { toast } from 'sonner';
+import { useMeta } from '@/api/useMeta';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 
 export interface PromptBridgePanelProps {
   stepIndex: number;
@@ -49,6 +51,9 @@ export function PromptBridgePanel({
   const [isValidating, setIsValidating] = useState(false);
   const [validateResult, setValidateResult] = useState<ValidationResult | null>(null);
 
+  const { data: meta } = useMeta();
+  const aiEnabled = Boolean(meta?.aiEnabled);
+
   // Copy animation for main prompt
   const handleCopy = () => {
     navigator.clipboard.writeText(promptText);
@@ -73,11 +78,15 @@ export function PromptBridgePanel({
       setValidateResult(result);
 
       if (result.valid) {
-        toast.success(`Step ${stepId} validated!`);
-        // 700ms auto-advance
+        if (stepIndex === 4) {
+          toast.success('Planning phase done! Jumping into the build phase...');
+        } else {
+          toast.success(`Step ${stepId} validated!`);
+        }
+        // auto-advance
         setTimeout(() => {
           onSuccess();
-        }, 700);
+        }, stepIndex === 4 ? 1000 : 700);
       }
     } catch (e: any) {
       console.error(e);
@@ -250,17 +259,40 @@ export function PromptBridgePanel({
           </div>
 
           <div className="flex items-center gap-2">
-            {hasApiKey && onGenerate && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onGenerate}
-                disabled={isGenerating}
-                className="text-xs h-7 gap-1"
-              >
-                {isGenerating ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5 text-lav-600" />}
-                Generate with my API key
-              </Button>
+            {onGenerate && (
+              !aiEnabled ? (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled
+                          className="text-xs h-7 gap-1 opacity-60"
+                        >
+                          <Sparkles className="size-3.5 text-lav-600" />
+                          Generate with AI
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>AI is not configured on the server</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onGenerate}
+                  disabled={isGenerating}
+                  className="text-xs h-7 gap-1"
+                >
+                  {isGenerating ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5 text-lav-600" />}
+                  Generate with AI
+                </Button>
+              )
             )}
 
             {/* Quick-fill helper button for testing and evaluation (DEV only per spec) */}
@@ -366,13 +398,13 @@ export function PromptBridgePanel({
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={onSuccess}
+                    onClick={() => onSuccess()}
                     className="text-xs font-semibold text-amber-700 dark:text-amber-300 hover:underline cursor-pointer"
                   >
-                    Validate anyway &rarr;
+                    {stepIndex === 4 ? 'Open Build Phase \u2192' : 'Validate anyway \u2192'}
                   </button>
                   <span className="text-caption text-muted-foreground animate-pulse">
-                    Auto-advancing...
+                    {stepIndex === 4 ? 'Planning phase done. Jumping into build phase...' : 'Auto-advancing...'}
                   </span>
                 </div>
               </div>
@@ -393,9 +425,20 @@ export function PromptBridgePanel({
               <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-semibold text-sm">
                 <Check className="size-4" /> Looks good! {validateResult.summary || 'Validation passed.'}
               </div>
-              <span className="text-caption text-emerald-600 dark:text-emerald-400 font-medium animate-pulse">
-                Auto-advancing...
-              </span>
+              <div className="flex items-center gap-3">
+                {stepIndex === 4 && (
+                  <button
+                    type="button"
+                    onClick={() => onSuccess()}
+                    className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 hover:underline cursor-pointer"
+                  >
+                    Open Build Phase &rarr;
+                  </button>
+                )}
+                <span className="text-caption text-emerald-600 dark:text-emerald-400 font-medium animate-pulse">
+                  {stepIndex === 4 ? 'Planning phase done. Jumping into build phase...' : 'Auto-advancing...'}
+                </span>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

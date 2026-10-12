@@ -101,10 +101,26 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
   });
 
   const isLeader = roomData ? (roomData as any).currentUserRole === 'leader' : true;
-  const isBuildUnlocked = roomData ? roomData.stage === 'build' : true;
-  const prepDone = prepData.filter((p: any) => p.done).length;
-  const prepTotal = prepData.length || 6;
-  const approvedIdeasCount = ideasData.filter((i: any) => i.status === 'approved').length;
+  const isBuildUnlocked = roomData
+    ? roomData.stage === 'build' || Boolean(roomData.stageDone?.plan) || Boolean((roomData as any).planDone) || Boolean((roomData as any).buildStartedAt)
+    : true;
+
+  const prepList = Array.isArray(prepData)
+    ? prepData
+    : Array.isArray((prepData as any)?.checklist)
+    ? (prepData as any).checklist
+    : [];
+  const prepDone = (prepData as any)?.progress?.done ?? prepList.filter((p: any) => p.done).length;
+  const prepTotal = (prepData as any)?.progress?.total ?? (prepList.length || 6);
+
+  const ideaList = Array.isArray(ideasData)
+    ? ideasData
+    : Array.isArray((ideasData as any)?.ideas)
+    ? (ideasData as any).ideas
+    : Array.isArray((ideasData as any)?.items)
+    ? (ideasData as any).items
+    : [];
+  const approvedIdeasCount = ideaList.filter((i: any) => i.status === 'approved').length;
 
   // Room details
   const rooms = homeData?.roomList ?? [];
@@ -281,28 +297,16 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
         phaseMatch: ['Polish', 'Submit'],
         items: [
           {
-            id: 'pitch/deck',
-            label: 'Pitch deck',
-            path: `/app/room/${roomId}/pitch/deck`,
+            id: 'deck',
+            label: 'Deck',
+            path: `/app/room/${roomId}/deck`,
             icon: (p) => <PitchDeckIcon {...p} />,
           },
           {
-            id: 'pitch/rehearse',
-            label: 'Rehearse',
-            path: `/app/room/${roomId}/pitch/rehearse`,
+            id: 'pitch-kit',
+            label: 'Pitch kit',
+            path: `/app/room/${roomId}/pitch-kit`,
             icon: (p) => <RehearseIcon {...p} />,
-          },
-          {
-            id: 'pitch/qa',
-            label: 'Q&A',
-            path: `/app/room/${roomId}/pitch/qa`,
-            icon: (p) => <QaIcon {...p} />,
-          },
-          {
-            id: 'demo',
-            label: 'Demo',
-            path: `/app/room/${roomId}/demo`,
-            icon: (p) => <DemoIcon {...p} />,
           },
           {
             id: 'submission',

@@ -8,18 +8,22 @@ function genId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export function mapBackendTaskToFrontend(t: any): Task {
+export function mapBackendTaskToFrontend(t: any, defaultRoomId?: string): Task {
   return {
     id: String(t.id),
     key: t.key || t.taskKey || '',
-    roomId: String(t.roomId || ''),
+    roomId: String(t.roomId || defaultRoomId || ''),
     summary: t.summary || t.title || 'Untitled task',
     description: t.description || '',
     status: (t.status || 'todo').toLowerCase().replace('_', '') as TaskStatus,
     flagged: Boolean(t.flagged),
     blockedReason: t.blockedReason || undefined,
-    assigneeId: t.assigneeId ? String(t.assigneeId) : (t.assignee?.id ? String(t.assignee.id) : undefined),
-    reporterId: t.reporterId ? String(t.reporterId) : (t.reporter?.id ? String(t.reporter.id) : undefined),
+    assigneeId: t.assigneeId
+      ? String(t.assigneeId)
+      : (t.assignee?.userId || t.assignee?.id ? String(t.assignee.userId || t.assignee.id) : undefined),
+    reporterId: t.reporterId
+      ? String(t.reporterId)
+      : (t.reporter?.userId || t.reporter?.id ? String(t.reporter.userId || t.reporter.id) : undefined),
     priority: (t.priority || 'medium').toLowerCase() as TaskPriority,
     phaseId: t.phaseId ? String(t.phaseId) : (t.phase?.id ? String(t.phase.id) : 'p-0'),
     role: t.role || 'Frontend',
@@ -35,13 +39,13 @@ export function mapBackendTaskToFrontend(t: any): Task {
     })),
     comments: (t.comments || []).map((c: any) => ({
       id: String(c.id),
-      authorId: String(c.authorId || c.author?.id || ''),
+      authorId: String(c.authorId || c.author?.id || c.author?.userId || ''),
       text: c.text || '',
       createdAt: c.createdAt || new Date().toISOString(),
     })),
     history: (t.history || []).map((h: any) => ({
       id: String(h.id),
-      actorId: String(h.actorId || h.actor?.id || ''),
+      actorId: String(h.actorId || h.actor?.id || h.actor?.userId || ''),
       text: h.text || '',
       at: h.at || h.createdAt || new Date().toISOString(),
     })),
@@ -69,7 +73,7 @@ export const boardService = {
       ...(columns.inprogress || []),
       ...(columns.done || []),
     ];
-    const tasks = rawTasks.map(mapBackendTaskToFrontend);
+    const tasks = rawTasks.map((t) => mapBackendTaskToFrontend(t, roomId));
     const phases: BoardPhase[] = (res.phases || []).map((p: any) => ({
       id: String(p.id),
       name: p.name,
@@ -97,7 +101,7 @@ export const boardService = {
 
   async getTask(roomId: string, taskIdOrKey: string): Promise<Task> {
     const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/tasks/${taskIdOrKey}`);
-    return mapBackendTaskToFrontend(res);
+    return mapBackendTaskToFrontend(res, roomId);
   },
 
   async createTask(roomId: string, draft: Partial<Task>): Promise<Task> {
@@ -118,7 +122,7 @@ export const boardService = {
       method: 'POST',
       body: JSON.stringify(payload),
     });
-    return mapBackendTaskToFrontend(res);
+    return mapBackendTaskToFrontend(res, roomId);
   },
 
   async moveTask(
@@ -132,11 +136,12 @@ export const boardService = {
       method: 'POST',
       body: JSON.stringify({
         toStatus,
-        targetIndex,
+        toIndex: targetIndex ?? 0,
+        targetIndex: targetIndex ?? 0,
         version: version ?? null,
       }),
     });
-    return mapBackendTaskToFrontend(res.movedTask || res);
+    return mapBackendTaskToFrontend(res.movedTask || res, roomId);
   },
 
   async flagTask(roomId: string, taskId: string, flagged: boolean, blockedReason?: string): Promise<Task> {
@@ -144,7 +149,7 @@ export const boardService = {
       method: 'POST',
       body: JSON.stringify({ flagged, blockedReason: blockedReason || null }),
     });
-    return mapBackendTaskToFrontend(res);
+    return mapBackendTaskToFrontend(res, roomId);
   },
 
   async assignTask(roomId: string, taskId: string, assigneeId?: string | null): Promise<Task> {
@@ -152,7 +157,7 @@ export const boardService = {
       method: 'POST',
       body: JSON.stringify({ assigneeId: assigneeId || null }),
     });
-    return mapBackendTaskToFrontend(res);
+    return mapBackendTaskToFrontend(res, roomId);
   },
 
   async updateTask(
@@ -187,7 +192,7 @@ export const boardService = {
       method: 'PATCH',
       body: JSON.stringify(payload),
     });
-    return mapBackendTaskToFrontend(res);
+    return mapBackendTaskToFrontend(res, roomId);
   },
 
   async updateTaskStatus(
@@ -209,7 +214,7 @@ export const boardService = {
       method: 'POST',
       body: JSON.stringify({ text }),
     });
-    return mapBackendTaskToFrontend(res);
+    return mapBackendTaskToFrontend(res, roomId);
   },
 
   async addSubtask(roomId: string, taskId: string, text: string): Promise<Task> {
@@ -217,7 +222,7 @@ export const boardService = {
       method: 'POST',
       body: JSON.stringify({ text }),
     });
-    return mapBackendTaskToFrontend(res);
+    return mapBackendTaskToFrontend(res, roomId);
   },
 
   async toggleSubtask(roomId: string, _taskId: string, subtaskId: string, done: boolean): Promise<Task> {
@@ -225,7 +230,7 @@ export const boardService = {
       method: 'PATCH',
       body: JSON.stringify({ done }),
     });
-    return mapBackendTaskToFrontend(res);
+    return mapBackendTaskToFrontend(res, roomId);
   },
 
   async addAcceptance(roomId: string, taskId: string, text: string): Promise<Task> {
@@ -233,7 +238,7 @@ export const boardService = {
       method: 'POST',
       body: JSON.stringify({ text }),
     });
-    return mapBackendTaskToFrontend(res);
+    return mapBackendTaskToFrontend(res, roomId);
   },
 
   async updateDependencies(roomId: string, taskId: string, dependsOnIds: string[]): Promise<Task> {

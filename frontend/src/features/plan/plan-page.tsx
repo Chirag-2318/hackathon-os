@@ -17,6 +17,8 @@ import {
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/apiClient';
 
+import { BeforeWePlan } from './components/before-we-plan';
+
 const STEP_KEYS = ['prd', 'tech', 'phases', 'tasks', 'demo'] as const;
 
 export function PlanPage() {
@@ -46,16 +48,35 @@ export function PlanPage() {
 
   const hasApiKey = (settings?.aiAndKeys?.providers?.length || 0) > 0;
 
+  const stepsList = Array.isArray(plan?.steps)
+    ? plan.steps
+    : (plan?.steps && typeof plan.steps === 'object')
+    ? Object.entries(plan.steps).map(([key, val]: [string, any], index) => ({
+        key,
+        index: index + 1,
+        title: key.toUpperCase(),
+        status: (val?.validated ? 'validated' : 'upcoming') as const,
+        answer: val?.answer,
+        validated: !!val?.validated,
+        errors: val?.issues || [],
+        warnings: val?.warnings || [],
+        promptText: '',
+        expectedFormat: '',
+        charCount: (val?.answer || '').length,
+        contextFiles: [],
+      }))
+    : [];
+
   useEffect(() => {
-    if (plan?.steps) {
+    if (stepsList.length > 0) {
       const loaded = STEP_KEYS.map((k) => {
-        const found = plan.steps.find((s) => s.key === k);
+        const found = stepsList.find((s) => s.key === k);
         return found?.answer || '';
       });
       setAnswers(loaded);
 
       // Default to first unvalidated step
-      const unvalIdx = plan.steps.findIndex((s) => !s.validated);
+      const unvalIdx = stepsList.findIndex((s) => !s.validated);
       if (unvalIdx >= 0 && currentStepIndex === 0) {
         setCurrentStepIndex(unvalIdx);
       }
@@ -63,7 +84,7 @@ export function PlanPage() {
   }, [plan]);
 
   const currentStepKey = STEP_KEYS[currentStepIndex] || 'prd';
-  const currentStep = plan?.steps?.find((s) => s.key === currentStepKey);
+  const currentStep = stepsList.find((s) => s.key === currentStepKey);
 
   // Autosave Draft
   const handleAnswerChange = (val: string) => {
@@ -102,6 +123,13 @@ export function PlanPage() {
     if (res.valid) {
       queryClient.invalidateQueries({ queryKey: ['plan', activeRoomId] });
       queryClient.invalidateQueries({ queryKey: ['room', activeRoomId] });
+      if (res.planComplete || currentStepIndex === 4) {
+        try {
+          await planService.enterBuild(activeRoomId);
+        } catch (_) {}
+        queryClient.invalidateQueries({ queryKey: ['room', activeRoomId] });
+        queryClient.invalidateQueries({ queryKey: ['nav-badges', activeRoomId] });
+      }
     }
     return res;
   };
@@ -109,6 +137,14 @@ export function PlanPage() {
   const handleStepSuccess = () => {
     if (currentStepIndex < 4) {
       setCurrentStepIndex(currentStepIndex + 1);
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['plan', activeRoomId] });
+      queryClient.invalidateQueries({ queryKey: ['room', activeRoomId] });
+      queryClient.invalidateQueries({ queryKey: ['plan-state', activeRoomId] });
+      toast.success('Planning phase done! Jumping into the build phase...');
+      setTimeout(() => {
+        navigate(`/app/room/${activeRoomId}/board`);
+      }, 1000);
     }
   };
 
@@ -123,8 +159,8 @@ export function PlanPage() {
       }
     } catch (err: any) {
       if (err instanceof ApiError) {
-        if (err.code === 'NO_API_KEY') toast.error('No API key configured in Settings.');
-        else if (err.code === 'AI_RATE_LIMIT') toast.error('AI rate limit reached (10 calls/hr). Try again later.');
+        if (err.code === 'AI_NOT_CONFIGURED') toast.error('The AI key is missing or invalid on the server.');
+        else if (err.code === 'AI_RATE_LIMIT') toast.error('AI rate limit reached (30 calls/hr). Try again later.');
         else if (err.code === 'AI_FAILED') toast.error(`AI generation failed: ${err.message}`);
         else toast.error(err.message);
       } else {
@@ -155,6 +191,19 @@ export function PlanPage() {
     );
   }
 
+  if (plan.started === false) {
+    return (
+      <BeforeWePlan
+        roomId={activeRoomId}
+        contextSummary={plan.contextSummary}
+        initialNotes={plan.notes || ''}
+        onPlanStarted={() => {
+          queryClient.invalidateQueries({ queryKey: ['plan', activeRoomId] });
+        }}
+      />
+    );
+  }
+
   if (plan.planLocked) {
     return (
       <PlanLockedView
@@ -166,51 +215,55 @@ export function PlanPage() {
     );
   }
 
-  const validatedSteps = plan.steps.map((s) => s.validated);
+  const validatedSteps = stepsList.map((s) => s.validated);
   const isAllComplete = validatedSteps.every(Boolean);
 
   return (
-    <div className="w-full flex flex-col gap-6 p-8 max-w-[1320px] mx-auto font-sans pb-24">
-      {/* Stepper Header */}
-      <PlanStepper
-        steps={plan.steps.map((s) => s.title)}
-        currentStep={currentStepIndex}
-        validatedSteps={validatedSteps}
-        onSelectStep={(idx) => setCurrentStepIndex(idx)}
-      />
-
+    <div className="w-full flex flex-col gap-6 p-8 max-w-[1400px] mx-auto font-sans pb-24">
       <div className="flex flex-col lg:flex-row gap-8 items-start">
+        {/* Left Stepper Rail */}
+        <div className="w-56 shrink-0 pt-2">
+          <PlanStepper
+            steps={stepsList.map((s) => s.title)}
+            currentStep={currentStepIndex}
+            validatedSteps={validatedSteps}
+            onSelectStep={(idx) => setCurrentStepIndex(idx)}
+          />
+        </div>
+
         {/* Main Step Interaction Panel */}
-        <PromptBridgePanel
-          stepIndex={currentStepIndex}
-          stepId={String(currentStepIndex + 1)}
-          stepName={currentStep?.title || 'Plan Step'}
-          promptText={currentStep?.promptText || ''}
-          answer={answers[currentStepIndex] || ''}
-          onAnswerChange={handleAnswerChange}
-          onValidate={handleValidateStep}
-          onSuccess={handleStepSuccess}
-          onDownloadIdeas={() => ideaService.exportIdeasMarkdown(activeRoomId)}
-          onDownloadContext={() => planService.downloadContext(activeRoomId, currentStepKey)}
-          onGenerate={handleGenerate}
-          isGenerating={isGenerating}
-          hasApiKey={hasApiKey}
-        />
+        <div className="flex-1 min-w-0">
+          <PromptBridgePanel
+            stepIndex={currentStepIndex}
+            stepId={String(currentStepIndex + 1)}
+            stepName={currentStep?.title || 'Plan Step'}
+            promptText={currentStep?.promptText || ''}
+            answer={answers[currentStepIndex] || ''}
+            onAnswerChange={handleAnswerChange}
+            onValidate={handleValidateStep}
+            onSuccess={handleStepSuccess}
+            onDownloadIdeas={() => ideaService.exportIdeasMarkdown(activeRoomId)}
+            onDownloadContext={() => planService.downloadContext(activeRoomId, currentStepKey)}
+            onGenerate={handleGenerate}
+            isGenerating={isGenerating}
+            hasApiKey={hasApiKey}
+          />
+        </div>
 
         {/* Right Rail Context & Completion */}
         <div className="flex flex-col gap-6 w-72 shrink-0">
           <PlanRightRail
             roomId={activeRoomId}
-            hasIdeas={plan.contextPack.ideas.ready}
-            ideasCount={plan.contextPack.ideas.count}
-            hasBrief={plan.contextPack.rubric.ready}
-            hasSkills={plan.contextPack.skills.ready}
+            hasIdeas={Boolean(plan?.contextPack?.idea?.ok ?? (plan?.contextPack as any)?.ideas?.ready ?? false)}
+            ideasCount={Number(plan?.contextPack?.idea?.approvedCount ?? (plan?.contextPack as any)?.ideas?.count ?? 0)}
+            hasBrief={Boolean(plan?.contextPack?.rubric?.ok ?? (plan?.contextPack as any)?.rubric?.ready ?? false)}
+            hasSkills={Boolean(plan?.contextPack?.skills?.ok ?? (plan?.contextPack as any)?.skills?.ready ?? false)}
             onDownloadIdeas={() => ideaService.exportIdeasMarkdown(activeRoomId)}
             onDownloadContext={() => planService.downloadContext(activeRoomId, currentStepKey)}
           />
 
           {/* Completion Summary Card */}
-          {plan.completion && (
+          {plan?.completion && (
             <div className="p-4 rounded-2xl bg-card border border-border shadow-xs flex flex-col gap-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">Workspace Ready</h4>
               <div className="grid grid-cols-2 gap-2 text-xs">
@@ -224,14 +277,14 @@ export function PlanPage() {
                 </div>
               </div>
 
-              {plan.completion.unassignedTasksCount > 0 && (
+              {(plan.completion.unassignedTasksCount || 0) > 0 && (
                 <p className="text-[11px] text-amber-600 flex items-center gap-1 font-medium">
                   <AlertTriangle className="size-3 shrink-0" />
                   {plan.completion.unassignedTasksCount} task{plan.completion.unassignedTasksCount > 1 ? 's' : ''} need an owner
                 </p>
               )}
 
-              {plan.permissions.canEnterBuild && (
+              {plan?.permissions?.canEnterBuild && (
                 <Button
                   onClick={handleEnterBuild}
                   disabled={isEnteringBuild}

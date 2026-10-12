@@ -9,4 +9,5 @@ import java.util.UUID;
 @Repository
 public interface UserOAuthTokenRepository extends JpaRepository<UserOAuthToken, UserOAuthToken.UserOAuthTokenId> {
     Optional<UserOAuthToken> findByUserIdAndProvider(UUID userId, String provider);
+    void deleteByUserIdAndProvider(UUID userId, String provider);
 }

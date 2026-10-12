@@ -20,10 +20,15 @@ export function DemoPage() {
 
   useEffect(() => {
     if (!roomId) return;
-    fetchDemo(roomId).then((d) => {
-      setData(d);
-      setLoading(false);
-    });
+    fetchDemo(roomId)
+      .then((d) => {
+        setData(d);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error('Failed to load demo data:', err);
+        setLoading(false);
+      });
   }, [roomId]);
 
   if (loading) {
@@ -41,12 +46,19 @@ export function DemoPage() {
 
   if (!data) return null;
 
-  const totalSeconds = data.beats.reduce((sum: number, b: any) => sum + b.seconds, 0);
-  const isOverLimit = totalSeconds > data.videoMaxSeconds;
-  const pct = Math.min(100, (totalSeconds / data.videoMaxSeconds) * 100);
+  const beats = Array.isArray(data.beats) ? data.beats : (Array.isArray(data.sections) ? data.sections : []);
+  const maxSeconds = data.videoMaxSeconds || 120;
+  const totalSeconds = beats.reduce((sum: number, b: any) => sum + (b.seconds || b.durationSec || 0), 0);
+  const isOverLimit = totalSeconds > maxSeconds;
+  const pct = Math.min(100, (totalSeconds / maxSeconds) * 100);
 
   // Filter tools to recording and video categories only
-  const filteredTools = data.tools.filter((t: any) => t.category === 'recording' || t.category === 'video');
+  const allTools = Array.isArray(data.tools) ? data.tools : [];
+  const filteredTools = allTools.filter((t: any) => {
+    const cat = (t.category || '').toLowerCase();
+    return cat === 'recording' || cat === 'video';
+  });
+  const toolsToDisplay = filteredTools.length > 0 ? filteredTools : allTools;
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -60,19 +72,24 @@ export function DemoPage() {
             <Card className="p-4">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Script builder</h3>
               <div className="divide-y">
-                {data.beats.map((beat: any) => (
-                  <div key={beat.id} className="flex items-start gap-4 py-3.5">
-                    <span className="text-sm font-semibold w-28 shrink-0 pt-0.5">{beat.label}</span>
-                    <span className="text-sm tabular-nums text-slate-500 w-12 shrink-0 pt-0.5 text-right">{beat.seconds}s</span>
-                    <p className="text-sm text-slate-600 dark:text-slate-400 flex-1">{beat.text}</p>
+                {beats.map((beat: any, idx: number) => (
+                  <div key={beat.id || idx} className="flex items-start gap-4 py-3.5">
+                    <span className="text-sm font-semibold w-28 shrink-0 pt-0.5">{beat.label || beat.title}</span>
+                    <span className="text-sm tabular-nums text-slate-500 w-12 shrink-0 pt-0.5 text-right">
+                      {beat.seconds || beat.durationSec || 0}s
+                    </span>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 flex-1">{beat.text || beat.notes || '—'}</p>
                   </div>
                 ))}
+                {beats.length === 0 && (
+                  <p className="py-4 text-xs text-slate-400">No script beats defined.</p>
+                )}
               </div>
 
               {/* Total duration bar */}
               <div className="mt-4 pt-4 border-t">
                 <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-                  <span>Total: {totalSeconds}s of {data.videoMaxSeconds}s</span>
+                  <span>Total: {totalSeconds}s of {maxSeconds}s</span>
                   {isOverLimit && (
                     <span className="flex items-center gap-1 text-[#B34700] font-medium">
                       ⚠ {COPY_TODO_OVER_LIMIT}
@@ -94,32 +111,34 @@ export function DemoPage() {
             {/* Shot List */}
             <div>
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Shot list</h3>
-              <ShotListTable shots={data.shots} />
+              <ShotListTable shots={data.shots || []} />
             </div>
           </div>
 
           {/* Right column */}
           <div className="space-y-6">
             <DemoInsuranceChecklist
-              items={data.insurance}
+              items={data.insurance || []}
               onToggle={(id) => {
                 setData((prev: any) => {
-                  if (!prev) return prev;
+                  if (!prev || !Array.isArray(prev.insurance)) return prev;
                   return {
                     ...prev,
                     insurance: prev.insurance.map((item: any) =>
-                      item.id === id ? { ...item, done: !item.done } : item
+                      (item.id === id || item.key === id || item.itemKey === id)
+                        ? { ...item, done: !item.done }
+                        : item
                     ),
                   };
                 });
               }}
             />
-            <VideoRulesCheck rules={data.videoRules} />
+            <VideoRulesCheck rules={data.videoRuleItems || data.videoRules} />
           </div>
         </div>
 
         {/* Tool Strip */}
-        <ToolStrip tools={filteredTools} />
+        <ToolStrip tools={toolsToDisplay} />
       </div>
     </div>
   );

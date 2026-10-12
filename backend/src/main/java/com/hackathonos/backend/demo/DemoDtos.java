@@ -25,7 +25,8 @@ public class DemoDtos {
             int lengthSeconds,
             String notes,
             String narration,
-            boolean done
+            boolean done,
+            String proofUrl
     ) {}
 
     public record InsuranceItemDto(
@@ -37,7 +38,9 @@ public class DemoDtos {
 
     public record DemoMediaDto(
             String videoUrl,
-            String fallbackUrl
+            String fallbackUrl,
+            boolean localRecordingSaved,
+            boolean localBackupSaved
     ) {}
 
     public record VideoRulesDto(
@@ -91,7 +94,8 @@ public class DemoDtos {
             String title,
             int durationSec,
             String notes,
-            boolean done
+            boolean done,
+            String proofUrl
     ) {}
 
     public record UpdateShotsRequest(
@@ -104,6 +108,8 @@ public class DemoDtos {
 
     public record UpdateMediaRequest(
             String videoUrl,
-            String fallbackUrl
+            String fallbackUrl,
+            Boolean localRecordingSaved,
+            Boolean localBackupSaved
     ) {}
 }

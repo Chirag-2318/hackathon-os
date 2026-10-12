@@ -7,6 +7,71 @@ import java.util.UUID;
 
 public class PitchDtos {
 
+    // ── DECK SOURCE ──────────────────────────────────────────────────
+    public record PitchDeckSourceDto(
+            UUID roomId,
+            String provider,
+            String url,
+            String title,
+            String filePath,
+            String thumbnailUrl,
+            String embedUrl,
+            UUID updatedBy,
+            Instant updatedAt
+    ) {}
+
+    public record SaveDeckSourceRequest(
+            String provider,
+            String url,
+            String title
+    ) {}
+
+    // ── PITCH SCRIPT ─────────────────────────────────────────────────
+    public record PitchSpeakerDto(
+            int index,
+            UUID userId,
+            String name,
+            String role
+    ) {}
+
+    public record PitchSlidePlanDto(
+            int n,
+            String headline,
+            int speakerIndex,
+            int seconds,
+            String say,
+            String show,
+            String cue,
+            List<String> keyPoints
+    ) {}
+
+    public record PitchScriptDto(
+            UUID roomId,
+            String type,
+            int speakerCount,
+            List<PitchSpeakerDto> speakers,
+            String instructions,
+            String hook,
+            String closingLine,
+            int totalSeconds,
+            List<PitchSlidePlanDto> slides,
+            UUID generatedBy,
+            Instant generatedAt
+    ) {}
+
+    public record GeneratePitchScriptRequest(
+            String type,
+            int speakerCount,
+            List<UUID> speakerUserIds,
+            String instructions
+    ) {}
+
+    public record UpdatePitchSlidePlanRequest(
+            String say,
+            String show
+    ) {}
+
+    // ── DECK & SLIDES ────────────────────────────────────────────────
     public record FormatProfileDto(
             String kind,
             String label,
@@ -55,7 +120,7 @@ public class PitchDtos {
     public record UpdateCoverageRequest(List<String> criteria) {}
     public record DraftSlideResponse(String content) {}
 
-    // Rehearse
+    // ── REHEARSE ─────────────────────────────────────────────────────
     public record SectionPaceDto(
             String label,
             int targetSec,
@@ -70,7 +135,8 @@ public class PitchDtos {
             UserSummaryDto presenter,
             UserSummaryDto operator,
             List<SectionPaceDto> sectionPaces,
-            String notes
+            String notes,
+            Object stats
     ) {}
 
     public record UserSummaryDto(
@@ -109,8 +175,9 @@ public class PitchDtos {
     public record CreateRunRequest(
             Integer durationSec,
             Integer durationSeconds,
-            String sectionPaces,
-            String notes
+            Object sectionPaces,
+            String notes,
+            Object stats
     ) {
         public int getEffectiveDurationSec() {
             if (durationSec != null) return durationSec;
@@ -124,7 +191,7 @@ public class PitchDtos {
             UUID operatorId
     ) {}
 
-    // Q&A
+    // ── Q&A ──────────────────────────────────────────────────────────
     public record QaItemDto(
             UUID id,
             String question,
@@ -134,7 +201,10 @@ public class PitchDtos {
             String source,
             boolean practiced,
             String status,
-            UserSummaryDto owner
+            UserSummaryDto owner,
+            String whyAsked,
+            String riskPoint,
+            Integer difficulty
     ) {}
 
     public record CodeDefenseDto(
@@ -161,14 +231,20 @@ public class PitchDtos {
             String question,
             String answer,
             String category,
-            UUID ownerId
+            UUID ownerId,
+            String whyAsked,
+            String riskPoint,
+            Integer difficulty
     ) {}
 
     public record UpdateQaRequest(
             String question,
             String answer,
             String category,
-            UUID ownerId
+            UUID ownerId,
+            String whyAsked,
+            String riskPoint,
+            Integer difficulty
     ) {}
 
     public record TogglePracticedRequest(
@@ -181,10 +257,18 @@ public class PitchDtos {
             UUID ownerId
     ) {}
 
+    public record GenerateQaRequest(
+            String level,
+            Integer count
+    ) {}
+
     public record GeneratedQaProposalDto(
             String question,
             String answer,
-            String category
+            String category,
+            String whyAsked,
+            String riskPoint,
+            Integer difficulty
     ) {}
 
     public record GenerateQaResponse(

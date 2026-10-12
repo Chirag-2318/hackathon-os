@@ -235,7 +235,7 @@ export function BranchRow({
           onClick={(e) => e.stopPropagation()}
           className="hidden sm:flex items-center gap-1.5 flex-wrap min-w-0"
         >
-          {branch.linkedTaskKeys.map((key) => (
+          {(branch.linkedTaskKeys || []).map((key) => (
             <span
               key={key}
               onClick={() => onOpenTaskModal(key)}
@@ -257,7 +257,7 @@ export function BranchRow({
           ))}
           <LinkTaskPopover
             roomId={roomId}
-            linkedKeys={branch.linkedTaskKeys}
+            linkedKeys={branch.linkedTaskKeys || []}
             onLink={onLinkTask}
             onUnlink={onUnlinkTask}
           />

@@ -1782,16 +1782,30 @@ export function RoomOverviewPage() {
     }
   }, [outletContext]);
 
-  const { data: room } = useQuery({
+  const { data: room, isLoading: isRoomLoading } = useQuery({
     queryKey: ['room', activeRoomId],
     queryFn: () => roomService.getRoom(activeRoomId),
   });
 
-  const { data: overview } = useRoomOverview(activeRoomId);
+  const { data: overview, isLoading: isOverviewLoading } = useRoomOverview(activeRoomId);
 
-  // If stage is before build, render the Planning variant
-  const currentStage = overview?.variant === 'planning' ? 'ideate' : (room?.stage || 'build');
-  if (room && currentStage !== 'build') {
+  // Show neutral skeleton until room data has loaded; never default to "build"
+  if (isRoomLoading || !room) {
+    return (
+      <div className="px-6 py-8 max-w-[1280px] mx-auto animate-pulse flex flex-col gap-6">
+        <div className="h-16 bg-muted/30 rounded-2xl w-full" />
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-7 h-80 bg-muted/20 rounded-2xl" />
+          <div className="lg:col-span-5 h-80 bg-muted/20 rounded-2xl" />
+        </div>
+      </div>
+    );
+  }
+
+  const stage = (room?.stage || 'brief').toLowerCase();
+  const isPlanning = overview?.variant === 'planning' || ['brief', 'ideate', 'plan'].includes(stage);
+
+  if (isPlanning) {
     return <PlanningOverview roomId={activeRoomId} />;
   }
 

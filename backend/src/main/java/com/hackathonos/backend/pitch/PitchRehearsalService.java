@@ -133,14 +133,35 @@ public class PitchRehearsalService {
         UUID presenterId = roles != null && roles.getPresenterId() != null ? roles.getPresenterId() : user.getId();
         UUID operatorId = roles != null ? roles.getOperatorId() : null;
 
+        String pacesJson = "[]";
+        if (req.sectionPaces() != null) {
+            if (req.sectionPaces() instanceof String s) {
+                pacesJson = s;
+            } else {
+                try {
+                    pacesJson = objectMapper.writeValueAsString(req.sectionPaces());
+                } catch (Exception e) {
+                    pacesJson = "[]";
+                }
+            }
+        }
+
+        String statsJson = null;
+        if (req.stats() != null) {
+            try {
+                statsJson = objectMapper.writeValueAsString(req.stats());
+            } catch (Exception ignored) {}
+        }
+
         PitchRehearsal run = new PitchRehearsal(
                 roomId,
                 Instant.now(),
                 durationSec,
                 presenterId,
                 operatorId,
-                req.sectionPaces() != null ? req.sectionPaces() : "[]",
-                req.notes() != null ? req.notes().trim() : ""
+                pacesJson,
+                req.notes() != null ? req.notes().trim() : "",
+                statsJson
         );
         PitchRehearsal saved = rehearsalRepository.save(run);
 
@@ -216,6 +237,13 @@ public class PitchRehearsalService {
             } catch (Exception ignored) {}
         }
 
+        Object statsObj = null;
+        if (r.getStats() != null && !r.getStats().isBlank()) {
+            try {
+                statsObj = objectMapper.readValue(r.getStats(), Object.class);
+            } catch (Exception ignored) {}
+        }
+
         return new PitchDtos.RehearsalRunDto(
                 r.getId(),
                 r.getRunAt(),
@@ -224,7 +252,8 @@ public class PitchRehearsalService {
                 getUserSummary(r.getPresenterId()),
                 getUserSummary(r.getOperatorId()),
                 paces,
-                r.getNotes()
+                r.getNotes(),
+                statsObj
         );
     }
 

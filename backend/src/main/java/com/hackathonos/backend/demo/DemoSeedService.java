@@ -33,6 +33,12 @@ public class DemoSeedService {
         this.planStepRepository = planStepRepository;
     }
 
+    @Transactional
+    public void cleanForRoom(UUID roomId) {
+        sectionRepository.deleteByRoomId(roomId);
+        shotRepository.deleteByRoomId(roomId);
+    }
+
     /**
      * Seeds demo sections, shots, and insurance items from the plan's demo answer.
      */
@@ -102,13 +108,6 @@ public class DemoSeedService {
             }
         }
 
-        if (list.isEmpty()) {
-            list.add(new DemoSection(roomId, 0, "Hook", 10, "Opening hook demonstrating immediate value."));
-            list.add(new DemoSection(roomId, 1, "Core flow", 45, "Live end-to-end journey solving the main friction."));
-            list.add(new DemoSection(roomId, 2, "Wow moment", 20, "Highlight key technical capability or insight."));
-            list.add(new DemoSection(roomId, 3, "Impact & Next", 15, "Quantified impact and immediate next steps."));
-        }
-
         return list;
     }
 
@@ -136,12 +135,6 @@ public class DemoSeedService {
                 String notes = m.group(3).replaceAll("[*]+", "").trim();
                 list.add(new DemoShot(roomId, pos++, title, seconds, notes, false));
             }
-        }
-
-        if (list.isEmpty()) {
-            list.add(new DemoShot(roomId, 0, "Dashboard screen", 15, "Overview metrics and live status indicator", false));
-            list.add(new DemoShot(roomId, 1, "Core action workflow", 30, "User executes primary task end-to-end", false));
-            list.add(new DemoShot(roomId, 2, "Realtime feedback", 15, "Instant confirmation and result preview", false));
         }
 
         return list;

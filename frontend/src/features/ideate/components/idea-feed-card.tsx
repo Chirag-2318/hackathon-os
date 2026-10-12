@@ -47,7 +47,7 @@ export function IdeaFeedCard({
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-bold text-foreground">
-            {idea.authorId ? `Member ${idea.authorId.slice(0, 6)}` : 'Team member'}
+            {(idea as any).author?.name || (idea as any).authorName || 'Team member'}
           </span>
           <span className="text-[11px] text-muted-foreground">
             {idea.createdAt ? formatDistanceToNow(new Date(idea.createdAt), { addSuffix: true }) : ''}

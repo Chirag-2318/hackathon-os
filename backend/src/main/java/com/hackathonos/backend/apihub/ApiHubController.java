@@ -1,5 +1,6 @@
 package com.hackathonos.backend.apihub;
 
+import com.hackathonos.backend.common.security.CurrentUser;
 import com.hackathonos.backend.apihub.dto.ApiHubDtos.*;
 import com.hackathonos.backend.users.User;
 import org.springframework.http.MediaType;
@@ -14,9 +15,15 @@ import java.util.UUID;
 public class ApiHubController {
 
     private final ApiHubService apiHubService;
+    private final CurrentUser currentUser;
 
-    public ApiHubController(ApiHubService apiHubService) {
+    public ApiHubController(ApiHubService apiHubService, CurrentUser currentUser) {
         this.apiHubService = apiHubService;
+        this.currentUser = currentUser;
+    }
+
+    private User resolveUser(User user) {
+        return user != null ? user : currentUser.get();
     }
 
     @GetMapping("/api/v1/rooms/{roomId}/apis")
@@ -24,7 +31,7 @@ public class ApiHubController {
             @PathVariable UUID roomId,
             @AuthenticationPrincipal User user
     ) {
-        return apiHubService.getApis(roomId, user);
+        return apiHubService.getApis(roomId, resolveUser(user));
     }
 
     @PostMapping("/api/v1/rooms/{roomId}/apis/externals")
@@ -33,7 +40,7 @@ public class ApiHubController {
             @RequestBody CreateExternalRequest request,
             @AuthenticationPrincipal User user
     ) {
-        return apiHubService.createExternal(roomId, request, user);
+        return apiHubService.createExternal(roomId, request, resolveUser(user));
     }
 
     @PatchMapping("/api/v1/rooms/{roomId}/apis/externals/{id}")
@@ -43,7 +50,7 @@ public class ApiHubController {
             @RequestBody UpdateExternalRequest request,
             @AuthenticationPrincipal User user
     ) {
-        return apiHubService.updateExternal(roomId, id, request, user);
+        return apiHubService.updateExternal(roomId, id, request, resolveUser(user));
     }
 
     @DeleteMapping("/api/v1/rooms/{roomId}/apis/externals/{id}")
@@ -52,7 +59,7 @@ public class ApiHubController {
             @PathVariable UUID id,
             @AuthenticationPrincipal User user
     ) {
-        apiHubService.deleteExternal(roomId, id, user);
+        apiHubService.deleteExternal(roomId, id, resolveUser(user));
         return ResponseEntity.noContent().build();
     }
 
@@ -62,7 +69,7 @@ public class ApiHubController {
             @PathVariable UUID id,
             @AuthenticationPrincipal User user
     ) {
-        return apiHubService.checkExternal(roomId, id, user);
+        return apiHubService.checkExternal(roomId, id, resolveUser(user));
     }
 
     @PostMapping("/api/v1/rooms/{roomId}/apis/endpoints")
@@ -71,7 +78,7 @@ public class ApiHubController {
             @RequestBody CreateEndpointRequest request,
             @AuthenticationPrincipal User user
     ) {
-        return apiHubService.createEndpoint(roomId, request, user);
+        return apiHubService.createEndpoint(roomId, request, resolveUser(user));
     }
 
     @PutMapping("/api/v1/rooms/{roomId}/apis/endpoints/{id}")
@@ -81,7 +88,7 @@ public class ApiHubController {
             @RequestBody UpdateEndpointRequest request,
             @AuthenticationPrincipal User user
     ) {
-        return apiHubService.updateEndpoint(roomId, id, request, user);
+        return apiHubService.updateEndpoint(roomId, id, request, resolveUser(user));
     }
 
     @DeleteMapping("/api/v1/rooms/{roomId}/apis/endpoints/{id}")
@@ -90,7 +97,7 @@ public class ApiHubController {
             @PathVariable UUID id,
             @AuthenticationPrincipal User user
     ) {
-        apiHubService.deleteEndpoint(roomId, id, user);
+        apiHubService.deleteEndpoint(roomId, id, resolveUser(user));
         return ResponseEntity.noContent().build();
     }
 
@@ -108,7 +115,7 @@ public class ApiHubController {
                 bytes = file.getBytes();
             } catch (Exception ignored) {}
         }
-        return apiHubService.importOpenApi(roomId, text, bytes, user);
+        return apiHubService.importOpenApi(roomId, text, bytes, resolveUser(user));
     }
 
     @GetMapping(value = "/api/v1/rooms/{roomId}/apis/openapi.json", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -116,7 +123,7 @@ public class ApiHubController {
             @PathVariable UUID roomId,
             @AuthenticationPrincipal User user
     ) {
-        return apiHubService.exportOpenApi(roomId, user);
+        return apiHubService.exportOpenApi(roomId, resolveUser(user));
     }
 
     @PutMapping("/api/v1/rooms/{roomId}/apis/mock")
@@ -125,6 +132,6 @@ public class ApiHubController {
             @RequestBody ToggleMockRequest request,
             @AuthenticationPrincipal User user
     ) {
-        return apiHubService.toggleMock(roomId, request, user);
+        return apiHubService.toggleMock(roomId, request, resolveUser(user));
     }
 }

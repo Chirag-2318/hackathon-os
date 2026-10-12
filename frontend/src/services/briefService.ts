@@ -2,6 +2,7 @@
  * briefService.ts — Brief CRUD, intake parsing, and confirmation.
  */
 import { apiFetch } from '@/api/client';
+import { ApiError } from '@/lib/apiClient';
 import type { Brief, BriefFields, RubricCriterion } from './types';
 
 export const briefService = {
@@ -38,6 +39,13 @@ export const briefService = {
     });
   },
 
+  async setTextSource(roomId: string, text: string): Promise<Brief> {
+    return apiFetch<Brief>(`/api/v1/rooms/${roomId}/brief/source/text`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+  },
+
   async setPdfSource(roomId: string, file: File, onProgress?: (pct: number) => void): Promise<Brief> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -59,19 +67,19 @@ export const briefService = {
           try {
             resolve(JSON.parse(xhr.responseText));
           } catch {
-            reject(new Error('Invalid server response'));
+            reject(new ApiError(xhr.status, 'Invalid server response', 'INVALID_RESPONSE'));
           }
         } else {
           try {
             const err = JSON.parse(xhr.responseText);
-            reject(new Error(err.message || `Upload failed with status ${xhr.status}`));
+            reject(new ApiError(xhr.status, err.message || `Upload failed with status ${xhr.status}`, err.code || 'UPLOAD_FAILED'));
           } catch {
-            reject(new Error(`Upload failed with status ${xhr.status}`));
+            reject(new ApiError(xhr.status, `Upload failed with status ${xhr.status}`, 'UPLOAD_FAILED'));
           }
         }
       };
 
-      xhr.onerror = () => reject(new Error('Network error during upload'));
+      xhr.onerror = () => reject(new ApiError(0, 'Network error during upload', 'NETWORK_ERROR'));
 
       const formData = new FormData();
       formData.append('file', file);
@@ -79,9 +87,52 @@ export const briefService = {
     });
   },
 
+  async setImagesSource(roomId: string, files: File[], onProgress?: (pct: number) => void): Promise<Brief> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+      xhr.open('POST', `${baseUrl}/api/v1/rooms/${roomId}/brief/source/images`);
+      xhr.withCredentials = true;
+
+      if (onProgress && xhr.upload) {
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            onProgress(percent);
+          }
+        };
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch {
+            reject(new ApiError(xhr.status, 'Invalid server response', 'INVALID_RESPONSE'));
+          }
+        } else {
+          try {
+            const err = JSON.parse(xhr.responseText);
+            reject(new ApiError(xhr.status, err.message || `Upload failed with status ${xhr.status}`, err.code || 'UPLOAD_FAILED'));
+          } catch {
+            reject(new ApiError(xhr.status, `Upload failed with status ${xhr.status}`, 'UPLOAD_FAILED'));
+          }
+        }
+      };
+
+      xhr.onerror = () => reject(new ApiError(0, 'Network error during upload', 'NETWORK_ERROR'));
+
+      const formData = new FormData();
+      for (const file of files) {
+        formData.append('files', file);
+      }
+      xhr.send(formData);
+    });
+  },
+
   async getExtractionPrompt(roomId: string): Promise<string> {
-    const res = await apiFetch<{ promptText: string }>(`/api/v1/rooms/${roomId}/brief/extraction-prompt`);
-    return res.promptText;
+    const res = await apiFetch<{ prompt?: string; promptText?: string }>(`/api/v1/rooms/${roomId}/brief/extraction-prompt`);
+    return res.prompt || res.promptText || '';
   },
 
   async validateExtract(roomId: string, jsonText: string): Promise<{ valid: boolean; fields?: BriefFields; errors: string[] }> {

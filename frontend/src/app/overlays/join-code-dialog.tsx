@@ -54,9 +54,17 @@ export function JoinCodeDialogOverlay() {
       }
     },
     onError: (err: any) => {
-      setError(err?.message ?? 'Invalid room code. Please check and try again.');
+      if (err?.code === 'INVALID_CODE') {
+        setError('No room found with that code');
+      } else if (err?.code === 'TOO_MANY_ATTEMPTS') {
+        setError(err.message || 'Too many attempts. Please wait a moment and try again.');
+      } else {
+        setError(err?.message ?? 'Invalid room code. Please check and try again.');
+      }
     },
   });
+
+  const codeString = digits.join('');
 
   const handleChange = (index: number, value: string) => {
     const char = value.slice(-1).toUpperCase();
@@ -69,16 +77,16 @@ export function JoinCodeDialogOverlay() {
     if (char && index < 3) {
       inputsRef.current[index + 1]?.focus();
     }
-
-    // Auto-submit if all 4 are filled
-    if (char && index === 3 && next.every((d) => d.length === 1)) {
-      joinMutation.mutate(next.join(''));
-    }
   };
 
   const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace' && !digits[index] && index > 0) {
       inputsRef.current[index - 1]?.focus();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (codeString.length === 4 && !joinMutation.isPending) {
+        joinMutation.mutate(codeString);
+      }
     }
   };
 
@@ -101,8 +109,6 @@ export function JoinCodeDialogOverlay() {
       joinMutation.mutate(newDigits.join(''));
     }
   };
-
-  const codeString = digits.join('');
 
   return (
     <Dialog open={isOpen} onOpenChange={(openState) => { if (!openState) close(); }}>

@@ -35,13 +35,15 @@ export function IdeatePage() {
   });
 
   const isLocked = Boolean(ideateData?.ideationDone);
-  const permissions = ideateData?.permissions || {
-    canPost: true,
-    canDecide: false,
-    canDone: false,
-    canReopen: false,
-    isLeader: false,
-  };
+  const permissions = ideateData?.permissions as any;
+  const canFinish = Boolean(
+    permissions?.canFinish ||
+    permissions?.canDone ||
+    permissions?.isLeader
+  );
+  const canReopen = Boolean(permissions?.canReopen);
+  const canDecide = Boolean(permissions?.canDecide ?? true);
+  const canPost = Boolean(permissions?.canPost ?? true);
 
   const ideas = ideateData?.ideas || [];
   const counts = ideateData?.counts || { total: 0, pending: 0, approved: 0, rejected: 0 };
@@ -191,7 +193,7 @@ export function IdeatePage() {
         <div className="lg:col-span-7 flex flex-col rounded-[24px] bg-card border border-border shadow-xs overflow-hidden">
           <IdeaComposer
             isLocked={isLocked}
-            canPost={permissions.canPost}
+            canPost={canPost}
             isPending={createMutation.isPending}
             onPost={(d) => createMutation.mutate(d)}
           />
@@ -228,7 +230,7 @@ export function IdeatePage() {
                   key={idea.id}
                   idea={idea}
                   isMine={user?.id ? idea.authorId === String(user.id) : true}
-                  canDecide={permissions.canDecide}
+                  canDecide={canDecide}
                   isLocked={isLocked}
                   onApprove={(id) => approveMutation.mutate(id)}
                   onReject={(id) => rejectMutation.mutate(id)}
@@ -265,7 +267,7 @@ export function IdeatePage() {
                       At least one approved idea is required to complete ideation.
                     </p>
                   )}
-                  {permissions.canDone && (
+                  {canFinish && (
                     <Button
                       onClick={() => doneMutation.mutate()}
                       disabled={approvedCount === 0 || doneMutation.isPending}
@@ -283,7 +285,7 @@ export function IdeatePage() {
                   <Button onClick={() => navigate(`/app/room/${activeRoomId}/plan`)} className="w-full text-xs h-9">
                     Go to Plan &rarr;
                   </Button>
-                  {permissions.canReopen && (
+                  {canReopen && (
                     <Button variant="outline" onClick={() => reopenMutation.mutate()} className="w-full text-xs h-9">
                       Reopen ideation
                     </Button>

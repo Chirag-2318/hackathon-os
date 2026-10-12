@@ -790,3 +790,186 @@
   to   { transform: scaleX(1); }
 }
 
+/* ══════════════════════════════════════════════════════════
+   STAGE THEME — scoped to .stage-theme wrapper
+   Used by: Deck, Pitch Kit, Submission pages
+   ══════════════════════════════════════════════════════════ */
+.stage-theme {
+  /* Color tokens */
+  --st-ink:        #17171A;
+  --st-dark-card:  #1A1A1D;
+  --st-dark-border:#2B2B30;
+  --st-dark-text:  #F4F1EA;
+  --st-dark-muted: #9C9AA3;
+  --st-cream:      #FFF1D6;
+  --st-sun:        #FFB81C;
+  --st-orange:     #FF7A1A;
+  --st-pink:       #FF5C8A;
+  --st-lilac:      #C9B8F4;
+  --st-mint:       #BFEBD3;
+  --st-sky:        #BFE3FF;
+  /* Speaker cycle: orange pink lilac mint sky sun */
+  --st-speaker-0: var(--st-orange);
+  --st-speaker-1: var(--st-pink);
+  --st-speaker-2: var(--st-lilac);
+  --st-speaker-3: var(--st-mint);
+  --st-speaker-4: var(--st-sky);
+  --st-speaker-5: var(--st-sun);
+
+  font-family: var(--font-inter, 'DM Sans Variable', sans-serif);
+  color: var(--ink);
+}
+
+/* Bento grid */
+.stage-bento {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+.stage-card {
+  border-radius: 24px;
+  overflow: hidden;
+}
+.stage-card-dark {
+  background: var(--st-dark-card);
+  border: 1px solid var(--st-dark-border);
+  color: var(--st-dark-text);
+}
+.stage-card-light {
+  background: #fff;
+  border: 1px solid var(--border);
+  color: var(--st-ink);
+}
+.stage-card-warm {
+  background: linear-gradient(135deg, var(--st-sun) 0%, var(--st-orange) 100%);
+  color: #fff;
+}
+
+/* Cream number circles */
+.stage-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: var(--st-cream);
+  color: var(--st-ink);
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Pink count badge */
+.stage-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  background: var(--st-pink);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 6px;
+}
+
+/* Pill buttons */
+.stage-pill {
+  border-radius: 9999px;
+  padding: 8px 20px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 200ms cubic-bezier(0.22,1,0.36,1),
+              box-shadow 200ms cubic-bezier(0.22,1,0.36,1);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.stage-pill:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+.stage-pill:active { transform: scale(0.98); }
+.stage-pill-orange { background: var(--st-orange); color: #fff; border: none; }
+.stage-pill-ghost  { background: transparent; color: var(--st-ink); border: 1.5px solid var(--border); }
+
+/* Art tiles: gradient art (CSS-only, per-n variant) */
+.stage-art-tile {
+  border-radius: 16px;
+  aspect-ratio: 1;
+  position: relative;
+  overflow: hidden;
+}
+.stage-art-tile-1 { background: radial-gradient(circle at 30% 30%, var(--st-orange) 0%, var(--st-pink) 60%, var(--st-lilac) 100%); }
+.stage-art-tile-2 { background: radial-gradient(circle at 70% 40%, var(--st-lilac) 0%, var(--st-pink) 50%, var(--st-sun) 100%); }
+.stage-art-tile-3 { background: conic-gradient(from 180deg, var(--st-sun), var(--st-orange), var(--st-pink), var(--st-lilac), var(--st-sun)); }
+.stage-art-tile-4 { background: radial-gradient(ellipse at top, var(--st-mint) 0%, var(--st-sky) 60%, var(--st-lilac) 100%); }
+
+/* Progress ring */
+.stage-ring {
+  --ring-size: 40px;
+  --ring-stroke: 3px;
+  width: var(--ring-size);
+  height: var(--ring-size);
+}
+.stage-ring circle {
+  fill: none;
+  stroke-width: var(--ring-stroke);
+  transform-origin: center;
+  transform: rotate(-90deg);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 700ms cubic-bezier(0.22,1,0.36,1);
+}
+.stage-ring .track { stroke: var(--st-dark-border, #e5e7eb); }
+.stage-ring .fill  { stroke: var(--st-orange); }
+
+/* Accordion body */
+.stage-accordion-body {
+  overflow: hidden;
+  transition: max-height 280ms cubic-bezier(0.22,1,0.36,1),
+              opacity    280ms cubic-bezier(0.22,1,0.36,1);
+}
+.stage-accordion-body[data-open="false"] { max-height: 0 !important; opacity: 0; }
+.stage-accordion-body[data-open="true"]  { opacity: 1; }
+
+/* Rise-in animation (stagger with JS --delay custom prop) */
+@keyframes stage-rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.stage-rise {
+  animation: stage-rise 400ms cubic-bezier(0.22,1,0.36,1) both;
+  animation-delay: var(--delay, 0ms);
+}
+
+/* Progress bar fill */
+@keyframes stage-bar-fill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+.stage-bar-fill {
+  transform-origin: left;
+  animation: stage-bar-fill 700ms cubic-bezier(0.22,1,0.36,1) both;
+}
+
+/* Count-up placeholder (number animates via JS; CSS provides entrance) */
+@keyframes stage-count-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.stage-count { animation: stage-count-up 500ms cubic-bezier(0.22,1,0.36,1) both; }
+
+/* Reduced motion: cancel all stage-theme animations */
+@media (prefers-reduced-motion: reduce) {
+  .stage-rise,
+  .stage-bar-fill,
+  .stage-count,
+  .stage-ring circle,
+  .stage-accordion-body,
+  .stage-pill {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+

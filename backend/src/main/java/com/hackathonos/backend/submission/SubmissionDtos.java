@@ -76,8 +76,32 @@ public class SubmissionDtos {
             boolean canVerify,
             List<String> blockers,
             boolean lateEdit,
-            Instant serverNow
-    ) {}
+            Instant serverNow,
+            boolean isLeader,
+            String deckUrl,
+            String demoUrl,
+            String liveUrl,
+            String repoUrl
+    ) {
+        public SubmissionResponse(
+                String status,
+                DeadlineInfoDto deadline,
+                List<String> requirements,
+                List<FormFieldDto> formFields,
+                SubmissionDraftDto draft,
+                List<ChecklistItemDto> checklist,
+                List<ChecklistItemDto> items,
+                List<SubmissionLinkDto> links,
+                List<LinkCheckRowDto> linkCheck,
+                JudgeViewDto judgeView,
+                boolean canVerify,
+                List<String> blockers,
+                boolean lateEdit,
+                Instant serverNow
+        ) {
+            this(status, deadline, requirements, formFields, draft, checklist, items, links, linkCheck, judgeView, canVerify, blockers, lateEdit, serverNow, true, null, null, null, null);
+        }
+    }
 
     public record UpdateDraftRequest(
             String whatItDoes,

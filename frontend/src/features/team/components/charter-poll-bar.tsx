@@ -4,18 +4,19 @@ import { ProgressRow } from '@/components/primitives/progress-row';
 
 export interface CharterPollBarProps {
   title: string;
-  options: CharterPollOption[];
+  options?: CharterPollOption[];
   className?: string;
 }
 
-export function CharterPollBar({ title, options, className }: CharterPollBarProps) {
+export function CharterPollBar({ title, options = [], className }: CharterPollBarProps) {
+  const safeOptions = Array.isArray(options) ? options : [];
   return (
     <div className={cn("flex flex-col gap-3 min-w-0 w-full", className)}>
       <span className="text-label text-ink">{title}</span>
       
       <div className="flex flex-col gap-3 w-full min-w-0">
-        {options.length > 0 ? (
-          options.map((opt, i) => (
+        {safeOptions.length > 0 ? (
+          safeOptions.map((opt, i) => (
             <ProgressRow 
               key={i} 
               label={opt.label} 

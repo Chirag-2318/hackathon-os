@@ -74,7 +74,9 @@ public class DemoService {
         DemoMedia media = mediaRepository.findByRoomId(roomId).orElse(null);
         DemoDtos.DemoMediaDto mediaDto = new DemoDtos.DemoMediaDto(
                 media != null ? media.getVideoUrl() : null,
-                media != null ? media.getFallbackUrl() : null
+                media != null ? media.getFallbackUrl() : null,
+                media != null && media.isLocalRecordingSaved(),
+                media != null && media.isLocalBackupSaved()
         );
 
         Brief brief = briefRepository.findByRoomId(roomId).orElse(null);
@@ -86,7 +88,7 @@ public class DemoService {
 
         List<DemoDtos.DemoShotDto> shotDtos = shots.stream().map(s ->
                 new DemoDtos.DemoShotDto(s.getId(), s.getPosition(), s.getPosition() + 1, s.getTitle(), s.getTitle(),
-                        s.getDurationSec(), s.getDurationSec(), s.getNotes(), s.getNotes(), s.isDone())
+                        s.getDurationSec(), s.getDurationSec(), s.getNotes(), s.getNotes(), s.isDone(), s.getProofUrl())
         ).toList();
 
         List<DemoDtos.InsuranceItemDto> insuranceDtos = insuranceItems.stream().map(i ->
@@ -156,13 +158,17 @@ public class DemoService {
         if (req.shots() != null) {
             int pos = 0;
             for (DemoDtos.ShotItemRequest s : req.shots()) {
-                list.add(new DemoShot(roomId, pos++, s.title().trim(), s.durationSec(), s.notes() != null ? s.notes().trim() : "", s.done()));
+                DemoShot shot = new DemoShot(roomId, pos++, s.title().trim(), s.durationSec(), s.notes() != null ? s.notes().trim() : "", s.done());
+                if (s.proofUrl() != null && !s.proofUrl().isBlank()) {
+                    shot.setProofUrl(s.proofUrl().trim());
+                }
+                list.add(shot);
             }
         }
         List<DemoShot> saved = shotRepository.saveAll(list);
         return saved.stream().map(s ->
                 new DemoDtos.DemoShotDto(s.getId(), s.getPosition(), s.getPosition() + 1, s.getTitle(), s.getTitle(),
-                        s.getDurationSec(), s.getDurationSec(), s.getNotes(), s.getNotes(), s.isDone())
+                        s.getDurationSec(), s.getDurationSec(), s.getNotes(), s.getNotes(), s.isDone(), s.getProofUrl())
         ).toList();
     }
 
@@ -196,6 +202,12 @@ public class DemoService {
 
         media.setVideoUrl(req.videoUrl() != null && !req.videoUrl().isBlank() ? req.videoUrl().trim() : null);
         media.setFallbackUrl(req.fallbackUrl() != null && !req.fallbackUrl().isBlank() ? req.fallbackUrl().trim() : null);
+        if (req.localRecordingSaved() != null) {
+            media.setLocalRecordingSaved(req.localRecordingSaved());
+        }
+        if (req.localBackupSaved() != null) {
+            media.setLocalBackupSaved(req.localBackupSaved());
+        }
         media.setUpdatedAt(Instant.now());
         DemoMedia saved = mediaRepository.save(media);
 
@@ -205,7 +217,7 @@ public class DemoService {
             checkpointService.evaluate(room);
         }
 
-        return new DemoDtos.DemoMediaDto(saved.getVideoUrl(), saved.getFallbackUrl());
+        return new DemoDtos.DemoMediaDto(saved.getVideoUrl(), saved.getFallbackUrl(), saved.isLocalRecordingSaved(), saved.isLocalBackupSaved());
     }
 
     private List<DemoInsuranceItem> seedDefaultInsurance(UUID roomId) {

@@ -1,5 +1,6 @@
 package com.hackathonos.backend.schedule;
 
+import com.hackathonos.backend.common.security.CurrentUser;
 import com.hackathonos.backend.users.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -15,9 +16,15 @@ import java.util.UUID;
 public class ScheduleController {
 
     private final ScheduleService scheduleService;
+    private final CurrentUser currentUser;
 
-    public ScheduleController(ScheduleService scheduleService) {
+    public ScheduleController(ScheduleService scheduleService, CurrentUser currentUser) {
         this.scheduleService = scheduleService;
+        this.currentUser = currentUser;
+    }
+
+    private User resolveUser(User user) {
+        return user != null ? user : currentUser.get();
     }
 
     @GetMapping
@@ -25,7 +32,7 @@ public class ScheduleController {
             @PathVariable UUID roomId,
             @AuthenticationPrincipal User user
     ) {
-        return scheduleService.getSchedule(roomId, user);
+        return scheduleService.getSchedule(roomId, resolveUser(user));
     }
 
     @PostMapping("/events")
@@ -35,7 +42,7 @@ public class ScheduleController {
             @AuthenticationPrincipal User user,
             @RequestBody ScheduleDtos.CreateEventRequest req
     ) {
-        return scheduleService.createEvent(roomId, user, req);
+        return scheduleService.createEvent(roomId, resolveUser(user), req);
     }
 
     @PatchMapping("/events/{id}")
@@ -45,7 +52,7 @@ public class ScheduleController {
             @AuthenticationPrincipal User user,
             @RequestBody ScheduleDtos.UpdateEventRequest req
     ) {
-        return scheduleService.updateEvent(roomId, id, user, req);
+        return scheduleService.updateEvent(roomId, id, resolveUser(user), req);
     }
 
     @DeleteMapping("/events/{id}")
@@ -55,6 +62,6 @@ public class ScheduleController {
             @PathVariable UUID id,
             @AuthenticationPrincipal User user
     ) {
-        scheduleService.deleteEvent(roomId, id, user);
+        scheduleService.deleteEvent(roomId, id, resolveUser(user));
     }
 }

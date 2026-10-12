@@ -2,59 +2,132 @@ package com.hackathonos.backend.plan;
 
 import com.hackathonos.backend.brief.Brief;
 import com.hackathonos.backend.brief.BriefRubricItem;
+import com.hackathonos.backend.ideas.Idea;
 import com.hackathonos.backend.members.RoomMember;
 import com.hackathonos.backend.rooms.Room;
 import com.hackathonos.backend.users.User;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
- * Builds standard server-side prompts and expected format specifications for all 5 plan steps.
+ * Builds standard server-side prompts and expected format specifications for all 5 plan steps
+ * incorporating real context: brief raw text (first 12,000 chars), structured fields, approved ideas with authors,
+ * plan notes, team skills, and event hours.
  */
 @Component
 public class PromptBuilder {
 
-    public String buildCommonHeader(Room room, Brief brief, List<BriefRubricItem> rubric, List<RoomMember> members, Map<java.util.UUID, User> users) {
-        String problem = (brief != null && brief.getProblemStatement() != null && !brief.getProblemStatement().isBlank())
-                ? brief.getProblemStatement() : "not provided";
-
-        StringBuilder rubricSb = new StringBuilder();
-        if (rubric != null && !rubric.isEmpty()) {
-            for (BriefRubricItem r : rubric) {
-                if (!rubricSb.isEmpty()) rubricSb.append(", ");
-                rubricSb.append(r.getCriterion()).append(" (").append(r.getWeight()).append("%)");
-            }
-        } else {
-            rubricSb.append("not provided");
-        }
-
-        StringBuilder teamSb = new StringBuilder();
-        if (members != null && !members.isEmpty()) {
-            for (RoomMember m : members) {
-                User u = users.get(m.getUserId());
-                String name = u != null ? (u.getName() != null ? u.getName() : (u.getEmail() != null ? u.getEmail() : "Member")) : "Member";
-                if (!teamSb.isEmpty()) teamSb.append(", ");
-                teamSb.append(name).append(": ").append(m.getRole());
-            }
-        } else {
-            teamSb.append("Solo builder");
-        }
+    public String buildCommonHeader(
+            Room room,
+            Brief brief,
+            List<BriefRubricItem> rubric,
+            List<RoomMember> members,
+            Map<UUID, User> users,
+            Map<UUID, List<String>> memberSkillsMap,
+            List<Idea> approvedIdeas,
+            Map<UUID, String> authorNamesMap
+    ) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("You are an expert hackathon mentor and product manager.\n");
+        sb.append("Hackathon: ").append(room.getName()).append(".\n");
 
         long hours = 36;
         if (room.getEventStart() != null && room.getEventEnd() != null) {
             hours = Math.max(1, Duration.between(room.getEventStart(), room.getEventEnd()).toHours());
         }
+        sb.append("Total event duration: ").append(hours).append(" hours.\n\n");
 
-        return "You are an expert hackathon mentor and product manager. I am building a project for the hackathon below. The file ideas.md is attached; use it as the source of truth.\n"
-                + "Hackathon: " + room.getName() + ".\n"
-                + "Problem statement: " + problem + ".\n"
-                + "Rubric: " + rubricSb + ".\n"
-                + "Team: " + teamSb + ".\n"
-                + "Time available: " + hours + " hours.\n"
-                + "Reply ONLY in the exact format below, with no extra commentary.\n\n";
+        // Plan notes
+        if (room.getPlanNotes() != null && !room.getPlanNotes().isBlank()) {
+            sb.append("=== Project Notes & Context ===\n")
+                    .append(room.getPlanNotes().trim())
+                    .append("\n\n");
+        }
+
+        // Team and skills
+        sb.append("=== Team & Skills ===\n");
+        if (members != null && !members.isEmpty()) {
+            for (RoomMember m : members) {
+                User u = users != null ? users.get(m.getUserId()) : null;
+                String name = u != null && u.getName() != null && !u.getName().isBlank()
+                        ? u.getName()
+                        : (u != null && u.getEmail() != null ? u.getEmail() : "Member");
+                List<String> skills = memberSkillsMap != null ? memberSkillsMap.getOrDefault(m.getId(), Collections.emptyList()) : Collections.emptyList();
+                sb.append("- ").append(name).append(" (Role: ").append(m.getRole());
+                if (!skills.isEmpty()) {
+                    sb.append(", Skills: ").append(String.join(", ", skills));
+                }
+                sb.append(")\n");
+            }
+        } else {
+            sb.append("Solo builder\n");
+        }
+        sb.append("\n");
+
+        // Approved ideas with author name
+        if (approvedIdeas != null && !approvedIdeas.isEmpty()) {
+            sb.append("=== Approved Ideas ===\n");
+            for (Idea idea : approvedIdeas) {
+                String author = authorNamesMap != null ? authorNamesMap.getOrDefault(idea.getAuthorId(), "Team Member") : "Team Member";
+                sb.append("- [").append(author).append("]: ").append(idea.getText().trim()).append("\n");
+            }
+            sb.append("\n");
+        }
+
+        // Structured brief fields
+        if (brief != null) {
+            sb.append("=== Hackathon Structured Brief ===\n");
+            if (brief.getProblemStatement() != null && !brief.getProblemStatement().isBlank()) {
+                sb.append("Problem Statement: ").append(brief.getProblemStatement().trim()).append("\n");
+            }
+            if (brief.getTargetAudience() != null && !brief.getTargetAudience().isBlank()) {
+                sb.append("Target Audience: ").append(brief.getTargetAudience().trim()).append("\n");
+            }
+            if (brief.getTechRules() != null && !brief.getTechRules().isBlank()) {
+                sb.append("Tech Rules: ").append(brief.getTechRules().trim()).append("\n");
+            }
+            if (brief.getAiPolicy() != null && !brief.getAiPolicy().isBlank()) {
+                sb.append("AI Policy: ").append(brief.getAiPolicy().trim()).append("\n");
+            }
+            if (brief.getJudgingFormat() != null && !brief.getJudgingFormat().isBlank()) {
+                sb.append("Judging Format: ").append(brief.getJudgingFormat().trim()).append("\n");
+            }
+            if (brief.getDeliverables() != null && !brief.getDeliverables().isBlank()) {
+                sb.append("Deliverables: ").append(brief.getDeliverables().trim()).append("\n");
+            }
+            if (brief.getTracksAndPrizes() != null && !brief.getTracksAndPrizes().isBlank()) {
+                sb.append("Tracks & Prizes: ").append(brief.getTracksAndPrizes().trim()).append("\n");
+            }
+            if (brief.getRisks() != null && !brief.getRisks().isBlank()) {
+                sb.append("Risks: ").append(brief.getRisks().trim()).append("\n");
+            }
+            if (rubric != null && !rubric.isEmpty()) {
+                sb.append("Rubric Criteria: ");
+                for (int i = 0; i < rubric.size(); i++) {
+                    BriefRubricItem r = rubric.get(i);
+                    sb.append(r.getCriterion()).append(" (").append(r.getWeight()).append("%)");
+                    if (i < rubric.size() - 1) sb.append(", ");
+                }
+                sb.append("\n");
+            }
+            sb.append("\n");
+
+            // Brief raw text (first 12,000 characters)
+            if (brief.getRawText() != null && !brief.getRawText().isBlank()) {
+                String rawText = brief.getRawText();
+                if (rawText.length() > 12000) {
+                    rawText = rawText.substring(0, 12000);
+                }
+                sb.append("=== Brief Raw Text (first 12,000 chars) ===\n")
+                        .append(rawText.trim())
+                        .append("\n\n");
+            }
+        }
+
+        sb.append("Reply ONLY in the exact format requested below, with no surrounding conversation or markdown blocks.\n\n");
+        return sb.toString();
     }
 
     public String getExpectedFormatPrd() {
@@ -101,84 +174,136 @@ The client communicates with the backend REST API over HTTPS.
 
 ```mermaid
 graph TD
-    Client[Web App] --> API[REST API]
-    API --> DB[(PostgreSQL)]
+    Client[Web Frontend] -->|REST API| Server[Spring Boot Backend]
+    Server -->|JDBC| DB[(PostgreSQL Database)]
 ```
-
-# New-tech risks""";
+""";
     }
 
     public String getExpectedFormatPhases() {
         return """
-reply ONLY with a JSON array of { "id": "p1", "name": string, "startPct": number, "endPct": number, "exitCheckpoint": string, "goals": [string] } covering 0 to 100 contiguously, at least 5 phases, matching the event length in hours, including a feature-freeze phase and a rehearsal phase.""";
+[
+  {
+    "id": "foundation",
+    "name": "Phase 1: Foundation",
+    "startPct": 0,
+    "endPct": 25,
+    "exitCheckpoint": "Repository initialized, CI passing, and data models created.",
+    "goals": ["Set up project repository", "Configure database schema"]
+  },
+  {
+    "id": "core",
+    "name": "Phase 2: Core Build",
+    "startPct": 25,
+    "endPct": 65,
+    "exitCheckpoint": "Main user flow functional end-to-end.",
+    "goals": ["Implement core API endpoints", "Build primary user screens"]
+  },
+  {
+    "id": "polish",
+    "name": "Phase 3: Polish & Demo",
+    "startPct": 65,
+    "endPct": 100,
+    "exitCheckpoint": "Demo script rehearsed and submission ready.",
+    "goals": ["Run QA and edge case checks", "Record demo walkthrough"]
+  }
+]
+""";
     }
 
     public String getExpectedFormatTasks() {
         return """
-reply ONLY with a JSON array of { "id": "t1", "title": string, "phaseId": string, "role": string, "estimateMin": number, "dependsOn": [string], "acceptance": string } where role is one of the team roles and skills listed above.""";
+[
+  {
+    "title": "Set up database migrations and tables",
+    "phaseId": "foundation",
+    "role": "backend",
+    "estimateMin": 120,
+    "acceptance": ["Flyway migrations run cleanly", "Entities mapped"]
+  },
+  {
+    "title": "Build core interactive dashboard",
+    "phaseId": "core",
+    "role": "frontend",
+    "estimateMin": 180,
+    "acceptance": ["Displays real project data", "Responsive layout"]
+  },
+  {
+    "title": "Record demo walkthrough video",
+    "phaseId": "polish",
+    "role": "domain",
+    "estimateMin": 90,
+    "acceptance": ["Video under 2 minutes", "Covers end-to-end workflow"]
+  }
+]
+""";
     }
 
     public String getExpectedFormatDemo() {
         return """
 # Demo script
-- [0-20s] Hook and real-world problem
-- [20-60s] Live end-to-end user walk-through
-- [60-90s] Technical highlight and wow moment
+- Hook (15s): Introduce the real-world friction and how our solution addresses it.
+- Core flow (45s): Walk through the live user journey solving the problem.
+- Wow moment (20s): Demonstrate the key differentiator and technical accomplishment.
+- Impact & Next (10s): Summary of measurable outcomes and roadmap.
 
 # Shot list
-1. Problem intro on landing hero
-2. Core interaction trigger
-3. Live success result screen
+- Shot 1 (15s): Landing page and instant value proposition
+- Shot 2 (45s): User navigating the primary workflow end-to-end
+- Shot 3 (20s): Feature showcase and real-time computation
+- Shot 4 (10s): Results review and next actions
 
 # Likely judge Q&A
-1. Q: What did you build this weekend?
-A: We built the end-to-end execution system.
-2. Q: What breaks first?
-A: Peak concurrent load on the live web socket adapter.
-3. Q: How does this solve the target user problem?
-A: It eliminates manual coordination bottlenecks.
-4. Q: Why did you choose this tech stack?
-A: For fast developer velocity and verified reliability.
-5. Q: What was the hardest technical challenge?
-A: Integrating the real-time state machine.
-6. Q: What is your secret sauce or wow moment?
-A: Instant multi-party project sync.
-7. Q: How do you handle edge cases and failure?
-A: Graceful fallbacks and user recovery hints.
-8. Q: What would you build with two more weeks?
-A: Native desktop notifications and mobile views.""";
+- Question: How does this scale beyond the demo data?
+  Answer: The architecture uses stateless microservices with indexed PostgreSQL queries and CDN caching.
+- Question: Who is the primary target user?
+  Answer: Fast-paced teams who need instant coordination without context switching.
+- Question: What breaks first under load?
+  Answer: High concurrency sync calls; our fallback is background asynchronous queue processing.
+""";
     }
 
-    public String buildPromptForStep(String stepKey, Room room, Brief brief, List<BriefRubricItem> rubric, List<RoomMember> members, Map<java.util.UUID, User> users, Map<String, String> validatedAnswers) {
-        String header = buildCommonHeader(room, brief, rubric, members, users);
+    public String buildPromptForStep(
+            String stepKey,
+            Room room,
+            Brief brief,
+            List<BriefRubricItem> rubric,
+            List<RoomMember> members,
+            Map<UUID, User> users,
+            Map<UUID, List<String>> memberSkillsMap,
+            List<Idea> approvedIdeas,
+            Map<UUID, String> authorNamesMap,
+            Map<String, String> validatedAnswers
+    ) {
+        String header = buildCommonHeader(room, brief, rubric, members, users, memberSkillsMap, approvedIdeas, authorNamesMap);
         StringBuilder sb = new StringBuilder(header);
 
         switch (stepKey.toLowerCase()) {
             case "prd" -> sb.append(getExpectedFormatPrd());
             case "tech" -> {
-                if (validatedAnswers.containsKey("prd")) {
-                    sb.append("Validated PRD Answer:\n").append(validatedAnswers.get("prd")).append("\n\n");
+                if (validatedAnswers != null && validatedAnswers.containsKey("prd")) {
+                    sb.append("=== Validated PRD Answer ===\n").append(validatedAnswers.get("prd")).append("\n\n");
                 }
                 sb.append(getExpectedFormatTech());
             }
             case "phases" -> {
-                if (validatedAnswers.containsKey("prd")) {
-                    sb.append("Validated PRD Answer:\n").append(validatedAnswers.get("prd")).append("\n\n");
+                if (validatedAnswers != null && validatedAnswers.containsKey("prd")) {
+                    sb.append("=== Validated PRD Answer ===\n").append(validatedAnswers.get("prd")).append("\n\n");
                 }
-                if (validatedAnswers.containsKey("tech")) {
-                    sb.append("Validated Tech Answer:\n").append(validatedAnswers.get("tech")).append("\n\n");
+                if (validatedAnswers != null && validatedAnswers.containsKey("tech")) {
+                    sb.append("=== Validated Tech Answer ===\n").append(validatedAnswers.get("tech")).append("\n\n");
                 }
                 sb.append(getExpectedFormatPhases());
             }
             case "tasks" -> {
-                if (validatedAnswers.containsKey("phases")) {
-                    sb.append("Validated Phases Answer:\n").append(validatedAnswers.get("phases")).append("\n\n");
+                if (validatedAnswers != null && validatedAnswers.containsKey("phases")) {
+                    sb.append("=== Validated Phases Answer ===\n").append(validatedAnswers.get("phases")).append("\n\n");
                 }
                 sb.append(getExpectedFormatTasks());
             }
             case "demo" -> {
-                if (validatedAnswers.containsKey("prd")) {
-                    sb.append("Validated PRD Answer:\n").append(validatedAnswers.get("prd")).append("\n\n");
+                if (validatedAnswers != null && validatedAnswers.containsKey("prd")) {
+                    sb.append("=== Validated PRD Answer ===\n").append(validatedAnswers.get("prd")).append("\n\n");
                 }
                 sb.append(getExpectedFormatDemo());
             }

@@ -11,4 +11,5 @@ import java.util.UUID;
 public interface DiagramRepository extends JpaRepository<Diagram, UUID> {
     List<Diagram> findByRoomIdOrderByUpdatedAtDesc(UUID roomId);
     Optional<Diagram> findByRoomIdAndTitle(UUID roomId, String title);
+    void deleteByRoomId(UUID roomId);
 }

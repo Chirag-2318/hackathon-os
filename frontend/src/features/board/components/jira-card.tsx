@@ -24,6 +24,9 @@ export interface JiraCardProps {
   onToggleBlock: (taskId: string) => void;
   // Drag-and-drop pointer handlers
   onPointerDownDrag?: (e: React.PointerEvent, task: Task) => void;
+  onDragStartTask?: (taskId: string) => void;
+  onDragEndTask?: () => void;
+  onAdvanceTaskStatus?: (taskId: string) => void;
 }
 
 export function JiraCard({
@@ -36,12 +39,16 @@ export function JiraCard({
   onAssignToMe,
   onToggleBlock,
   onPointerDownDrag,
+  onDragStartTask,
+  onDragEndTask,
+  onAdvanceTaskStatus,
 }: JiraCardProps) {
   const isDone = task.status === 'done';
   const isBlocked = task.flagged || Boolean(task.blockedReason);
   const assignee = members.find(m => m.id === task.assigneeId);
   const phaseIndex = phases.findIndex(p => p.id === task.phaseId);
   const phase = phases[phaseIndex] || { name: 'Sprint' };
+  const [justDragged, setJustDragged] = useState(false);
 
   // Subtask progress
   const totalSubtasks = (task.subtasks || []).length;
@@ -53,12 +60,35 @@ export function JiraCard({
       tabIndex={0}
       data-task-id={task.id}
       data-task-key={task.key}
+      draggable={true}
+      onDragStart={(e) => {
+        if ((e.target as HTMLElement).closest('button, [role="menuitem"], a, input')) {
+          e.preventDefault();
+          return;
+        }
+        setJustDragged(true);
+        e.dataTransfer.setData('text/plain', task.id);
+        e.dataTransfer.effectAllowed = 'move';
+        onDragStartTask?.(task.id);
+      }}
+      onDragEnd={() => {
+        setTimeout(() => setJustDragged(false), 100);
+        onDragEndTask?.();
+      }}
       onPointerDown={(e) => {
-        // Ignore if clicking interactive controls
         if ((e.target as HTMLElement).closest('button, [role="menuitem"], a, input')) return;
         onPointerDownDrag?.(e, task);
       }}
-      onClick={() => onOpen(task)}
+      onDoubleClick={(e) => {
+        if ((e.target as HTMLElement).closest('button, [role="menuitem"], a, input')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onAdvanceTaskStatus?.(task.id);
+      }}
+      onClick={(e) => {
+        if (justDragged) return;
+        onOpen(task);
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -66,12 +96,12 @@ export function JiraCard({
         }
       }}
       className={cn(
-        'group relative bg-white dark:bg-card rounded-[12px] p-3 text-left border border-[#E7E7E9] dark:border-border select-none cursor-pointer',
+        'group relative bg-white dark:bg-card rounded-[12px] p-3 text-left border border-[#E7E7E9] dark:border-border select-none cursor-grab active:cursor-grabbing',
         'shadow-[0_1px_2px_rgba(16,16,20,0.06)] transition-all duration-150',
         'hover:shadow-md hover:border-[#D6D6DA] dark:hover:border-border/80',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500',
         isBlocked && 'border-l-[3px] border-l-rose-500 dark:border-l-rose-500',
-        isDragging && 'shadow-[0_12px_28px_rgba(16,16,20,0.18)] rotate-[1.5deg] opacity-95 scale-[1.02] z-50 pointer-events-none'
+        (isDragging || justDragged) && 'opacity-60 shadow-[0_12px_28px_rgba(16,16,20,0.18)] scale-[1.01]'
       )}
     >
       {/* Top row: Flag + BLOCKED Lozenge (only when relevant) */}

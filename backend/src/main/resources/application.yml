@@ -2,6 +2,10 @@ server:
   port: 8080
 
 spring:
+  config:
+    import:
+      - "optional:file:.env[.properties]"
+      - "optional:file:../.env[.properties]"
   application:
     name: hackathon-os-backend
   profiles:
@@ -57,13 +61,24 @@ app:
   base-url: ${APP_BASE_URL:http://localhost:8080}
   upload-dir: ${APP_UPLOAD_DIR:./uploads}
   encryption-key: ${APP_ENCRYPTION_KEY:}
+  github:
+    token: ${APP_GITHUB_TOKEN:}
+    use-fake: ${APP_GITHUB_USE_FAKE:false}
+    link-client-id: ${GITHUB_LINK_CLIENT_ID:}
+    link-client-secret: ${GITHUB_LINK_CLIENT_SECRET:}
+  canva:
+    client-id: ${CANVA_CLIENT_ID:}
+    client-secret: ${CANVA_CLIENT_SECRET:}
   ai:
-    openai:
-      base-url: ${AI_OPENAI_BASE_URL:https://api.openai.com}
-      model: ${AI_OPENAI_MODEL:gpt-4o-mini}
-    anthropic:
-      base-url: ${AI_ANTHROPIC_BASE_URL:https://api.anthropic.com}
-      model: ${AI_ANTHROPIC_MODEL:claude-3-5-haiku-20241022}
-    gemini:
-      base-url: ${AI_GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
-      model: ${AI_GEMINI_MODEL:gemini-1.5-flash}
+    groq:
+      api-key: ${GROQ_API_KEY:${XAI_API_KEY:}}
+      base-url: ${GROQ_BASE_URL:${XAI_BASE_URL:https://api.groq.com/openai/v1}}
+      model: ${GROQ_MODEL:${XAI_MODEL:llama-3.3-70b-versatile}}
+      vision-model: ${GROQ_VISION_MODEL:${XAI_VISION_MODEL:llama-3.2-11b-vision-preview}}
+      max-tokens: ${GROQ_MAX_TOKENS:${XAI_MAX_TOKENS:6000}}
+    xai:
+      api-key: ${XAI_API_KEY:${GROQ_API_KEY:}}
+      base-url: ${XAI_BASE_URL:${GROQ_BASE_URL:https://api.groq.com/openai/v1}}
+      model: ${XAI_MODEL:${GROQ_MODEL:llama-3.3-70b-versatile}}
+      vision-model: ${XAI_VISION_MODEL:${GROQ_VISION_MODEL:llama-3.2-11b-vision-preview}}
+      max-tokens: ${XAI_MAX_TOKENS:${GROQ_MAX_TOKENS:6000}}

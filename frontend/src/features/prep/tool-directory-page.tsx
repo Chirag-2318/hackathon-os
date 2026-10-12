@@ -11,7 +11,7 @@
  */
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchTools } from './api/tools-api';
+import { fetchTools, CURATED_TOOLS } from './api/tools-api';
 import { useIsOnline } from '@/shared/hooks/use-is-online';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -294,6 +294,16 @@ function ToolDirectoryTab({ offline }: { offline: boolean }) {
     setFilterLicense('');
   };
 
+  const tools = useMemo(() => {
+    if (data?.tools && data.tools.length > 0) return data.tools;
+    return CURATED_TOOLS.filter(t => {
+      if (filterCategory && t.category.toLowerCase() !== filterCategory.toLowerCase()) return false;
+      if (filterCost && t.cost.toLowerCase() !== filterCost.toLowerCase()) return false;
+      if (filterLicense && t.license.toLowerCase() !== filterLicense.toLowerCase()) return false;
+      return true;
+    });
+  }, [data, filterCategory, filterCost, filterLicense]);
+
   return (
     <div className="flex gap-6 items-start">
       {/* ── Desktop filter sidebar ──────────────────────────────── */}
@@ -307,7 +317,7 @@ function ToolDirectoryTab({ offline }: { offline: boolean }) {
           setFilterLicense={setFilterLicense}
           hasFilters={hasFilters}
           clearFilters={clearFilters}
-          toolCount={data?.tools.length}
+          toolCount={tools.length}
         />
       </div>
 
@@ -365,7 +375,7 @@ function ToolDirectoryTab({ offline }: { offline: boolean }) {
         )}
 
         {/* Error */}
-        {isError && (
+        {isError && tools.length === 0 && (
           <div className="flex flex-col items-center gap-3 py-8">
             <p className="text-body text-ink-muted">Could not load tools.</p>
             <Button variant="outline" size="sm" onClick={() => refetch()}>
@@ -375,12 +385,12 @@ function ToolDirectoryTab({ offline }: { offline: boolean }) {
         )}
 
         {/* Empty (no data) */}
-        {!isLoading && !isError && data?.tools.length === 0 && !hasFilters && (
+        {!isLoading && tools.length === 0 && !hasFilters && (
           <EmptyState title="No tools in the directory yet." description="" dashed />
         )}
 
         {/* Empty (filtered) */}
-        {!isLoading && !isError && data?.tools.length === 0 && hasFilters && (
+        {!isLoading && tools.length === 0 && hasFilters && (
           <EmptyState
             title="No tools match these filters."
             description=""
@@ -391,9 +401,9 @@ function ToolDirectoryTab({ offline }: { offline: boolean }) {
         )}
 
         {/* Tool grid */}
-        {!isLoading && !isError && data && data.tools.length > 0 && (
+        {!isLoading && tools.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-            {data.tools.map(tool => (
+            {tools.map(tool => (
               <ToolCard key={tool.id} tool={tool} offline={offline} />
             ))}
           </div>

@@ -243,6 +243,19 @@ export interface PlanPermissions {
   isLeader?: boolean;
 }
 
+export interface PlanApprovedIdea {
+  id: string;
+  title: string;
+  authorName: string;
+}
+
+export interface PlanContextSummary {
+  briefStatement?: string;
+  approvedIdeas: PlanApprovedIdea[];
+  memberSkills: string[];
+  eventHours?: number;
+}
+
 export interface PlanData {
   steps: PlanStepItem[];
   contextPack: PlanContextPack;
@@ -250,6 +263,9 @@ export interface PlanData {
   planLocked: boolean;
   canEnterBuild: boolean;
   permissions: PlanPermissions;
+  started?: boolean;
+  notes?: string;
+  contextSummary?: PlanContextSummary;
 }
 
 // ── Docs ─────────────────────────────────────────────────────────────────────

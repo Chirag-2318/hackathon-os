@@ -6,7 +6,11 @@ import java.util.UUID;
 
 public class GithubDtos {
 
-    public record ConnectRepoRequest(String repo) {}
+    public record ConnectRepoRequest(String repo, String repoName) {
+        public String getEffectiveRepo() {
+            return repo != null && !repo.isBlank() ? repo : repoName;
+        }
+    }
 
     public record UpdateBranchRequest(String purpose, String role, UUID ownerId, Boolean replace) {}
 
@@ -166,4 +170,5 @@ public class GithubDtos {
     ) {}
 
     public record MyRepoDto(String fullName, boolean isPrivate, Instant updatedAt) {}
+    public record GitHubStatusDto(boolean linked, String login, boolean privateAccess) {}
 }

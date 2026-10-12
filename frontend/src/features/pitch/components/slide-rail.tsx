@@ -10,13 +10,16 @@ interface SlideRailProps {
   onSelect: (id: string) => void;
 }
 
-export function SlideRail({ slides, selectedId, coverageStatus, onSelect }: SlideRailProps) {
+export function SlideRail({ slides = [], selectedId, coverageStatus = {}, onSelect }: SlideRailProps) {
+  const safeSlides = Array.isArray(slides) ? slides : [];
+  const safeCoverage = coverageStatus || {};
+
   return (
     <TooltipProvider>
       <div className="w-56 shrink-0 border-r bg-white dark:bg-[#1C1C1E] overflow-y-auto">
         <div className="p-3 space-y-1">
-          {slides.map((slide) => {
-            const status = coverageStatus[slide.id] ?? 'not_yet';
+          {safeSlides.map((slide) => {
+            const status = safeCoverage[slide.id] ?? 'not_yet';
             return (
               <button
                 key={slide.id}

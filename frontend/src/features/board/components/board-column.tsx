@@ -19,6 +19,10 @@ export interface BoardColumnProps {
   onToggleBlock: (taskId: string) => void;
   onInlineCreate: (status: TaskStatus, summary: string) => Promise<void>;
   onPointerDownDrag?: (e: React.PointerEvent, task: Task) => void;
+  onDropTask?: (taskId: string, targetStatus: TaskStatus) => void;
+  onAdvanceTaskStatus?: (taskId: string) => void;
+  onDragStartTask?: (taskId: string) => void;
+  onDragEndTask?: () => void;
 }
 
 export function BoardColumn({
@@ -36,9 +40,14 @@ export function BoardColumn({
   onToggleBlock,
   onInlineCreate,
   onPointerDownDrag,
+  onDropTask,
+  onAdvanceTaskStatus,
+  onDragStartTask,
+  onDragEndTask,
 }: BoardColumnProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [newSummary, setNewSummary] = useState('');
+  const [isNativeDragOver, setIsNativeDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -61,12 +70,31 @@ export function BoardColumn({
     }
   };
 
+  const activeDrop = isDropTarget || isNativeDragOver;
+
   return (
     <div
       data-column-status={status}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setIsNativeDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+        setIsNativeDragOver(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsNativeDragOver(false);
+        const droppedId = e.dataTransfer.getData('text/plain') || draggingTaskId;
+        if (droppedId) {
+          onDropTask?.(droppedId, status);
+        }
+      }}
       className={cn(
-        'flex flex-col rounded-[16px] p-2 bg-[#F3F3F4] dark:bg-muted/30 min-h-[480px] transition-colors duration-200 border-2 border-transparent',
-        isDropTarget && 'bg-[#F0F7FF] dark:bg-blue-950/20 border-dashed border-blue-500'
+        'flex flex-col rounded-[16px] p-2 bg-[#F3F3F4] dark:bg-muted/30 min-h-[480px] transition-all duration-150 border-2 border-transparent',
+        activeDrop && 'bg-[#F0F7FF] dark:bg-blue-950/20 border-dashed border-blue-500 shadow-sm'
       )}
     >
       {/* Column Header (Sticky inside column) */}
@@ -103,6 +131,9 @@ export function BoardColumn({
                 onAssignToMe={onAssignToMe}
                 onToggleBlock={onToggleBlock}
                 onPointerDownDrag={onPointerDownDrag}
+                onDragStartTask={onDragStartTask}
+                onDragEndTask={onDragEndTask}
+                onAdvanceTaskStatus={onAdvanceTaskStatus}
               />
             </React.Fragment>
           );

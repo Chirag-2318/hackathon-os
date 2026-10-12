@@ -1,9 +1,15 @@
 package com.hackathonos.backend.tasks.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 
 public record MoveTaskRequest(
         @NotBlank String toStatus,
-        @NotNull Integer toIndex
-) {}
+        @JsonAlias("targetIndex") Integer toIndex
+) {
+    public MoveTaskRequest {
+        if (toIndex == null) {
+            toIndex = 0;
+        }
+    }
+}

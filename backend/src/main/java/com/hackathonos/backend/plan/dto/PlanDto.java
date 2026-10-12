@@ -8,5 +8,8 @@ public record PlanDto(
         PlanCompletionSummaryDto completion,
         boolean planLocked,
         boolean canEnterBuild,
-        PlanPermissionsDto permissions
+        PlanPermissionsDto permissions,
+        boolean started,
+        String notes,
+        PlanContextSummaryDto contextSummary
 ) {}

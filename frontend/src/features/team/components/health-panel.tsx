@@ -6,16 +6,38 @@ import { SegmentedControl, SegmentedControlItem } from '@/components/primitives/
 import type { HealthPanelData, TeamMember } from '@/api/client';
 
 export interface HealthPanelProps {
-  data: HealthPanelData;
-  members: TeamMember[];
+  data?: any;
+  members?: any[];
 }
 
-export function HealthPanel({ data, members }: HealthPanelProps) {
+export function HealthPanel({ data, members = [] }: HealthPanelProps) {
   const [selectedCheckIn, setSelectedCheckIn] = React.useState<string | null>(null);
 
+  // Compute or extract member health
+  const safeMembers = members || [];
+  const memberHealth: any[] = data?.memberHealth || safeMembers.map((m: any) => {
+    const done = Number(m.tasksDone || 0);
+    const totalAll = safeMembers.reduce((sum, curr) => sum + Number(curr.tasksDone || 0), 0);
+    const workloadPercent = totalAll > 0 ? Math.round((done / totalAll) * 100) : 0;
+    return {
+      memberId: m.userId || m.id,
+      workloadPercent,
+      isOverloaded: workloadPercent > 50,
+    };
+  });
+
+  const checkInOptions: any[] = data?.checkInOptions || [
+    { id: 'good', label: 'Energized', icon: '⚡' },
+    { id: 'ok', label: 'Steady', icon: '👍' },
+    { id: 'tired', label: 'Stuck / Tired', icon: '☕' },
+  ];
+
   // Find if anyone is overloaded
-  const rescuer = data.memberHealth.find((h: any) => h.isOverloaded);
-  const rescuerMember = rescuer ? members.find((m: any) => m.id === rescuer.memberId) : null;
+  const rescuer = memberHealth.find((h: any) => h.isOverloaded);
+  const rescuerMember = rescuer
+    ? safeMembers.find((m: any) => (m.userId || m.id) === rescuer.memberId)
+    : null;
+
   return (
     <div className="flex flex-col gap-4 p-5 bg-surface border border-border shadow-e0 rounded-card">
       <header className="flex items-center justify-between">
@@ -25,7 +47,7 @@ export function HealthPanel({ data, members }: HealthPanelProps) {
       <div className="flex flex-col gap-3 min-w-0">
         <span className="text-label text-ink-muted">Your check-in (optional)</span>
         <SegmentedControl className="w-full justify-between">
-          {data.checkInOptions.map((opt: any) => (
+          {checkInOptions.map((opt: any) => (
             <SegmentedControlItem 
               key={opt.id}
               active={selectedCheckIn === opt.id}
@@ -48,7 +70,7 @@ export function HealthPanel({ data, members }: HealthPanelProps) {
             <button className="text-caption font-bold underline shrink-0 ml-2">View workload</button>
           </div>
           <span className="text-body min-w-0">
-            {rescuerMember.fullName} has done {rescuer!.workloadPercent}% of the completed tasks.
+            {rescuerMember.name || rescuerMember.fullName || 'Teammate'} has done {rescuer!.workloadPercent}% of the completed tasks.
           </span>
         </div>
       )}
@@ -56,18 +78,20 @@ export function HealthPanel({ data, members }: HealthPanelProps) {
       <div className="flex flex-col gap-4 mt-2 min-w-0">
         <span className="text-label text-ink-muted">Workload share</span>
         <div className="flex flex-col gap-3">
-          {data.memberHealth.map((health: any) => {
-            const member = members.find(m => m.id === health.memberId);
+          {memberHealth.map((health: any) => {
+            const member = safeMembers.find(m => (m.userId || m.id) === health.memberId);
             if (!member) return null;
+            const initials = member.initials || (member.name ? member.name.slice(0, 2).toUpperCase() : member.avatarId || 'ME');
+            const displayName = member.name || member.fullName || 'Teammate';
             
             return (
               <div key={health.memberId} className="flex items-center gap-3 min-w-0">
                 <div className="w-6 h-6 rounded-full bg-surface-sunken flex items-center justify-center shrink-0 overflow-hidden">
-                  <span className="text-[10px] font-bold">{member.avatarId}</span>
+                  <span className="text-[10px] font-bold">{initials}</span>
                 </div>
                 <div className="flex-1 flex flex-col gap-1 min-w-0">
                   <div className="flex justify-between items-center text-caption min-w-0">
-                    <span className="text-ink font-medium truncate pr-2">{member.fullName}</span>
+                    <span className="text-ink font-medium truncate pr-2">{displayName}</span>
                     <span className="text-ink-muted shrink-0 tabular-nums">{health.workloadPercent}%</span>
                   </div>
                   <ProgressBar 

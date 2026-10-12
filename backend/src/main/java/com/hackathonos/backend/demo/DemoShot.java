@@ -29,6 +29,9 @@ public class DemoShot {
     @Column(name = "done", nullable = false)
     private boolean done;
 
+    @Column(name = "proof_url", columnDefinition = "TEXT")
+    private String proofUrl;
+
     public DemoShot() {}
 
     public DemoShot(UUID roomId, int position, String title, int durationSec, String notes, boolean done) {
@@ -60,4 +63,7 @@ public class DemoShot {
 
     public boolean isDone() { return done; }
     public void setDone(boolean done) { this.done = done; }
+
+    public String getProofUrl() { return proofUrl; }
+    public void setProofUrl(String proofUrl) { this.proofUrl = proofUrl; }
 }

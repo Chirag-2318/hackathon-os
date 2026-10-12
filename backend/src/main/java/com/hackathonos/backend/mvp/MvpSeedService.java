@@ -34,6 +34,14 @@ public class MvpSeedService {
         this.stepRepository = stepRepository;
     }
 
+    @Transactional
+    public void cleanForRoom(UUID roomId) {
+        mvpStateRepository.deleteById(roomId);
+        flowStepRepository.deleteByRoomId(roomId);
+        ledgerRowRepository.deleteByRoomId(roomId);
+        cutItemRepository.deleteByRoomId(roomId);
+    }
+
     /**
      * Seeds initial MVP state, core flow, reality ledger, and cut list from validated PRD plan step.
      */

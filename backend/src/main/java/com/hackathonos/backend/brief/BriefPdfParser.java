@@ -5,7 +5,10 @@ import com.hackathonos.backend.common.error.PayloadTooLargeException;
 import com.hackathonos.backend.common.error.UnprocessableEntityException;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -16,6 +19,7 @@ import java.io.IOException;
 @Component
 public class BriefPdfParser {
 
+    private static final Logger log = LoggerFactory.getLogger(BriefPdfParser.class);
     private static final int MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
     private static final int MAX_CHARS = 200_000;
 
@@ -34,18 +38,30 @@ public class BriefPdfParser {
         }
 
         try (PDDocument document = Loader.loadPDF(bytes)) {
+            if (document.isEncrypted()) {
+                throw new UnprocessableEntityException("PDF_PROTECTED", "This PDF is password protected");
+            }
             PDFTextStripper stripper = new PDFTextStripper();
             String text = stripper.getText(document);
             if (text == null || text.trim().isEmpty()) {
-                throw new UnprocessableEntityException("NO_TEXT_IN_PDF", "PDF contains no selectable text");
+                throw new UnprocessableEntityException("NO_TEXT_IN_PDF", "This PDF looks scanned (only images). Paste the text instead");
             }
             String result = text.trim();
             if (result.length() > MAX_CHARS) {
                 result = result.substring(0, MAX_CHARS);
             }
             return result;
+        } catch (InvalidPasswordException e) {
+            log.warn("Failed to parse PDF: {} - {}", e.getClass().getName(), e.getMessage());
+            throw new UnprocessableEntityException("PDF_PROTECTED", "This PDF is password protected");
+        } catch (UnprocessableEntityException | PayloadTooLargeException | BadRequestException e) {
+            throw e;
         } catch (IOException e) {
+            log.warn("Failed to parse PDF: {} - {}", e.getClass().getName(), e.getMessage());
             throw new BadRequestException("NOT_A_PDF", "Unable to read PDF: " + e.getMessage());
+        } catch (Exception e) {
+            log.warn("Failed to parse PDF: {} - {}", e.getClass().getName(), e.getMessage());
+            throw new BadRequestException("NOT_A_PDF", "Unable to parse PDF: " + e.getMessage());
         }
     }
 }

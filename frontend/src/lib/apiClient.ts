@@ -4,15 +4,15 @@ export interface FieldErrors {
 
 export class ApiError extends Error {
   status: number;
-  code?: string;
+  code: string;
   fieldErrors?: FieldErrors;
   details?: any;
 
-  constructor(status: number, message: string, code?: string, fieldErrors?: FieldErrors, details?: any) {
-    super(message);
+  constructor(status: number, message: string = 'Request failed', code: string = 'UNKNOWN', fieldErrors?: FieldErrors, details?: any) {
+    super(message || 'Request failed');
     this.name = 'ApiError';
     this.status = status;
-    this.code = code;
+    this.code = code || 'UNKNOWN';
     this.fieldErrors = fieldErrors;
     this.details = details;
   }
@@ -23,7 +23,8 @@ function getCookie(name: string): string | null {
   return match ? decodeURIComponent(match[2]) : null;
 }
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const BASE_URL = API_BASE_URL;
 
 export async function apiClient<T>(path: string, options: RequestInit = {}): Promise<T> {
   const method = (options.method ?? 'GET').toUpperCase();
@@ -50,14 +51,40 @@ export async function apiClient<T>(path: string, options: RequestInit = {}): Pro
       credentials: 'include',
     });
   } catch (err: any) {
-    throw new ApiError(0, 'Network error. Please check your connection and retry.');
+    if (err?.name === 'AbortError') {
+      throw err;
+    }
+    console.error(`[apiClient fetch error] ${method} ${url}:`, err);
+    throw new ApiError(0, `Network error (${err?.message || 'Please check your connection and retry.'})`, 'NETWORK_ERROR');
   }
 
   if (res.status === 401) {
+    let body: any = {};
+    try {
+      body = await res.clone().json();
+    } catch {}
+    if (body?.code === 'GITHUB_TOKEN_INVALID') {
+      throw new ApiError(401, body.message || "The server's GitHub token is invalid. Check APP_GITHUB_TOKEN in .env.", 'GITHUB_TOKEN_INVALID');
+    }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('auth:session-expired'));
     }
-    throw new ApiError(401, 'Authentication required', 'UNAUTHORIZED');
+    throw new ApiError(401, body?.message || 'Authentication required', body?.code || 'UNAUTHORIZED');
+  }
+
+  // Automatic retry on 403 CSRF token refresh
+  if (res.status === 403 && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && !headers['X-CSRF-RETRIED']) {
+    const freshToken = getCookie('XSRF-TOKEN');
+    if (freshToken) {
+      return apiClient<T>(path, {
+        ...options,
+        headers: {
+          ...headers,
+          'X-XSRF-TOKEN': freshToken,
+          'X-CSRF-RETRIED': 'true',
+        },
+      });
+    }
   }
 
   if (!res.ok) {
@@ -68,10 +95,10 @@ export async function apiClient<T>(path: string, options: RequestInit = {}): Pro
       body = { message: res.statusText };
     }
 
-    const message = body.message || body.detail || (res.status === 429 ? 'Too many attempts, try again in a few minutes' : 'Request failed');
-    const code = body.code;
-    const fieldErrors = body.fieldErrors;
-    const details = body.details;
+    const message = body?.message || body?.detail || (res.status === 429 ? 'Too many attempts, try again in a few minutes' : 'Request failed');
+    const code = body?.code || 'UNKNOWN';
+    const fieldErrors = body?.fieldErrors;
+    const details = body?.details;
 
     throw new ApiError(res.status, message, code, fieldErrors, details);
   }
@@ -85,5 +112,14 @@ export async function apiClient<T>(path: string, options: RequestInit = {}): Pro
     return (await res.text()) as unknown as T;
   }
 
-  return res.json();
+  const text = await res.text();
+  if (!text || !text.trim()) {
+    return undefined as T;
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return text as unknown as T;
+  }
 }

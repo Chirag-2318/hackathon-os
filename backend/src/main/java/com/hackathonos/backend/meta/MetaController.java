@@ -1,5 +1,7 @@
 package com.hackathonos.backend.meta;
 
+import com.hackathonos.backend.ai.GroqClient;
+import com.hackathonos.backend.common.config.AppProperties;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -9,6 +11,14 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/meta")
 public class MetaController {
+
+    private final GroqClient groqClient;
+    private final AppProperties appProperties;
+
+    public MetaController(GroqClient groqClient, AppProperties appProperties) {
+        this.groqClient = groqClient;
+        this.appProperties = appProperties;
+    }
 
     public record LimitsDto(
             int ideaMaxChars,
@@ -28,11 +38,14 @@ public class MetaController {
             List<String> crowdCliches,
             List<String> timezones,
             List<String> noteTypes,
-            LimitsDto limits
+            LimitsDto limits,
+            boolean aiEnabled,
+            boolean githubLinkEnabled,
+            boolean canvaEnabled
     ) {}
 
     /**
-     * Returns server metadata including supported enum options, limits, and timezones.
+     * Returns server metadata including supported enum options, limits, timezones, and aiEnabled status.
      */
     @GetMapping
     public MetaResponse getMeta() {
@@ -52,7 +65,11 @@ public class MetaController {
                         MetaConstants.TASK_SUMMARY_MAX,
                         MetaConstants.DOC_MAX_CHARS,
                         MetaConstants.UPLOAD_MAX_MB
-                )
+                ),
+                groqClient.isConfigured(),
+                appProperties.getGithub().isLinkConfigured(),
+                appProperties.getCanva().isConfigured()
         );
     }
 }
+

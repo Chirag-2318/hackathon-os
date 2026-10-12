@@ -12,24 +12,24 @@ import java.util.UUID;
 public class MemberMapper {
 
     public MemberItemDto toMemberDto(RoomMember member, User user, List<String> skills, UUID currentUserId) {
-        String name = user != null ? user.getName() : "Unknown Member";
+        String name = user != null && user.getName() != null ? user.getName() : "Unknown Member";
         String email = user != null ? user.getEmail() : null;
         String avatarUrl = user != null ? user.getAvatarUrl() : null;
         String initials = computeInitials(name);
-        boolean isLeader = "LEADER".equalsIgnoreCase(member.getRole());
-        boolean isMe = user != null && user.getId().equals(currentUserId);
+        boolean isLeader = member != null && "LEADER".equalsIgnoreCase(member.getRole());
+        boolean isMe = user != null && currentUserId != null && currentUserId.equals(user.getId());
 
         return new MemberItemDto(
-                member.getUserId(),
+                member != null ? member.getUserId() : null,
                 name,
                 initials,
                 email,
                 avatarUrl,
-                member.getRole(),
+                member != null ? member.getRole() : "BUILDER",
                 skills != null ? skills : Collections.emptyList(),
-                member.getStatus(),
-                member.getJoinedAt(),
-                member.getLastSeenAt(),
+                member != null ? member.getStatus() : "ACTIVE",
+                member != null ? member.getJoinedAt() : null,
+                member != null ? member.getLastSeenAt() : null,
                 isLeader,
                 isMe,
                 null
@@ -37,23 +37,23 @@ public class MemberMapper {
     }
 
     public MemberItemDto toInvitationDto(RoomInvitation invitation) {
-        String name = invitation.getInviteeText();
+        String name = invitation != null && invitation.getInviteeText() != null ? invitation.getInviteeText() : "Invited Teammate";
         String initials = computeInitials(name);
 
         return new MemberItemDto(
                 null,
                 name,
                 initials,
-                name.contains("@") ? name : null,
+                name != null && name.contains("@") ? name : null,
                 null,
-                invitation.getRole(),
+                invitation != null && invitation.getRole() != null ? invitation.getRole() : "BUILDER",
                 Collections.emptyList(),
                 "PENDING",
-                invitation.getCreatedAt(),
+                invitation != null ? invitation.getCreatedAt() : null,
                 null,
                 false,
                 false,
-                invitation.getId()
+                invitation != null ? invitation.getId() : null
         );
     }
 

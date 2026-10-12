@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import { InlineHighlight } from '@/features/home/components/HomeDesignSystem';
 import { BranchRow } from './branch-row';
 import { RoleChangeDialog } from './role-change-dialog';
+import { useCurrentUser } from '@/features/auth/useCurrentUser';
 import type { Branch, BranchRole, Commit } from '@/services/types';
 
 interface BranchMapProps {
@@ -30,9 +31,9 @@ interface BranchMapProps {
 type FilterOption = 'all' | 'mine' | 'attention' | 'prs';
 
 export function BranchMap({
-  branches,
-  commits,
-  missingMap,
+  branches = [],
+  commits = [],
+  missingMap = {},
   repoFullName,
   onUpdatePurpose,
   onUpdateRole,
@@ -40,6 +41,9 @@ export function BranchMap({
   onUnlinkTask,
   onOpenTaskModal,
 }: BranchMapProps) {
+  const safeBranches = branches || [];
+  const { data: currentUser } = useCurrentUser();
+  const currentUserId = currentUser?.id ? String(currentUser.id) : '';
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterOption>('all');
   const [showStale, setShowStale] = useState(false);
@@ -49,11 +53,11 @@ export function BranchMap({
   const [replaceTarget, setReplaceTarget] = useState<string | null>(null);
 
   // Check if a demo-safe branch exists
-  const existingDemoSafe = branches.find((b) => b.role === 'demo-safe');
+  const existingDemoSafe = safeBranches.find((b) => b.role === 'demo-safe');
 
   // Filter branches
   const filteredBranches = useMemo(() => {
-    return branches.filter((b) => {
+    return safeBranches.filter((b) => {
       // Search
       const q = search.toLowerCase().trim();
       if (q && !b.name.toLowerCase().includes(q) && !b.purpose.toLowerCase().includes(q)) {
@@ -61,7 +65,7 @@ export function BranchMap({
       }
 
       // Filter dropdown
-      if (filter === 'mine' && b.ownerId !== 'u-aarav') {
+      if (filter === 'mine' && currentUserId && b.ownerId !== currentUserId) {
         return false;
       }
       if (filter === 'prs' && !b.pr) {

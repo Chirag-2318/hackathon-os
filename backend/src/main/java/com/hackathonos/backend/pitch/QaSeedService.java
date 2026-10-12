@@ -46,6 +46,12 @@ public class QaSeedService {
         this.skillRepository = skillRepository;
     }
 
+    @Transactional
+    public void cleanForRoom(UUID roomId) {
+        qaRepository.deleteByRoomId(roomId);
+        drillRepository.deleteByRoomId(roomId);
+    }
+
     /**
      * Parses demo plan step and tech stack to seed Q&A and code defense drills.
      */

@@ -19,14 +19,15 @@ export function RepoHealthCard({
 }: RepoHealthCardProps) {
   const [isRechecking, setIsRechecking] = useState(false);
   const [editingUrl, setEditingUrl] = useState(false);
-  const [deployedUrl, setDeployedUrl] = useState('https://mess-meter.app');
+  const [deployedUrl, setDeployedUrl] = useState('');
 
-  const passedCount = health.filter((h) => h.status === 'pass').length;
-  const totalCount = health.length;
+  const safeHealth = health || [];
+  const passedCount = safeHealth.filter((h) => h.status === 'pass').length;
+  const totalCount = safeHealth.length;
   const progressPct = Math.round((passedCount / Math.max(1, totalCount)) * 100);
 
   // Failed rows sort to the top
-  const sortedHealth = [...health].sort((a, b) => {
+  const sortedHealth = [...safeHealth].sort((a, b) => {
     if (a.status === 'fail' && b.status === 'pass') return -1;
     if (a.status === 'pass' && b.status === 'fail') return 1;
     return 0;

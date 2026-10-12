@@ -57,7 +57,8 @@ public class BriefMapper {
                 risks
         );
 
-        boolean hasSource = (brief.getSourceUrl() != null && !brief.getSourceUrl().isBlank())
+        boolean hasSource = brief.getId() != null
+                || (brief.getSourceUrl() != null && !brief.getSourceUrl().isBlank())
                 || (brief.getFileName() != null && !brief.getFileName().isBlank())
                 || (brief.getRawText() != null && !brief.getRawText().isBlank());
 

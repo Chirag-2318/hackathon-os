@@ -168,7 +168,7 @@ public class FakeGitHubClient implements GitHubClient {
     public List<UserRepo> listUserRepos(String token) {
         return List.of(
                 new UserRepo("demo/demo-repo", false, clock.instant().minus(Duration.ofMinutes(10))),
-                new UserRepo("hackathon-os/mess-meter", false, clock.instant().minus(Duration.ofHours(2))),
+                new UserRepo("kaveri-squad/smart-attend", false, clock.instant().minus(Duration.ofHours(2))),
                 new UserRepo("kaveri-squad/campus-app", false, clock.instant().minus(Duration.ofDays(1))),
                 new UserRepo("student-lab/pitch-studio", false, clock.instant().minus(Duration.ofDays(3)))
         );

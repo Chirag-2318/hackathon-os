@@ -175,6 +175,7 @@ public class HomeService {
     private SelectedRoomDto buildSelectedRoom(Room room, User user) {
         boolean isBuild = "build".equalsIgnoreCase(room.getStage());
         String variant = isBuild ? "build" : "planning";
+        Instant now = clock.instant();
 
         List<PlanPhase> phases = phaseRepository.findByRoomIdOrderByPositionAsc(room.getId());
         ClockService.ClockCalculation clockCalc = clockService.calculate(room, phases);
@@ -229,14 +230,35 @@ public class HomeService {
 
         TeamDtos.TeamResponseDto teamResp = teamService.getTeam(room.getId(), user);
         List<OverviewMemberDto> overviewMembers = new ArrayList<>();
-        for (TeamDtos.TeamMemberDto m : teamResp.members()) {
-            CurrentTaskDto cur = m.currentTask() != null ? new CurrentTaskDto(m.currentTask().key(), m.currentTask().summary()) : null;
-            overviewMembers.add(new OverviewMemberDto(m.userId(), m.name(), m.avatarUrl(), m.role(), m.status(), cur));
+        if (teamResp != null && teamResp.members() != null) {
+            for (TeamDtos.TeamMemberDto m : teamResp.members()) {
+                CurrentTaskDto cur = m.currentTask() != null ? new CurrentTaskDto(m.currentTask().key(), m.currentTask().summary()) : null;
+                overviewMembers.add(new OverviewMemberDto(m.userId(), m.name(), m.avatarUrl(), m.role(), m.status(), cur));
+            }
         }
-        OverviewTeamDto teamDto = new OverviewTeamDto(overviewMembers, teamResp.skillCoverage());
+        OverviewTeamDto teamDto = new OverviewTeamDto(overviewMembers, teamResp != null ? teamResp.skillCoverage() : Collections.emptyList());
 
         HomePlanningDataDto planningData = null;
+        ClockService.ClockStatusDto clockDto;
+        List<ClockService.TimelineSegmentDto> timelineDto;
+
         if (!isBuild) {
+            Instant targetAt = room.getEventStart() != null ? room.getEventStart() : now.plus(java.time.Duration.ofDays(7));
+            long secondsLeft = Math.max(0, java.time.Duration.between(now, targetAt).getSeconds());
+            long hoursLeft = secondsLeft / 3600;
+            long minutesLeft = (secondsLeft % 3600) / 60;
+            clockDto = new ClockService.ClockStatusDto(
+                    "Event starts in",
+                    targetAt,
+                    hoursLeft,
+                    minutesLeft,
+                    "PLANNING",
+                    targetAt,
+                    0,
+                    48
+            );
+            timelineDto = Collections.emptyList();
+
             JourneyDto journey = stageService.getJourney(room);
             String briefSummary = briefRepository.findByRoomId(room.getId()).map(Brief::getProblemStatement).orElse(null);
             long pending = ideaRepository.countByRoomIdAndStatus(room.getId(), "PENDING");
@@ -244,6 +266,9 @@ public class HomeService {
             long rejected = ideaRepository.countByRoomIdAndStatus(room.getId(), "REJECTED");
             PlanningIdeasDto ideasDto = new PlanningIdeasDto(pending, approved, rejected, Collections.emptyList());
             planningData = new HomePlanningDataDto(journey, briefSummary, ideasDto);
+        } else {
+            clockDto = clockCalc.clockStatus();
+            timelineDto = clockCalc.timeline();
         }
 
         return new SelectedRoomDto(
@@ -251,8 +276,8 @@ public class HomeService {
                 room.getName(),
                 variant,
                 headline,
-                clockCalc.clockStatus(),
-                clockCalc.timeline(),
+                clockDto,
+                timelineDto,
                 cps != null ? cps.next() : null,
                 deadlineRows,
                 myTasksDto,

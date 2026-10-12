@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class AiRateLimiter {
 
-    private static final int MAX_CALLS_PER_HOUR = 10;
+    private static final int MAX_CALLS_PER_HOUR = 30;
     private static final Duration WINDOW = Duration.ofHours(1);
 
     private final Map<UUID, Deque<Instant>> userCallHistory = new ConcurrentHashMap<>();
@@ -37,7 +37,7 @@ public class AiRateLimiter {
         }
 
         if (history.size() >= MAX_CALLS_PER_HOUR) {
-            throw new TooManyRequestsException("AI_RATE_LIMIT", "AI rate limit exceeded (maximum 10 calls per hour)");
+            throw new TooManyRequestsException("AI_RATE_LIMIT", "AI rate limit exceeded (maximum 30 calls per hour)");
         }
 
         history.addLast(now);

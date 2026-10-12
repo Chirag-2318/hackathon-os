@@ -1,5 +1,6 @@
 package com.hackathonos.backend.docs;
 
+import com.hackathonos.backend.common.security.CurrentUser;
 import com.hackathonos.backend.docs.dto.*;
 import com.hackathonos.backend.docs.dto.DocRequests.*;
 import com.hackathonos.backend.users.User;
@@ -17,9 +18,15 @@ import java.util.UUID;
 public class DocController {
 
     private final DocService docService;
+    private final CurrentUser currentUser;
 
-    public DocController(DocService docService) {
+    public DocController(DocService docService, CurrentUser currentUser) {
         this.docService = docService;
+        this.currentUser = currentUser;
+    }
+
+    private User resolveUser(User user) {
+        return user != null ? user : currentUser.get();
     }
 
     @GetMapping
@@ -27,7 +34,7 @@ public class DocController {
             @PathVariable UUID roomId,
             @AuthenticationPrincipal User user
     ) {
-        return docService.listDocs(roomId, user);
+        return docService.listDocs(roomId, resolveUser(user));
     }
 
     @PostMapping
@@ -36,7 +43,7 @@ public class DocController {
             @RequestBody CreateDocRequest req,
             @AuthenticationPrincipal User user
     ) {
-        return docService.createCustomDoc(roomId, req, user);
+        return docService.createCustomDoc(roomId, req, resolveUser(user));
     }
 
     @GetMapping("/download.zip")
@@ -44,7 +51,7 @@ public class DocController {
             @PathVariable UUID roomId,
             @AuthenticationPrincipal User user
     ) {
-        byte[] zipBytes = docService.downloadAllZip(roomId, user);
+        byte[] zipBytes = docService.downloadAllZip(roomId, resolveUser(user));
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"hackathon-os-docs.zip\"")
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
@@ -57,7 +64,7 @@ public class DocController {
             @PathVariable UUID commentId,
             @AuthenticationPrincipal User user
     ) {
-        docService.deleteComment(roomId, commentId, user);
+        docService.deleteComment(roomId, commentId, resolveUser(user));
         return ResponseEntity.noContent().build();
     }
 
@@ -67,7 +74,7 @@ public class DocController {
             @PathVariable String fileName,
             @AuthenticationPrincipal User user
     ) {
-        return docService.getDocByFileName(roomId, fileName, user);
+        return docService.getDocByFileName(roomId, fileName, resolveUser(user));
     }
 
     @PutMapping("/{fileName}")
@@ -77,7 +84,7 @@ public class DocController {
             @RequestBody UpdateDocRequest req,
             @AuthenticationPrincipal User user
     ) {
-        return docService.updateDoc(roomId, fileName, req, user);
+        return docService.updateDoc(roomId, fileName, req, resolveUser(user));
     }
 
     @DeleteMapping("/{fileName}")
@@ -86,7 +93,7 @@ public class DocController {
             @PathVariable String fileName,
             @AuthenticationPrincipal User user
     ) {
-        docService.deleteDoc(roomId, fileName, user);
+        docService.deleteDoc(roomId, fileName, resolveUser(user));
         return ResponseEntity.noContent().build();
     }
 
@@ -97,7 +104,7 @@ public class DocController {
             @PathVariable int version,
             @AuthenticationPrincipal User user
     ) {
-        return docService.getVersionContent(roomId, fileName, version, user);
+        return docService.getVersionContent(roomId, fileName, version, resolveUser(user));
     }
 
     @PostMapping("/{fileName}/restore")
@@ -107,7 +114,7 @@ public class DocController {
             @RequestBody RestoreDocRequest req,
             @AuthenticationPrincipal User user
     ) {
-        return docService.restoreVersion(roomId, fileName, req.version(), user);
+        return docService.restoreVersion(roomId, fileName, req.version(), resolveUser(user));
     }
 
     @GetMapping("/{fileName}/comments")
@@ -116,7 +123,7 @@ public class DocController {
             @PathVariable String fileName,
             @AuthenticationPrincipal User user
     ) {
-        return docService.listComments(roomId, fileName, user);
+        return docService.listComments(roomId, fileName, resolveUser(user));
     }
 
     @PostMapping("/{fileName}/comments")
@@ -126,7 +133,7 @@ public class DocController {
             @RequestBody CreateCommentRequest req,
             @AuthenticationPrincipal User user
     ) {
-        return docService.addComment(roomId, fileName, req.text(), user);
+        return docService.addComment(roomId, fileName, req.text(), resolveUser(user));
     }
 
     @GetMapping("/{fileName}/download")
@@ -135,7 +142,7 @@ public class DocController {
             @PathVariable String fileName,
             @AuthenticationPrincipal User user
     ) {
-        byte[] docBytes = docService.downloadDoc(roomId, fileName, user);
+        byte[] docBytes = docService.downloadDoc(roomId, fileName, resolveUser(user));
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
                 .contentType(MediaType.parseMediaType("text/markdown"))

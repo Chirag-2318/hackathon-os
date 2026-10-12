@@ -8,8 +8,10 @@ interface ToolStripProps {
   tools: DemoTool[];
 }
 
-export function ToolStrip({ tools }: ToolStripProps) {
-  if (tools.length === 0) {
+export function ToolStrip({ tools = [] }: ToolStripProps) {
+  const safeTools = Array.isArray(tools) ? tools : [];
+
+  if (safeTools.length === 0) {
     return (
       <Card className="p-4">
         <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Tools</h3>
@@ -22,7 +24,7 @@ export function ToolStrip({ tools }: ToolStripProps) {
     <Card className="p-4">
       <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Recording and video tools</h3>
       <div className="flex gap-3 overflow-x-auto pb-2">
-        {tools.map((tool) => (
+        {safeTools.map((tool) => (
           <div
             key={tool.name}
             className="shrink-0 w-52 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/50 border flex flex-col gap-2"

@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -28,6 +29,11 @@ public class DiagramSeedService {
     ) {
         this.diagramRepository = diagramRepository;
         this.planStepRepository = planStepRepository;
+    }
+
+    @Transactional
+    public void cleanForRoom(UUID roomId) {
+        diagramRepository.deleteByRoomId(roomId);
     }
 
     /**

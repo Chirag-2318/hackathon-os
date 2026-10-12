@@ -10,4 +10,5 @@ import java.util.UUID;
 public interface PitchQaRepository extends JpaRepository<PitchQa, UUID> {
     List<PitchQa> findByRoomIdOrderByPositionAsc(UUID roomId);
     void deleteByRoomId(UUID roomId);
+    void deleteByRoomIdAndSourceAndPracticedFalse(UUID roomId, String source);
 }

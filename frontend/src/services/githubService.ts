@@ -57,6 +57,20 @@ function computeAll(state: GithubState, eventStart: string): GithubDataComputed 
 export const githubService = {
   async getGithubData(roomId: string): Promise<GithubDataComputed> {
     const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/github`);
+    const rawBranches = res.branches || [];
+    const normalizedBranches: Branch[] = rawBranches.map((b: any) => ({
+      ...b,
+      linkedTaskKeys: Array.isArray(b.linkedTaskKeys)
+        ? b.linkedTaskKeys
+        : Array.isArray(b.linkedTasks)
+          ? b.linkedTasks.map((t: any) => t.key || t.id || '')
+          : [],
+      ownerId: b.ownerId || b.owner?.username || b.owner?.id || '',
+      ahead: typeof b.ahead === 'number' ? b.ahead : 0,
+      behind: typeof b.behind === 'number' ? b.behind : 0,
+      lastCommitAt: b.lastCommitAt || new Date().toISOString(),
+    }));
+
     const state: GithubState = {
       repo: res.repo || {
         fullName: res.repoName || '',
@@ -67,9 +81,9 @@ export const githubService = {
         lastSyncAt: res.lastSyncAt || new Date().toISOString(),
         access: 'read-only',
       },
-      branches: res.branches || [],
+      branches: normalizedBranches,
       commits: res.commits || [],
-      health: res.healthChecklist || [],
+      health: res.healthChecklist || res.health || [],
       frozenDemo: res.frozenDemo,
       dismissedAttentionIds: res.dismissedAttentionIds || [],
     };
@@ -126,12 +140,25 @@ export const githubService = {
   },
 
   async connectRepo(roomId: string, repoInput: string): Promise<GithubDataComputed> {
-    const cleanName = repoInput.trim().replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/i, '');
+    const raw = repoInput.trim();
     await apiFetch<any>(`/api/v1/rooms/${roomId}/github/connect`, {
       method: 'POST',
-      body: JSON.stringify({ repoName: cleanName }),
+      body: JSON.stringify({ repo: raw, repoName: raw }),
     });
     return this.getGithubData(roomId);
+  },
+
+  async getLinkStatus(): Promise<{ linked: boolean; login: string | null; privateAccess: boolean }> {
+    return apiFetch<{ linked: boolean; login: string | null; privateAccess: boolean }>('/api/v1/github/status');
+  },
+
+  async disconnectLink(): Promise<void> {
+    await apiFetch<void>('/api/v1/github/link', { method: 'DELETE' });
+  },
+
+  async getMyRepos(search?: string): Promise<Array<{ fullName: string; isPrivate: boolean; updatedAt: string }>> {
+    const query = search ? `?search=${encodeURIComponent(search.trim())}` : '';
+    return apiFetch<Array<{ fullName: string; isPrivate: boolean; updatedAt: string }>>(`/api/v1/github/my-repos${query}`);
   },
 
   async disconnectRepo(roomId: string): Promise<void> {

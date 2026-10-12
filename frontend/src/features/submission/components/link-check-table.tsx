@@ -11,7 +11,9 @@ interface LinkCheckTableProps {
   rows: LinkCheckRow[];
 }
 
-export function LinkCheckTable({ rows }: LinkCheckTableProps) {
+export function LinkCheckTable({ rows = [] }: LinkCheckTableProps) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+
   return (
     <TooltipProvider>
       <Card className="overflow-hidden">
@@ -28,7 +30,7 @@ export function LinkCheckTable({ rows }: LinkCheckTableProps) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, idx) => (
+              {safeRows.map((row, idx) => (
                 <tr key={idx} className="border-b last:border-b-0">
                   <td className="px-4 py-3 max-w-[200px]">
                     <Tooltip>
@@ -65,6 +67,13 @@ export function LinkCheckTable({ rows }: LinkCheckTableProps) {
                   </td>
                 </tr>
               ))}
+              {safeRows.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="px-4 py-4 text-center text-xs text-slate-400">
+                    No links to check
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

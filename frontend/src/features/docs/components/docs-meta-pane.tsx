@@ -30,7 +30,7 @@ export function DocsMetaPane({ file }: DocsMetaPaneProps) {
           </div>
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1 text-sm">
-              <span className="text-ink font-medium">Edited by {file.editedBy}</span>
+              <span className="text-ink font-medium">Edited by {(file as any).authorName || (file as any).author?.name || file.editedBy || 'Team Member'}</span>
               <span className="text-ink-muted text-xs">Just now • {file.version}</span>
             </div>
             <div className="flex flex-col gap-1 text-sm">
