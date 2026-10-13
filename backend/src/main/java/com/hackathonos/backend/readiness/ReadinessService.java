@@ -392,7 +392,7 @@ public class ReadinessService {
         List<ReadinessCalculator.ReadinessItem> list = new ArrayList<>();
         List<Task> tasks = taskRepository.findByRoomId(roomId);
         int total = tasks.size();
-        int done = (int) tasks.stream().filter(t -> "DONE".equalsIgnoreCase(t.getStatus())).count();
+        int done = (int) tasks.stream().filter(Task::isConfirmedDone).count();
         int pct = total > 0 ? Math.round(((float) done / total) * 100) : 0;
 
         list.add(new ReadinessCalculator.ReadinessItem("Board tasks completing on schedule (" + pct + "%)", pct >= 50, "/board"));

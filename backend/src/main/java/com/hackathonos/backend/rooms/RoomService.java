@@ -1,18 +1,35 @@
 package com.hackathonos.backend.rooms;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hackathonos.backend.activity.ActivityLogger;
+import com.hackathonos.backend.brief.BriefRepository;
+import com.hackathonos.backend.checkpoints.CheckpointService;
+import com.hackathonos.backend.checkpoints.RoomCheckpoint;
+import com.hackathonos.backend.checkpoints.RoomCheckpointRepository;
 import com.hackathonos.backend.common.error.BadRequestException;
 import com.hackathonos.backend.common.security.RoomAccess;
+import com.hackathonos.backend.docs.Doc;
+import com.hackathonos.backend.docs.DocRepository;
+import com.hackathonos.backend.docs.DocVersion;
+import com.hackathonos.backend.docs.DocVersionRepository;
 import com.hackathonos.backend.members.RoomMember;
 import com.hackathonos.backend.members.RoomMemberRepository;
 import com.hackathonos.backend.notifications.NotificationService;
 import com.hackathonos.backend.notifications.NotificationType;
+import com.hackathonos.backend.plan.PlanPhase;
+import com.hackathonos.backend.plan.PlanPhaseRepository;
+import com.hackathonos.backend.plan.PlanStep;
+import com.hackathonos.backend.plan.PlanStepRepository;
 import com.hackathonos.backend.rooms.dto.*;
+import com.hackathonos.backend.tasks.Task;
+import com.hackathonos.backend.tasks.TaskRepository;
 import com.hackathonos.backend.templates.EventTemplate;
 import com.hackathonos.backend.templates.EventTemplateService;
 import com.hackathonos.backend.users.User;
+import com.hackathonos.backend.users.UserRepository;
 import com.hackathonos.backend.users.UserSettings;
 import com.hackathonos.backend.users.UserSettingsRepository;
+import com.hackathonos.backend.users.dto.UserSummaryDto;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,8 +42,8 @@ import java.util.*;
 @Service
 public class RoomService {
 
-    private static final String JOIN_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final String UNAMBIGUOUS_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final RoomRepository roomRepository;
     private final RoomMemberRepository memberRepository;
@@ -34,13 +51,21 @@ public class RoomService {
     private final UserSettingsRepository settingsRepository;
     private final RoomAccess roomAccess;
     private final RoomStageService stageService;
+    private final RoomTimeService timeService;
     private final RoomMapper roomMapper;
     private final ActivityLogger activityLogger;
     private final NotificationService notificationService;
-    private final com.hackathonos.backend.users.UserRepository userRepository;
-    private final com.hackathonos.backend.submission.SubmissionRepository submissionRepository;
-    private final com.hackathonos.backend.tasks.TaskRepository taskRepository;
-    private final com.hackathonos.backend.plan.PlanStepRepository planStepRepository;
+    private final UserRepository userRepository;
+    private final TaskRepository taskRepository;
+    private final PlanStepRepository planStepRepository;
+    private final BriefRepository briefRepository;
+    private final RoomCheckpointRepository checkpointRepository;
+    private final NextStepService nextStepService;
+    private final CheckpointService checkpointService;
+    private final PlanPhaseRepository phaseRepository;
+    private final DocRepository docRepository;
+    private final DocVersionRepository docVersionRepository;
+    private final ObjectMapper objectMapper;
 
     public RoomService(RoomRepository roomRepository,
                        RoomMemberRepository memberRepository,
@@ -48,305 +73,197 @@ public class RoomService {
                        UserSettingsRepository settingsRepository,
                        RoomAccess roomAccess,
                        RoomStageService stageService,
+                       RoomTimeService timeService,
                        RoomMapper roomMapper,
                        ActivityLogger activityLogger,
                        NotificationService notificationService,
-                       com.hackathonos.backend.users.UserRepository userRepository,
-                       com.hackathonos.backend.submission.SubmissionRepository submissionRepository,
-                       com.hackathonos.backend.tasks.TaskRepository taskRepository,
-                       com.hackathonos.backend.plan.PlanStepRepository planStepRepository) {
+                       UserRepository userRepository,
+                       TaskRepository taskRepository,
+                       PlanStepRepository planStepRepository,
+                       BriefRepository briefRepository,
+                       RoomCheckpointRepository checkpointRepository,
+                       NextStepService nextStepService,
+                       CheckpointService checkpointService,
+                       PlanPhaseRepository phaseRepository,
+                       DocRepository docRepository,
+                       DocVersionRepository docVersionRepository,
+                       ObjectMapper objectMapper) {
         this.roomRepository = roomRepository;
         this.memberRepository = memberRepository;
         this.templateService = templateService;
         this.settingsRepository = settingsRepository;
         this.roomAccess = roomAccess;
         this.stageService = stageService;
+        this.timeService = timeService;
         this.roomMapper = roomMapper;
         this.activityLogger = activityLogger;
         this.notificationService = notificationService;
         this.userRepository = userRepository;
-        this.submissionRepository = submissionRepository;
         this.taskRepository = taskRepository;
         this.planStepRepository = planStepRepository;
+        this.briefRepository = briefRepository;
+        this.checkpointRepository = checkpointRepository;
+        this.nextStepService = nextStepService;
+        this.checkpointService = checkpointService;
+        this.phaseRepository = phaseRepository;
+        this.docRepository = docRepository;
+        this.docVersionRepository = docVersionRepository;
+        this.objectMapper = objectMapper;
     }
 
-    /**
-     * Creates a room, makes the creator its leader, and gives it a unique join code.
-     * Computes start and end clocks, sets key prefix, and dispatches creation notifications.
-     */
     @Transactional
     public RoomDetailDto createRoom(User creator, CreateRoomRequest request) {
-        EventTemplate template;
-        try {
-            template = templateService.getOrThrow(request.templateId());
-        } catch (com.hackathonos.backend.common.error.NotFoundException e) {
-            throw new BadRequestException("INVALID_TEMPLATE", "Unknown event template", Map.of("templateId", "Unknown event template"));
+        EventTemplate template = templateService.getOrThrow(request.templateId());
+        int duration = (request.durationHours() != null && request.durationHours() > 0)
+                ? request.durationHours() : template.getDurationHours();
+        if (duration < 1 || duration > 168) {
+            throw new BadRequestException("INVALID_DATES", "Duration must be between 1 and 168 hours");
         }
+
         String timezone = resolveTimezone(creator, request.timezone());
-        Instant eventStart = resolveEventStart(request.eventStart(), timezone);
-        Instant eventEnd = eventStart.plus(template.getDurationHours(), ChronoUnit.HOURS);
+        Instant startsAt = (request.startsAt() != null && !request.startsAt().isBlank())
+                ? Instant.parse(request.startsAt().trim())
+                : resolveEventStart(request.eventStart(), timezone);
+        Instant endsAt = (request.endsAt() != null && !request.endsAt().isBlank())
+                ? Instant.parse(request.endsAt().trim())
+                : startsAt.plus(duration, ChronoUnit.HOURS);
+        Instant freezeAt = (request.freezeAt() != null && !request.freezeAt().isBlank())
+                ? Instant.parse(request.freezeAt().trim())
+                : startsAt.plus((long) (duration * 3600_000L * 0.70), ChronoUnit.MILLIS);
+
+        if (!startsAt.isBefore(freezeAt) || !freezeAt.isBefore(endsAt)) {
+            throw new BadRequestException("INVALID_DATES", "Dates must satisfy startsAt < freezeAt < endsAt");
+        }
+
         String joinCode = generateUniqueJoinCode();
         String keyPrefix = generateKeyPrefix(request.name());
 
-        Room room = new Room(
-                request.name().trim(),
-                request.description() != null ? request.description().trim() : null,
-                request.projectDescription() != null ? request.projectDescription().trim() : null,
-                template.getId(),
-                creator.getId(),
-                eventStart,
-                eventEnd,
-                timezone,
-                keyPrefix,
-                joinCode
-        );
+        Room room = new Room(request.name().trim(), request.description(), request.projectDescription(),
+                template.getId(), creator.getId(), startsAt, endsAt, timezone, keyPrefix, joinCode);
+        room.setDurationHours(duration);
+        room.setFreezeAt(freezeAt);
         roomRepository.save(room);
 
         RoomMember leader = new RoomMember(room.getId(), creator.getId(), "LEADER");
         memberRepository.save(leader);
 
+        seedTemplatePhases(room, template);
+        checkpointService.createForRoom(room);
+        seedInitialDocs(room, creator);
+
         activityLogger.log(room, creator, "room_created", "Created the room");
         notificationService.notifyUser(creator, room, NotificationType.ROOM_CREATED, "Room created", room.getName());
 
-        return roomMapper.toDetail(room, template.getName(), 1, "LEADER", true);
+        return getRoomDetail(creator, room.getId());
     }
 
-    /**
-     * Returns all active rooms where the user is currently a member, newest first.
-     * Summarizes phase completion progress and member counts for each card.
-     */
+    private void seedTemplatePhases(Room room, EventTemplate template) {
+        if (template.getPhases() == null || template.getPhases().isBlank()) return;
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(template.getPhases());
+            if (root.isArray()) {
+                int pos = 0;
+                for (com.fasterxml.jackson.databind.JsonNode node : root) {
+                    String name = node.has("name") ? node.get("name").asText() : "Phase " + (pos + 1);
+                    double startPct = node.has("startPct") ? node.get("startPct").asDouble() : 0.0;
+                    double endPct = node.has("endPct") ? node.get("endPct").asDouble() : 100.0;
+                    String exitCheckpoint = node.has("exitCheckpoint") ? node.get("exitCheckpoint").asText() : "";
+                    String key = name.toLowerCase().replaceAll("[^a-z0-9]+", "_");
+                    PlanPhase phase = new PlanPhase(
+                            room.getId(),
+                            key,
+                            pos++,
+                            name,
+                            java.math.BigDecimal.valueOf(startPct),
+                            java.math.BigDecimal.valueOf(endPct),
+                            exitCheckpoint,
+                            "[]"
+                    );
+                    phaseRepository.save(phase);
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void seedInitialDocs(Room room, User creator) {
+        try {
+            if (docRepository.findByRoomIdAndFileName(room.getId(), "README.md").isEmpty()) {
+                Doc readme = new Doc(room.getId(), "README.md", "Project Overview", 1);
+                readme.setLastEditedBy(creator.getId());
+                readme = docRepository.save(readme);
+                String initialContent = "# " + room.getName() + "\n\n" +
+                        (room.getDescription() != null ? room.getDescription() + "\n\n" : "") +
+                        (room.getProjectDescription() != null ? "### Project Scope\n" + room.getProjectDescription() + "\n" : "");
+                docVersionRepository.save(new DocVersion(readme.getId(), 1, initialContent, "Initial workspace README", creator.getId()));
+            }
+        } catch (Exception ignored) {}
+    }
+
     public List<RoomListItemDto> listRooms(User user) {
         List<Room> rooms = roomRepository.findActiveRoomsByMemberUserId(user.getId());
-        if (rooms.isEmpty()) {
-            return Collections.emptyList();
-        }
+        if (rooms.isEmpty()) return Collections.emptyList();
 
         List<UUID> roomIds = rooms.stream().map(Room::getId).toList();
-
-        // 1. Batched fetch members
         List<RoomMember> allMembers = memberRepository.findByRoomIdIn(roomIds);
         Map<UUID, List<RoomMember>> membersByRoom = allMembers.stream()
                 .collect(java.util.stream.Collectors.groupingBy(RoomMember::getRoomId));
 
-        // 2. Collect up to 4 user IDs per room for avatar previews
         Set<UUID> previewUserIds = new HashSet<>();
         for (UUID rId : roomIds) {
-            List<RoomMember> rMembers = membersByRoom.getOrDefault(rId, Collections.emptyList());
-            rMembers.stream()
-                    .sorted((a, b) -> {
-                        boolean aLead = "LEADER".equalsIgnoreCase(a.getRole());
-                        boolean bLead = "LEADER".equalsIgnoreCase(b.getRole());
-                        if (aLead != bLead) return aLead ? -1 : 1;
-                        return 0;
-                    })
-                    .limit(4)
+            membersByRoom.getOrDefault(rId, Collections.emptyList()).stream().limit(4)
                     .forEach(m -> previewUserIds.add(m.getUserId()));
         }
+        Map<UUID, User> userMap = userRepository.findAllById(previewUserIds).stream()
+                .collect(java.util.stream.Collectors.toMap(User::getId, u -> u));
 
-        // 3. Batched fetch users
-        Map<UUID, com.hackathonos.backend.users.User> userMap = userRepository.findAllById(previewUserIds).stream()
-                .collect(java.util.stream.Collectors.toMap(com.hackathonos.backend.users.User::getId, u -> u));
-
-        // 4. Batched fetch submissions
-        Map<UUID, com.hackathonos.backend.submission.Submission> submissionMap = submissionRepository.findAllById(roomIds).stream()
-                .collect(java.util.stream.Collectors.toMap(com.hackathonos.backend.submission.Submission::getRoomId, s -> s));
-
-        // 5. Batched fetch tasks
-        Map<UUID, List<com.hackathonos.backend.tasks.Task>> tasksByRoom = taskRepository.findByRoomIdIn(roomIds).stream()
-                .collect(java.util.stream.Collectors.groupingBy(com.hackathonos.backend.tasks.Task::getRoomId));
-
-        // 6. Batched fetch plan steps
-        Map<UUID, List<com.hackathonos.backend.plan.PlanStep>> planStepsByRoom = planStepRepository.findByRoomIdIn(roomIds).stream()
-                .collect(java.util.stream.Collectors.groupingBy(com.hackathonos.backend.plan.PlanStep::getRoomId));
-
-        Instant now = Instant.now();
         List<RoomListItemDto> items = new ArrayList<>();
-
         for (Room room : rooms) {
-            EventTemplate template = null;
-            try {
-                template = templateService.getOrThrow(room.getTemplateId());
-            } catch (Exception ignored) {}
-            String templateName = template != null ? template.getName() : "Hackathon";
-            int durationHours = template != null ? template.getDurationHours() : 36;
+            List<RoomMember> rMembers = membersByRoom.getOrDefault(room.getId(), Collections.emptyList());
+            RoomMember myMember = rMembers.stream().filter(m -> m.getUserId().equals(user.getId())).findFirst().orElse(null);
+            String myRole = myMember != null ? myMember.getRole() : "BUILDER";
+            boolean isLeader = "LEADER".equalsIgnoreCase(myRole);
 
-            List<RoomMember> roomMembers = membersByRoom.getOrDefault(room.getId(), Collections.emptyList());
-            long memberCount = roomMembers.size();
-
-            RoomMember currentMember = roomMembers.stream()
-                    .filter(m -> m.getUserId().equals(user.getId()))
-                    .findFirst()
-                    .orElse(null);
-            String role = currentMember != null ? currentMember.getRole() : "BUILDER";
-            boolean isLeader = "LEADER".equalsIgnoreCase(role);
-
-            // Member previews
-            List<com.hackathonos.backend.users.dto.UserSummaryDto> memberPreview = roomMembers.stream()
-                    .sorted((a, b) -> {
-                        boolean aLead = "LEADER".equalsIgnoreCase(a.getRole());
-                        boolean bLead = "LEADER".equalsIgnoreCase(b.getRole());
-                        if (aLead != bLead) return aLead ? -1 : 1;
-                        return 0;
-                    })
-                    .limit(4)
-                    .map(m -> {
-                        com.hackathonos.backend.users.User u = userMap.get(m.getUserId());
-                        return com.hackathonos.backend.users.dto.UserSummaryDto.from(u, "Member");
-                    })
+            List<UserSummaryDto> memberPreview = rMembers.stream().limit(4)
+                    .map(m -> userMap.get(m.getUserId()))
                     .filter(Objects::nonNull)
+                    .map(u -> new UserSummaryDto(u.getId(), u.getName(), u.getAvatarUrl(), u.getLogin()))
                     .toList();
 
-            com.hackathonos.backend.submission.Submission sub = submissionMap.get(room.getId());
-            Instant submittedAt = (sub != null && sub.getSubmittedAt() != null) ? sub.getSubmittedAt() : null;
-            boolean isSubmitted = submittedAt != null || (sub != null && "SUBMITTED".equalsIgnoreCase(sub.getStatus()));
-
-            String phase;
-            int phaseIndex;
-            int phaseCount = 4;
-
-            if (isSubmitted) {
-                phase = "Submitted";
-                phaseIndex = 3;
-            } else if ("present".equalsIgnoreCase(room.getStage())
-                    || (room.getBuildStartedAt() != null && room.getEventEnd() != null && now.isAfter(room.getEventEnd().minus(Duration.ofHours(2))))) {
-                phase = "Present";
-                phaseIndex = 2;
-            } else if (room.getBuildStartedAt() != null || "build".equalsIgnoreCase(room.getStage())) {
-                phase = "Build";
-                phaseIndex = 1;
-            } else {
-                phase = "Planning";
-                phaseIndex = 0;
-            }
-
-            List<com.hackathonos.backend.tasks.Task> roomTasks = tasksByRoom.getOrDefault(room.getId(), Collections.emptyList());
-            List<com.hackathonos.backend.plan.PlanStep> roomPlanSteps = planStepsByRoom.getOrDefault(room.getId(), Collections.emptyList());
-
-            int attentionCount = 0;
-            String nextStepLabel = null;
-
-            if (phaseIndex == 3) {
-                nextStepLabel = "Submitted — ready for judging";
-            } else if (phaseIndex == 2) {
-                nextStepLabel = "Next: finalize pitch deck & submission";
-                if (room.getEventEnd() != null && now.isAfter(room.getEventEnd().minus(Duration.ofHours(1)))) {
-                    attentionCount++;
-                }
-            } else if (phaseIndex == 1) {
-                long blockedTasks = roomTasks.stream()
-                        .filter(t -> t.isFlagged() && !"done".equalsIgnoreCase(t.getStatus()))
-                        .count();
-                long overdueTasks = roomTasks.stream()
-                        .filter(t -> t.getDueAt() != null && t.getDueAt().isBefore(now) && !"done".equalsIgnoreCase(t.getStatus()))
-                        .count();
-                long unassignedTasks = roomTasks.stream()
-                        .filter(t -> t.getAssigneeId() == null && !"done".equalsIgnoreCase(t.getStatus()))
-                        .count();
-
-                attentionCount = (int) (blockedTasks + overdueTasks);
-                if (room.getEventEnd() != null && now.isAfter(room.getEventEnd().minus(Duration.ofHours(2)))) {
-                    attentionCount++;
-                }
-
-                if (blockedTasks > 0) {
-                    nextStepLabel = blockedTasks == 1 ? "1 blocked task needs attention" : blockedTasks + " blocked tasks need attention";
-                } else if (unassignedTasks > 0) {
-                    nextStepLabel = unassignedTasks == 1 ? "1 task needs an owner" : unassignedTasks + " tasks need an owner";
-                } else {
-                    com.hackathonos.backend.tasks.Task nextTask = roomTasks.stream()
-                            .filter(t -> !"done".equalsIgnoreCase(t.getStatus()))
-                            .findFirst()
-                            .orElse(null);
-                    if (nextTask != null) {
-                        nextStepLabel = "Next: " + nextTask.getSummary();
-                    } else {
-                        nextStepLabel = "All sprint tasks complete";
-                    }
-                }
-            } else {
-                if (!room.isBriefDone()) {
-                    nextStepLabel = "Next: add problem statement";
-                    if (room.getEventStart() != null && now.isAfter(room.getEventStart())) {
-                        attentionCount++;
-                    }
-                } else if (!room.isIdeateDone()) {
-                    nextStepLabel = "Next: brainstorm and approve ideas";
-                } else if (!room.isPlanDone()) {
-                    com.hackathonos.backend.plan.PlanStep unvalidatedStep = roomPlanSteps.stream()
-                            .filter(s -> !s.isValidated())
-                            .findFirst()
-                            .orElse(null);
-                    if (unvalidatedStep != null) {
-                        String stepName = switch (unvalidatedStep.getStepKey()) {
-                            case "prd" -> "PRD & Scope";
-                            case "tech" -> "Tech Stack & Architecture";
-                            case "phases" -> "Phases & Timeline";
-                            case "tasks" -> "Tasks & Milestones";
-                            case "demo" -> "Demo & Q&A";
-                            default -> unvalidatedStep.getStepKey();
-                        };
-                        nextStepLabel = "Next: validate " + stepName;
-                        attentionCount++;
-                    } else {
-                        nextStepLabel = "Next: finalize implementation plan";
-                    }
-                } else {
-                    nextStepLabel = "Next: start build phase";
-                }
-            }
-
-            int doneJourney = (room.isBriefDone() ? 1 : 0) +
-                    (room.isIdeateDone() ? 1 : 0) +
-                    (room.isPlanDone() ? 1 : 0) +
-                    (room.getBuildStartedAt() != null ? 1 : 0);
+            RoomClockDto clock = timeService.computeClock(room);
+            boolean aiAllowed = isAiAllowed(room.getId());
+            RoomProgressSummaryDto progress = computeProgressSummary(room.getId());
+            NextStepDto nextStep = nextStepService.computeNextStep(room);
 
             items.add(new RoomListItemDto(
-                    room.getId(),
-                    room.getName(),
-                    room.getDescription(),
-                    room.getTemplateId(),
-                    templateName,
-                    room.getStage(),
-                    room.getEventStart(),
-                    room.getEventEnd(),
-                    memberCount,
-                    role,
-                    isLeader,
-                    new RoomListItemDto.JourneyProgress(doneJourney, 4),
-                    room.getCreatedAt(),
-                    durationHours,
-                    phase,
-                    phaseIndex,
-                    phaseCount,
-                    room.getEventStart(),
-                    room.getEventEnd(),
-                    submittedAt,
-                    memberPreview,
-                    nextStepLabel,
-                    attentionCount
+                    room.getId(), room.getName(), room.getDescription(), room.getTemplateId(),
+                    resolveTemplateName(room.getTemplateId()),
+                    room.getStage(), room.getStartsAt(), room.getEndsAt(), rMembers.size(), myRole, isLeader,
+                    new RoomListItemDto.JourneyProgress((int) progress.stepsValidated(), (int) progress.stepsTotal()),
+                    room.getCreatedAt(), room.getDurationHours(), room.getWorkflowStage(),
+                    0, 4, room.getStartsAt(), room.getEndsAt(), room.getSubmittedAt(), memberPreview,
+                    nextStep != null ? nextStep.label() : ("Live in " + room.getWorkflowStage()), 0, clock, aiAllowed, progress, nextStep
             ));
         }
-
         return items;
     }
 
-    /**
-     * Returns full room details including stage completion flags and server timestamp.
-     * Ensures caller is an active member of the requested room.
-     */
     public RoomDetailDto getRoomDetail(User user, UUID roomId) {
         RoomMember member = roomAccess.requireMember(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
-        String templateName = templateService.getOrThrow(room.getTemplateId()).getName();
-        long count = memberRepository.countByRoomId(room.getId());
+        String templateName = resolveTemplateName(room.getTemplateId());
+        long memberCount = memberRepository.countByRoomId(room.getId());
         boolean isLeader = "LEADER".equalsIgnoreCase(member.getRole());
-        return roomMapper.toDetail(room, templateName, count, member.getRole(), isLeader);
+
+        RoomClockDto clock = timeService.computeClock(room);
+        boolean aiAllowed = isAiAllowed(room.getId());
+        RoomProgressSummaryDto progress = computeProgressSummary(room.getId());
+        List<StageUnlockRuleDto> unlockRules = stageService.computeUnlockRules(room);
+        NextStepDto nextStep = nextStepService.computeNextStep(room);
+
+        return roomMapper.toDetail(room, templateName, memberCount, member.getRole(), isLeader,
+                clock, aiAllowed, progress, unlockRules, nextStep);
     }
 
-    /**
-     * Updates editable room fields (name, description, eventStart, timezone).
-     * Recalculates eventEnd if eventStart changed; requires leader privileges.
-     */
     @Transactional
     public RoomDetailDto updateRoom(User user, UUID roomId, UpdateRoomRequest request) {
         RoomMember member = roomAccess.requireLeader(roomId, user);
@@ -358,14 +275,9 @@ public class RoomService {
         roomRepository.save(room);
 
         activityLogger.log(room, user, "room_updated", "Updated room details");
-        long count = memberRepository.countByRoomId(room.getId());
-        return roomMapper.toDetail(room, template.getName(), count, member.getRole(), true);
+        return getRoomDetail(user, roomId);
     }
 
-    /**
-     * Archives a room so it no longer appears in member room lists.
-     * Requires leader privileges; preserves database rows for audit integrity.
-     */
     @Transactional
     public void archiveRoom(User user, UUID roomId) {
         roomAccess.requireLeader(roomId, user);
@@ -376,46 +288,77 @@ public class RoomService {
         activityLogger.log(room, user, "room_archived", "Archived the room");
     }
 
-    /**
-     * Generates a unique, non-colliding room name suggestion based on season and tech themes.
-     */
-    public SuggestNameResponse suggestName(User user) {
-        String[] adjectives = {"Autumn", "Quantum", "Hyper", "Stellar", "Cosmic", "Agile", "Apex", "Nexus", "Turbo", "Vivid", "Rapid"};
-        String[] nouns = {"Build Sprint", "Codefest", "Hacks", "Lab", "Works", "Studio", "Launch", "Sprint", "Challenge"};
-        int year = LocalDate.now().getYear();
-
-        for (int i = 0; i < 20; i++) {
-            String adj = adjectives[RANDOM.nextInt(adjectives.length)];
-            String noun = nouns[RANDOM.nextInt(nouns.length)];
-            String candidate = adj + " " + noun + " " + year;
-            return new SuggestNameResponse(candidate);
-        }
-        return new SuggestNameResponse("Hackathon Sprint " + year);
+    @Transactional
+    public void deleteRoom(User user, UUID roomId) {
+        roomAccess.requireLeader(roomId, user);
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        room.setDeletedAt(Instant.now());
+        room.setUpdatedAt(Instant.now());
+        roomRepository.save(room);
+        activityLogger.log(room, user, "room_deleted", "Deleted the room");
     }
 
-    /**
-     * Regenerates the 4-character join code for the room.
-     * Requires leader privileges and immediately invalidates the old code.
-     */
     @Transactional
     public JoinCodeResponse regenerateJoinCode(User user, UUID roomId) {
         roomAccess.requireLeader(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
         String newCode = generateUniqueJoinCode();
         room.setJoinCode(newCode);
+        room.setCodeRevoked(false);
         room.setUpdatedAt(Instant.now());
         roomRepository.save(room);
         activityLogger.log(room, user, "join_code_regenerated", "Regenerated the room join code");
         return new JoinCodeResponse(newCode);
     }
 
-    /**
-     * Returns stage steps and status for the room's hackathon journey.
-     */
+    @Transactional
+    public void revokeJoinCode(User user, UUID roomId) {
+        roomAccess.requireLeader(roomId, user);
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        room.setCodeRevoked(true);
+        room.setUpdatedAt(Instant.now());
+        roomRepository.save(room);
+        activityLogger.log(room, user, "join_code_revoked", "Revoked the room join code");
+    }
+
     public JourneyDto getJourney(User user, UUID roomId) {
         roomAccess.requireMember(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
         return stageService.getJourney(room);
+    }
+
+    public SuggestNameResponse suggestName(User user) {
+        String[] adjs = {"Quantum", "Hyper", "Stellar", "Cosmic", "Agile", "Apex", "Nexus", "Turbo", "Vivid", "Rapid"};
+        String[] nouns = {"Codefest", "Hacks", "Lab", "Works", "Studio", "Launch", "Sprint", "Challenge"};
+        int year = LocalDate.now().getYear();
+        String candidate = adjs[SECURE_RANDOM.nextInt(adjs.length)] + " " + nouns[SECURE_RANDOM.nextInt(nouns.length)] + " " + year;
+        return new SuggestNameResponse(candidate);
+    }
+
+    public RoomProgressSummaryDto computeProgressSummary(UUID roomId) {
+        List<Task> tasks = taskRepository.findByRoomId(roomId);
+        long tasksTotal = tasks.size();
+        long tasksDone = tasks.stream().filter(Task::isConfirmedDone).count();
+        boolean hasTasks = tasksTotal > 0;
+
+        List<PlanStep> steps = planStepRepository.findByRoomId(roomId);
+        long stepsValidated = steps.stream().filter(PlanStep::isValidated).count();
+
+        List<RoomCheckpoint> checkpoints = checkpointRepository.findByRoomIdOrderByPositionAsc(roomId);
+        long checklistTotal = checkpoints.size();
+        long checklistDone = checkpoints.stream().filter(c -> c.getPassedAt() != null).count();
+
+        return new RoomProgressSummaryDto(tasksDone, tasksTotal, hasTasks, stepsValidated, 5L, checklistDone, checklistTotal);
+    }
+
+    public boolean isAiAllowed(UUID roomId) {
+        if (roomId == null) return true;
+        return briefRepository.findByRoomId(roomId).map(b -> {
+            String p = b.getAiPolicy();
+            if (p == null || p.isBlank()) return true;
+            String up = p.toUpperCase();
+            return !(up.contains("FORBIDDEN") || up.contains("RESTRICTED") || up.contains("PROHIBITED") || up.contains("NO_AI"));
+        }).orElse(true);
     }
 
     private void applyRoomUpdates(Room room, UpdateRoomRequest request, EventTemplate template) {
@@ -423,49 +366,77 @@ public class RoomService {
         if (request.description() != null) room.setDescription(request.description().trim());
         if (request.projectDescription() != null) room.setProjectDescription(request.projectDescription().trim());
         if (request.timezone() != null) room.setTimezone(request.timezone().trim());
-        if (request.eventStart() != null) {
-            Instant newStart = Instant.parse(request.eventStart().trim());
-            room.setEventStart(newStart);
-            room.setEventEnd(newStart.plus(template.getDurationHours(), ChronoUnit.HOURS));
+        if (request.deadlineOverridden() != null) room.setDeadlineOverridden(request.deadlineOverridden());
+
+        if (request.durationHours() != null) {
+            if (request.durationHours() < 1 || request.durationHours() > 168) {
+                throw new BadRequestException("INVALID_DATES", "Duration must be between 1 and 168 hours");
+            }
+            room.setDurationHours(request.durationHours());
+        }
+
+        Instant startsAt = room.getStartsAt();
+        if (request.startsAt() != null && !request.startsAt().isBlank()) {
+            startsAt = Instant.parse(request.startsAt().trim());
+            room.setStartsAt(startsAt);
+        } else if (request.eventStart() != null && !request.eventStart().isBlank()) {
+            startsAt = Instant.parse(request.eventStart().trim());
+            room.setStartsAt(startsAt);
+        }
+
+        int duration = room.getDurationHours() > 0 ? room.getDurationHours() : template.getDurationHours();
+        room.setDurationHours(duration);
+
+        Instant endsAt = room.getEndsAt();
+        if (request.endsAt() != null && !request.endsAt().isBlank()) {
+            endsAt = Instant.parse(request.endsAt().trim());
+            room.setEndsAt(endsAt);
+            room.setDeadlineOverridden(true);
+        } else if (!room.isDeadlineOverridden() && startsAt != null) {
+            endsAt = startsAt.plus(duration, ChronoUnit.HOURS);
+            room.setEndsAt(endsAt);
+        }
+
+        Instant freezeAt = room.getFreezeAt();
+        if (request.freezeAt() != null && !request.freezeAt().isBlank()) {
+            freezeAt = Instant.parse(request.freezeAt().trim());
+            room.setFreezeAt(freezeAt);
+        } else if (startsAt != null) {
+            freezeAt = startsAt.plus((long) (duration * 3600_000L * 0.70), ChronoUnit.MILLIS);
+            room.setFreezeAt(freezeAt);
+        }
+
+        if (startsAt != null && freezeAt != null && endsAt != null) {
+            if (!startsAt.isBefore(freezeAt) || !freezeAt.isBefore(endsAt)) {
+                throw new BadRequestException("INVALID_DATES", "Dates must satisfy startsAt < freezeAt < endsAt");
+            }
         }
     }
 
-    private String resolveTimezone(User user, String requestedTimezone) {
-        if (requestedTimezone != null && !requestedTimezone.isBlank()) {
-            return requestedTimezone.trim();
-        }
-        return settingsRepository.findById(user.getId())
-                .map(UserSettings::getTimezone)
-                .orElse("UTC");
+    private String resolveTimezone(User user, String req) {
+        if (req != null && !req.isBlank()) return req.trim();
+        return settingsRepository.findById(user.getId()).map(UserSettings::getTimezone).orElse("UTC");
     }
 
     private Instant resolveEventStart(String eventStartStr, String timezone) {
         if (eventStartStr != null && !eventStartStr.isBlank()) {
-            Instant parsed = Instant.parse(eventStartStr.trim());
-            if (parsed.isAfter(Instant.now().plus(730, ChronoUnit.DAYS))) {
-                throw new BadRequestException("INVALID_START_DATE", "Event start date cannot be more than 2 years in the future");
-            }
-            return parsed;
+            return Instant.parse(eventStartStr.trim());
         }
-
         ZoneId zone = ZoneId.of(timezone.equals("UTC") ? "UTC" : timezone);
         LocalDate nextSaturday = LocalDate.now(zone).with(TemporalAdjusters.next(DayOfWeek.SATURDAY));
-        ZonedDateTime satMorning = nextSaturday.atTime(9, 0).atZone(zone);
-        return satMorning.toInstant();
+        return nextSaturday.atTime(9, 0).atZone(zone).toInstant();
     }
 
     private String generateUniqueJoinCode() {
         for (int i = 0; i < 50; i++) {
-            StringBuilder sb = new StringBuilder(4);
-            for (int c = 0; c < 4; c++) {
-                sb.append(JOIN_CODE_CHARS.charAt(RANDOM.nextInt(JOIN_CODE_CHARS.length())));
+            StringBuilder sb = new StringBuilder(8);
+            for (int c = 0; c < 8; c++) {
+                sb.append(UNAMBIGUOUS_ALPHABET.charAt(SECURE_RANDOM.nextInt(UNAMBIGUOUS_ALPHABET.length())));
             }
             String code = sb.toString();
-            if (!roomRepository.existsByJoinCodeIgnoreCase(code)) {
-                return code;
-            }
+            if (!roomRepository.existsByJoinCodeIgnoreCase(code)) return code;
         }
-        throw new IllegalStateException("Failed to generate unique join code after retries");
+        throw new IllegalStateException("Failed to generate unique join code");
     }
 
     private String generateKeyPrefix(String name) {
@@ -474,11 +445,22 @@ public class RoomService {
         StringBuilder sb = new StringBuilder();
         for (String w : words) {
             String cleaned = w.replaceAll("[^a-zA-Z]", "");
-            if (!cleaned.isEmpty()) {
-                sb.append(Character.toUpperCase(cleaned.charAt(0)));
-            }
+            if (!cleaned.isEmpty()) sb.append(Character.toUpperCase(cleaned.charAt(0)));
             if (sb.length() >= 4) break;
         }
         return sb.length() >= 2 ? sb.toString() : "ROOM";
     }
+
+    private String resolveTemplateName(String templateId) {
+        if (templateId == null || templateId.isBlank()) {
+            return "Custom";
+        }
+        try {
+            EventTemplate template = templateService.getOrThrow(templateId);
+            return template != null ? template.getName() : "Custom";
+        } catch (Exception e) {
+            return "Custom";
+        }
+    }
 }
+

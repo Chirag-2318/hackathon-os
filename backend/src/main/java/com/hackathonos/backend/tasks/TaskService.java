@@ -54,6 +54,7 @@ public class TaskService {
     private final Clock clock;
     private final GithubBranchTaskRepository branchTaskRepository;
     private final GithubBranchRepository branchRepository;
+    private final com.hackathonos.backend.events.RoomEventService roomEventService;
 
     public TaskService(
             TaskRepository taskRepository,
@@ -75,7 +76,8 @@ public class TaskService {
             ClockService clockService,
             Clock clock,
             GithubBranchTaskRepository branchTaskRepository,
-            GithubBranchRepository branchRepository
+            GithubBranchRepository branchRepository,
+            com.hackathonos.backend.events.RoomEventService roomEventService
     ) {
         this.taskRepository = taskRepository;
         this.subtaskRepository = subtaskRepository;
@@ -97,6 +99,7 @@ public class TaskService {
         this.clock = clock;
         this.branchTaskRepository = branchTaskRepository;
         this.branchRepository = branchRepository;
+        this.roomEventService = roomEventService;
     }
 
     /**
@@ -146,6 +149,7 @@ public class TaskService {
         activityLogger.log(room, user, "TASK_CREATED", "created " + saved.getTaskKey());
 
         notifyAssigneeIfApplicable(room, user, saved.getAssigneeId(), saved.getTaskKey());
+        roomEventService.recordEvent(roomId, "task.created", "task", saved.getId().toString(), user.getId());
         return getTask(roomId, user, saved.getId().toString());
     }
 
@@ -182,6 +186,7 @@ public class TaskService {
             saveLabels(saved.getId(), request.labels());
         }
 
+        roomEventService.recordEvent(roomId, "task.updated", "task", saved.getId().toString(), user.getId());
         return buildTaskDetail(saved, user);
     }
 
@@ -198,6 +203,13 @@ public class TaskService {
         String targetStatus = toInternalStatus(request.toStatus());
         String oldStatus = task.getStatus();
 
+        if (("IN_PROGRESS".equals(targetStatus) || "DONE".equals(targetStatus)) && !"DONE".equals(oldStatus)) {
+            List<String> blockers = getBlockingTaskNames(task);
+            if (!blockers.isEmpty()) {
+                throw new ConflictException("TASK_BLOCKED", "You can't start this task yet. Finish: " + String.join(", ", blockers));
+            }
+        }
+
         if ("IN_PROGRESS".equals(targetStatus) && task.getAssigneeId() == null) {
             task.setAssigneeId(user.getId());
             historyRepository.save(new TaskHistory(task.getId(), user.getId(), "Assigned to " + user.getName() + " automatically"));
@@ -205,10 +217,29 @@ public class TaskService {
 
         if ("DONE".equals(targetStatus) && !"DONE".equals(oldStatus)) {
             task.setCompletedAt(clock.instant());
-            historyRepository.save(new TaskHistory(task.getId(), user.getId(), "moved to Done"));
-            activityLogger.log(room, user, "TASK_COMPLETED", "finished " + task.getTaskKey());
+            boolean isLeader = roomAccess.isLeader(roomId, user.getId());
+            if (isLeader) {
+                task.setReviewState("CONFIRMED");
+                task.setConfirmedAt(clock.instant());
+                task.setConfirmedBy(user.getId());
+                task.setReviewNote(null);
+                historyRepository.save(new TaskHistory(task.getId(), user.getId(), "moved to Done and confirmed"));
+                activityLogger.log(room, user, "TASK_COMPLETED", "finished " + task.getTaskKey());
+            } else {
+                task.setReviewState("AWAITING");
+                task.setConfirmedAt(null);
+                task.setConfirmedBy(null);
+                task.setReviewNote(null);
+                historyRepository.save(new TaskHistory(task.getId(), user.getId(), "moved to Done (awaiting leader confirmation)"));
+                activityLogger.log(room, user, "TASK_COMPLETED", "finished " + task.getTaskKey() + " (awaiting leader)");
+                notifyLeaderTaskAwaiting(room, user, task);
+            }
         } else if (!"DONE".equals(targetStatus) && "DONE".equals(oldStatus)) {
             task.setCompletedAt(null);
+            task.setConfirmedAt(null);
+            task.setConfirmedBy(null);
+            task.setReviewState("NONE");
+            task.setReviewNote(null);
             historyRepository.save(new TaskHistory(task.getId(), user.getId(), "moved to " + request.toStatus()));
         } else if (!targetStatus.equals(oldStatus)) {
             historyRepository.save(new TaskHistory(task.getId(), user.getId(), "moved to " + request.toStatus()));
@@ -219,6 +250,7 @@ public class TaskService {
         task.setUpdatedAt(clock.instant());
         Task saved = taskRepository.save(task);
 
+        roomEventService.recordEvent(roomId, "task.moved", "task", saved.getId().toString(), user.getId());
         BoardSummaryDto summary = computeBoardSummary(roomId);
         TaskDto movedDto = buildTaskDto(saved);
         return new MoveTaskResponseDto(summary, movedDto);
@@ -284,6 +316,7 @@ public class TaskService {
                             "Task Assigned", "You were assigned to " + task.getTaskKey()));
         }
 
+        roomEventService.recordEvent(roomId, "task.assigned", "task", saved.getId().toString(), user.getId());
         return buildTaskDetail(saved, user);
     }
 
@@ -408,11 +441,12 @@ public class TaskService {
                 .orElseThrow(() -> new NotFoundException("TASK_NOT_FOUND", "Task not found"));
 
         TaskComment comment = new TaskComment(taskId, user.getId(), request.text().trim());
-        commentRepository.save(comment);
+        TaskComment savedComment = commentRepository.save(comment);
 
         parseAndNotifyMentions(room, user, task, request.text());
         task.setUpdatedAt(clock.instant());
         taskRepository.save(task);
+        roomEventService.recordEvent(roomId, "comment.added", "task_comment", savedComment.getId().toString(), user.getId());
         return buildTaskDetail(task, user);
     }
 
@@ -468,13 +502,20 @@ public class TaskService {
      */
     @Transactional
     public TaskDetailDto updateDependencies(UUID roomId, User user, UUID taskId, UpdateDependenciesRequest request) {
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
         roomAccess.requireMember(roomId, user);
         Task task = taskRepository.findByIdAndRoomId(taskId, roomId)
                 .orElseThrow(() -> new NotFoundException("TASK_NOT_FOUND", "Task not found"));
 
+        boolean isLeader = roomAccess.isLeader(roomId, user.getId());
+        boolean isAssignee = task.getAssigneeId() != null && task.getAssigneeId().equals(user.getId());
+        if (!isLeader && !isAssignee) {
+            throw new ForbiddenException("FORBIDDEN", "Only the room leader or task assignee can edit dependencies");
+        }
+
         List<UUID> proposed = request.dependsOnTaskIds() != null ? request.dependsOnTaskIds() : Collections.emptyList();
-        if (proposed.size() > 10) {
-            throw new BadRequestException("TOO_MANY_DEPENDENCIES", "A task cannot depend on more than 10 tasks");
+        if (proposed.size() > 8) {
+            throw new BadRequestException("TOO_MANY_DEPENDENCIES", "A task cannot have more than 8 prerequisites");
         }
 
         for (UUID depId : proposed) {
@@ -488,25 +529,80 @@ public class TaskService {
             }
         }
 
-        List<TaskDependency> existingDeps = dependencyRepository.findAll();
+        List<TaskDependency> existingDeps = dependencyRepository.findByRoomId(roomId);
         DependencyCycleDetector.CycleCheckResult cycleResult = cycleDetector.detectCycle(taskId, proposed, existingDeps);
         if (cycleResult.hasCycle()) {
             List<String> keys = new ArrayList<>();
             for (UUID id : cycleResult.cyclePath()) {
                 taskRepository.findById(id).ifPresent(t -> keys.add(t.getTaskKey()));
             }
-            throw new BadRequestException("DEPENDENCY_CYCLE", "Dependency cycle detected: " + String.join(" -> ", keys));
+            throw new ConflictException("DEPENDENCY_CYCLE", "Dependency cycle detected: " + String.join(" -> ", keys));
         }
 
         dependencyRepository.deleteByTaskId(taskId);
         for (UUID depId : proposed) {
-            dependencyRepository.save(new TaskDependency(taskId, depId));
+            dependencyRepository.save(new TaskDependency(taskId, depId, roomId));
         }
 
-        historyRepository.save(new TaskHistory(taskId, user.getId(), user.getName() + " updated dependencies"));
+        historyRepository.save(new TaskHistory(taskId, user.getId(), user.getName() + " updated prerequisites"));
         task.setUpdatedAt(clock.instant());
         taskRepository.save(task);
         return buildTaskDetail(task, user);
+    }
+
+    @Transactional
+    public TaskDetailDto confirmTask(UUID roomId, User user, UUID taskId) {
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        roomAccess.requireLeader(roomId, user);
+        Task task = taskRepository.findByIdAndRoomId(taskId, roomId)
+                .orElseThrow(() -> new NotFoundException("TASK_NOT_FOUND", "Task not found"));
+
+        task.setStatus("DONE");
+        task.setReviewState("CONFIRMED");
+        task.setConfirmedAt(clock.instant());
+        task.setConfirmedBy(user.getId());
+        task.setReviewNote(null);
+        if (task.getCompletedAt() == null) {
+            task.setCompletedAt(clock.instant());
+        }
+        task.setUpdatedAt(clock.instant());
+        Task saved = taskRepository.save(task);
+
+        historyRepository.save(new TaskHistory(task.getId(), user.getId(), user.getName() + " confirmed task as done"));
+        activityLogger.log(room, user, "TASK_CONFIRMED", "confirmed done for " + task.getTaskKey());
+        roomEventService.recordEvent(roomId, "task.confirmed", "task", saved.getId().toString(), user.getId());
+
+        return buildTaskDetail(saved, user);
+    }
+
+    @Transactional
+    public TaskDetailDto requestChanges(UUID roomId, User user, UUID taskId, RequestChangesRequest request) {
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        roomAccess.requireLeader(roomId, user);
+        Task task = taskRepository.findByIdAndRoomId(taskId, roomId)
+                .orElseThrow(() -> new NotFoundException("TASK_NOT_FOUND", "Task not found"));
+
+        task.setStatus("IN_PROGRESS");
+        task.setReviewState("CHANGES_REQUESTED");
+        task.setReviewNote(request != null ? request.note() : null);
+        task.setConfirmedAt(null);
+        task.setConfirmedBy(null);
+        task.setCompletedAt(null);
+        task.setUpdatedAt(clock.instant());
+        Task saved = taskRepository.save(task);
+
+        historyRepository.save(new TaskHistory(task.getId(), user.getId(), user.getName() + " requested changes: " + (task.getReviewNote() != null ? task.getReviewNote() : "")));
+        activityLogger.log(room, user, "TASK_CHANGES_REQUESTED", "requested changes on " + task.getTaskKey());
+        roomEventService.recordEvent(roomId, "task.changes_requested", "task", saved.getId().toString(), user.getId());
+
+        if (task.getAssigneeId() != null) {
+            userRepository.findById(task.getAssigneeId()).ifPresent(assignee ->
+                    notificationService.notifyUser(assignee.getId(), roomId, NotificationType.CHANGES_REQUESTED,
+                            "Changes Requested", "Leader requested changes on " + task.getTaskKey() + ": " + (task.getReviewNote() != null ? task.getReviewNote() : ""),
+                            "/app/room/" + roomId + "/board?task=" + task.getTaskKey()));
+        }
+
+        return buildTaskDetail(saved, user);
     }
 
     /**
@@ -686,6 +782,30 @@ public class TaskService {
         }
     }
 
+    public List<String> getBlockingTaskNames(Task task) {
+        List<TaskDependency> deps = dependencyRepository.findByTaskId(task.getId());
+        List<String> blockers = new ArrayList<>();
+        for (TaskDependency dep : deps) {
+            taskRepository.findById(dep.getDependsOnTaskId()).ifPresent(prereq -> {
+                if (!prereq.isConfirmedDone()) {
+                    blockers.add(prereq.getTaskKey() + " (" + prereq.getSummary() + ")");
+                }
+            });
+        }
+        return blockers;
+    }
+
+    private void notifyLeaderTaskAwaiting(Room room, User user, Task task) {
+        memberRepository.findByRoomIdAndRole(room.getId(), "LEADER").ifPresent(leaderMember -> {
+            if (!leaderMember.getUserId().equals(user.getId())) {
+                userRepository.findById(leaderMember.getUserId()).ifPresent(leader ->
+                        notificationService.notifyUser(leader.getId(), room.getId(), NotificationType.TASK_DONE,
+                                "Task Awaiting Confirmation", task.getTaskKey() + " was moved to Done and is awaiting your confirmation",
+                                "/app/room/" + room.getId() + "/board?task=" + task.getTaskKey()));
+            }
+        });
+    }
+
     private BoardSummaryDto computeBoardSummary(UUID roomId) {
         List<Task> tasks = taskRepository.findByRoomId(roomId);
         Instant now = clock.instant();
@@ -695,7 +815,7 @@ public class TaskService {
 
         for (Task t : tasks) {
             String norm = taskDtoMapper.normalizeStatus(t.getStatus());
-            if ("done".equals(norm)) {
+            if (t.isConfirmedDone()) {
                 done++;
             } else {
                 open++;
@@ -720,7 +840,21 @@ public class TaskService {
         List<TaskAcceptanceItem> acceptance = acceptanceRepository.findByTaskIdOrderByPositionAsc(task.getId());
         boolean hasBranch = !branchTaskRepository.findByTaskId(task.getId()).isEmpty();
 
-        return taskDtoMapper.toDto(task, phase, assignee, reporter, labels, subtasks, acceptance, Collections.emptyList(), Collections.emptyList(), 0, hasBranch);
+        List<TaskDependency> deps = dependencyRepository.findByTaskId(task.getId());
+        List<TaskDependencyItemDto> dependsOn = new ArrayList<>();
+        for (TaskDependency d : deps) {
+            taskRepository.findById(d.getDependsOnTaskId()).ifPresent(t ->
+                    dependsOn.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()), t.isConfirmedDone())));
+        }
+
+        List<TaskDependency> blockerDeps = dependencyRepository.findByDependsOnTaskId(task.getId());
+        List<TaskDependencyItemDto> blocks = new ArrayList<>();
+        for (TaskDependency d : blockerDeps) {
+            taskRepository.findById(d.getTaskId()).ifPresent(t ->
+                    blocks.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()), t.isConfirmedDone())));
+        }
+
+        return taskDtoMapper.toDto(task, phase, assignee, reporter, labels, subtasks, acceptance, dependsOn, blocks, 0, hasBranch);
     }
 
     private TaskDetailDto buildTaskDetail(Task task, User viewer) {
@@ -735,14 +869,14 @@ public class TaskService {
         List<TaskDependencyItemDto> dependsOn = new ArrayList<>();
         for (TaskDependency d : deps) {
             taskRepository.findById(d.getDependsOnTaskId()).ifPresent(t ->
-                    dependsOn.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()))));
+                    dependsOn.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()), t.isConfirmedDone())));
         }
 
         List<TaskDependency> blockerDeps = dependencyRepository.findByDependsOnTaskId(task.getId());
         List<TaskDependencyItemDto> blocks = new ArrayList<>();
         for (TaskDependency d : blockerDeps) {
             taskRepository.findById(d.getTaskId()).ifPresent(t ->
-                    blocks.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()))));
+                    blocks.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()), t.isConfirmedDone())));
         }
 
         List<TaskComment> comments = commentRepository.findByTaskIdOrderByCreatedAtAsc(task.getId());

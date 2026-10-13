@@ -43,4 +43,18 @@ public class DocRequests {
             int version,
             String content
     ) {}
+
+    public record DocAiRequest(
+            String prompt,
+            String selectedText,
+            String fullContent,
+            String action
+    ) {}
+
+    public record DocAiResponse(
+            String answer,
+            java.util.List<String> sources,
+            String model,
+            long latencyMs
+    ) {}
 }

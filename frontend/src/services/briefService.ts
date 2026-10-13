@@ -148,6 +148,13 @@ export const briefService = {
     });
   },
 
+  async extractBrief(roomId: string, text: string): Promise<{ applied: boolean; fields: BriefFields; brief: Brief; extractedFieldsCount: number }> {
+    return apiFetch<{ applied: boolean; fields: BriefFields; brief: Brief; extractedFieldsCount: number }>(`/api/v1/rooms/${roomId}/brief/extract`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+  },
+
   async confirmBrief(roomId: string, applyDatesToRoom: boolean = false): Promise<Brief> {
     return apiFetch<Brief>(`/api/v1/rooms/${roomId}/brief/confirm`, {
       method: 'POST',

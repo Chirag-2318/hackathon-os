@@ -1,0 +1,176 @@
+/* ==========================================================================
+   Design Tokens - Hackathon OS
+   Aligned with strict 8px spacing, semantic color scale, AA contrast,
+   refined motion curves, elevation levels, and dark-mode readiness.
+   ========================================================================== */
+
+:root {
+  /* Neutral Color Scale (0 - 900) */
+  --neutral-0: #FFFFFF;
+  --neutral-50: #FAFAFA;
+  --neutral-100: #F4F4F5;
+  --neutral-200: #E4E4E7;
+  --neutral-300: #D4D4D8;
+  --neutral-400: #A1A1AA;
+  --neutral-500: #71717A;
+  --neutral-600: #52525B;
+  --neutral-700: #3F3F46;
+  --neutral-800: #27272A;
+  --neutral-900: #18181B;
+  --neutral-950: #09090B;
+
+  /* Brand Accent */
+  --brand-primary: #6366F1;
+  --brand-primary-hover: #4F46E5;
+  --brand-primary-subtle: #EEF2FF;
+  --brand-primary-border: #C7D2FE;
+  --brand-primary-fg: #4338CA;
+
+  /* Semantic - Success */
+  --semantic-success-bg: #ECFDF5;
+  --semantic-success-border: #A7F3D0;
+  --semantic-success-fg: #065F46;
+  --semantic-success-solid: #10B981;
+
+  /* Semantic - Warning */
+  --semantic-warning-bg: #FFFBEB;
+  --semantic-warning-border: #FDE68A;
+  --semantic-warning-fg: #92400E;
+  --semantic-warning-solid: #F59E0B;
+
+  /* Semantic - Danger */
+  --semantic-danger-bg: #FEF2F2;
+  --semantic-danger-border: #FECACA;
+  --semantic-danger-fg: #991B1B;
+  --semantic-danger-solid: #EF4444;
+
+  /* Semantic - Info */
+  --semantic-info-bg: #EFF6FF;
+  --semantic-info-border: #BFDBFE;
+  --semantic-info-fg: #1E40AF;
+  --semantic-info-solid: #3B82F6;
+
+  /* 8px Spacing Scale */
+  --space-0-5: 4px;
+  --space-1: 8px;
+  --space-1-5: 12px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-5: 40px;
+  --space-6: 48px;
+  --space-8: 64px;
+
+  /* Radii Scale (6, 10, 14, 20, full) */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Elevation (4 Soft Layered Levels) */
+  --elevation-1: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --elevation-2: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --elevation-3: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  --elevation-4: 0 20px 25px -5px rgba(0, 0, 0, 0.10), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+
+  /* Motion Timings & Curves (150ms - 280ms) */
+  --motion-fast: 150ms;
+  --motion-normal: 200ms;
+  --motion-slow: 280ms;
+  --motion-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --motion-ease-in: cubic-bezier(0.4, 0, 1, 1);
+
+  /* Z-Index Scale */
+  --z-base: 0;
+  --z-card-hover: 5;
+  --z-sticky: 10;
+  --z-dropdown: 20;
+  --z-modal-backdrop: 40;
+  --z-modal: 50;
+  --z-popover: 60;
+  --z-toast: 70;
+  --z-tooltip: 80;
+
+  /* Focus Ring */
+  --focus-ring: 0 0 0 2px var(--neutral-0), 0 0 0 4px var(--brand-primary);
+
+  /* Tour Color Tokens */
+  --tour-bg: #070708;
+  --tour-surface: #101012;
+  --tour-surface-2: #17171A;
+  --tour-border: rgba(255, 255, 255, 0.08);
+  --tour-text: #F4F1EA;
+  --tour-text-muted: rgba(244, 241, 234, 0.65);
+  --tour-card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 24px 60px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Dark Mode Token Readiness */
+.dark {
+  --neutral-0: #09090B;
+  --neutral-50: #18181B;
+  --neutral-100: #27272A;
+  --neutral-200: #3F3F46;
+  --neutral-300: #52525B;
+  --neutral-400: #71717A;
+  --neutral-500: #A1A1AA;
+  --neutral-600: #D4D4D8;
+  --neutral-700: #E4E4E7;
+  --neutral-800: #F4F4F5;
+  --neutral-900: #FAFAFA;
+  --neutral-950: #FFFFFF;
+
+  --brand-primary-subtle: #1E1B4B;
+  --brand-primary-border: #3730A3;
+  --brand-primary-fg: #A5B4FC;
+
+  --semantic-success-bg: #064E3B;
+  --semantic-success-border: #047857;
+  --semantic-success-fg: #A7F3D0;
+
+  --semantic-warning-bg: #451A03;
+  --semantic-warning-border: #78350F;
+  --semantic-warning-fg: #FDE68A;
+
+  --semantic-danger-bg: #450A0A;
+  --semantic-danger-border: #7F1D1D;
+  --semantic-danger-fg: #FECACA;
+
+  --semantic-info-bg: #172554;
+  --semantic-info-border: #1E3A8A;
+  --semantic-info-fg: #BFDBFE;
+
+  --elevation-1: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --elevation-2: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --elevation-3: 0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -4px rgba(0, 0, 0, 0.5);
+  --elevation-4: 0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 8px 10px -6px rgba(0, 0, 0, 0.6);
+
+  --focus-ring: 0 0 0 2px var(--neutral-0), 0 0 0 4px var(--brand-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Route Content Cross-fade with 6px Upward Slide (180ms) */
+.page-transition {
+  animation: pageEnter 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

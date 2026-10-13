@@ -30,12 +30,17 @@ export function BriefPage() {
   });
 
   const [confirmedChecks, setConfirmedChecks] = useState<Record<string, boolean>>({});
+  const confirmedChecksRef = useRef<Record<string, boolean>>({});
+  confirmedChecksRef.current = confirmedChecks;
 
   useEffect(() => {
-    if (brief) {
-      setConfirmedChecks(brief.confirmedFields || {});
+    if (brief?.confirmedFields) {
+      setConfirmedChecks((prev) => ({
+        ...brief.confirmedFields,
+        ...prev,
+      }));
     }
-  }, [brief]);
+  }, [brief?.confirmedFields]);
 
   const canEdit = isLeader && (brief?.permissions?.canEdit ?? true) && !brief?.confirmed;
 
@@ -43,7 +48,21 @@ export function BriefPage() {
     mutationFn: (updated: Brief) => briefService.saveBrief(updated),
     onSuccess: (saved) => {
       setSaveStatus('saved');
-      queryClient.setQueryData(['brief', activeRoomId], saved);
+      queryClient.setQueryData(['brief', activeRoomId], (old: Brief | null | undefined) => {
+        if (!old) return saved;
+        return {
+          ...old,
+          ...saved,
+          fields: {
+            ...old.fields,
+            ...saved.fields,
+          },
+          confirmedFields: {
+            ...saved.confirmedFields,
+            ...confirmedChecksRef.current,
+          },
+        };
+      });
       setTimeout(() => setSaveStatus('idle'), 2000);
     },
     onError: () => setSaveStatus('idle'),
@@ -78,10 +97,20 @@ export function BriefPage() {
     const nextVal = !confirmedChecks[key];
     const updated = { ...confirmedChecks, [key]: nextVal };
     setConfirmedChecks(updated);
+    confirmedChecksRef.current = updated;
 
     try {
       await briefService.updateConfirmedField(activeRoomId, key, nextVal);
-      queryClient.invalidateQueries({ queryKey: ['brief', activeRoomId] });
+      queryClient.setQueryData(['brief', activeRoomId], (old: Brief | null | undefined) => {
+        if (!old) return old;
+        return {
+          ...old,
+          confirmedFields: {
+            ...old.confirmedFields,
+            [key]: nextVal,
+          },
+        };
+      });
     } catch (e: any) {
       toast.error(e.message || 'Failed to update check');
     }
@@ -89,15 +118,32 @@ export function BriefPage() {
 
   const handleFieldsChange = (newFields: BriefFields) => {
     if (!brief || !canEdit) return;
+    const mergedFields: BriefFields = {
+      ...brief.fields,
+      ...newFields,
+    };
     queryClient.setQueryData(['brief', activeRoomId], (old: Brief | null | undefined) => {
       if (!old) return old;
-      return { ...old, fields: newFields };
+      return {
+        ...old,
+        fields: {
+          ...old.fields,
+          ...mergedFields,
+        },
+      };
     });
     setSaveStatus('saving');
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
 
     autosaveTimerRef.current = setTimeout(() => {
-      saveBriefMutation.mutate({ ...brief, fields: newFields });
+      saveBriefMutation.mutate({
+        ...brief,
+        fields: mergedFields,
+        confirmedFields: {
+          ...(brief.confirmedFields || {}),
+          ...confirmedChecksRef.current,
+        },
+      });
     }, 800);
   };
 

@@ -17,12 +17,15 @@ public class InviteController {
 
     private final InviteService inviteService;
     private final CurrentUser currentUser;
+    private final com.hackathonos.backend.common.idempotency.IdempotencyService idempotencyService;
 
-    public InviteController(InviteService inviteService, CurrentUser currentUser) {
+    public InviteController(InviteService inviteService, CurrentUser currentUser, com.hackathonos.backend.common.idempotency.IdempotencyService idempotencyService) {
         this.inviteService = inviteService;
         this.currentUser = currentUser;
+        this.idempotencyService = idempotencyService;
     }
 
+    @com.hackathonos.backend.common.security.RateLimited(key = "create_invite", limit = 10, periodSeconds = 60)
     @PostMapping("/api/v1/rooms/{roomId}/invites")
     public InviteResponse createInviteLink(@PathVariable UUID roomId,
                                            @RequestBody(required = false) CreateInviteRequest request) {
@@ -54,10 +57,24 @@ public class InviteController {
         return inviteService.joinByInvite(user, token);
     }
 
+    @com.hackathonos.backend.common.security.RateLimited(key = "join_by_code", limit = 10, periodSeconds = 60)
     @PostMapping("/api/v1/rooms/join")
-    public JoinInviteResponse joinByCode(@Valid @RequestBody JoinCodeRequest request) {
+    public JoinInviteResponse joinByCode(
+            @Valid @RequestBody JoinCodeRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
+    ) {
         User user = currentUser.get();
-        return inviteService.joinByCode(user, request);
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            var cached = idempotencyService.get(user.getId(), idempotencyKey);
+            if (cached.isPresent() && cached.get() instanceof JoinInviteResponse dto) {
+                return dto;
+            }
+        }
+        JoinInviteResponse result = inviteService.joinByCode(user, request);
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            idempotencyService.put(user.getId(), idempotencyKey, result);
+        }
+        return result;
     }
 
     private User resolveOptionalUser() {

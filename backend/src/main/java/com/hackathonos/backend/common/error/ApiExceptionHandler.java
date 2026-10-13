@@ -144,27 +144,74 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
+    @ExceptionHandler(EntityConflictException.class)
+    public ResponseEntity<ErrorResponse> handleEntityConflict(EntityConflictException ex) {
+        String reqId = resolveRequestId();
+        Map<String, Object> details = new HashMap<>();
+        details.put("currentVersion", ex.getCurrentVersion());
+        details.put("lastEditedBy", ex.getLastEditedBy());
+        details.put("updatedAt", ex.getUpdatedAt());
+
+        ErrorResponse body = new ErrorResponse(
+                ex.getCode() != null ? ex.getCode() : ErrorCode.VERSION_CONFLICT.getCode(),
+                ex.getMessage(),
+                details,
+                reqId
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
     @ExceptionHandler(TooManyRequestsException.class)
     public ResponseEntity<ErrorResponse> handleTooManyRequests(TooManyRequestsException ex) {
         String reqId = resolveRequestId();
+        Map<String, Object> details = new HashMap<>();
+        if (ex.getRetryAfterSeconds() > 0) {
+            details.put("retryAfterSeconds", ex.getRetryAfterSeconds());
+        }
         ErrorResponse body = new ErrorResponse(
-                Instant.now().toString(),
-                429,
-                ex.getCode(),
+                ex.getCode() != null ? ex.getCode() : ErrorCode.TOO_MANY_REQUESTS.getCode(),
                 ex.getMessage(),
+                details.isEmpty() ? null : details,
                 reqId
         );
-        return ResponseEntity.status(429).body(body);
+        var builder = ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS);
+        if (ex.getRetryAfterSeconds() > 0) {
+            builder.header(org.springframework.http.HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()));
+        }
+        return builder.body(body);
+    }
+
+    @ExceptionHandler(AiOutputException.class)
+    public ResponseEntity<ErrorResponse> handleAiOutput(AiOutputException ex) {
+        String reqId = resolveRequestId();
+        String code = ex.getCode();
+        HttpStatus status = HttpStatus.BAD_GATEWAY;
+        if ("AI_RESTRICTED_BY_EVENT".equalsIgnoreCase(code)) {
+            status = HttpStatus.FORBIDDEN;
+            code = "AI_RESTRICTED_BY_EVENT";
+        } else if ("AI_CIRCUIT_OPEN".equalsIgnoreCase(code) || "AI_UNAVAILABLE".equalsIgnoreCase(code)) {
+            status = HttpStatus.SERVICE_UNAVAILABLE;
+            code = "AI_UNAVAILABLE";
+        } else if (code == null || code.isBlank() || "AI_OUTPUT_ERROR".equalsIgnoreCase(code)) {
+            code = "AI_OUTPUT_INVALID";
+        }
+
+        ErrorResponse body = new ErrorResponse(
+                code,
+                ex.getMessage(),
+                null,
+                reqId
+        );
+        return ResponseEntity.status(status).body(body);
     }
 
     @ExceptionHandler(BadGatewayException.class)
     public ResponseEntity<ErrorResponse> handleBadGateway(BadGatewayException ex) {
         String reqId = resolveRequestId();
         ErrorResponse body = new ErrorResponse(
-                Instant.now().toString(),
-                HttpStatus.BAD_GATEWAY.value(),
-                ex.getCode(),
+                ex.getCode() != null ? ex.getCode() : "BAD_GATEWAY",
                 ex.getMessage(),
+                null,
                 reqId
         );
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(body);
@@ -275,12 +322,12 @@ public class ApiExceptionHandler {
         String reqId = resolveRequestId();
         log.error("Internal error [{}]", reqId, ex);
         ErrorResponse body = new ErrorResponse(
-                Instant.now().toString(),
-                HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                "INTERNAL_ERROR",
-                "Something went wrong",
+                ErrorCode.INTERNAL_SERVER_ERROR.getCode(),
+                "An unexpected internal error occurred. Please try again later.",
+                null,
                 reqId
         );
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }
 }
+

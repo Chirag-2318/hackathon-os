@@ -6,11 +6,13 @@
  * Density: Comfortable | Compact (default: Comfortable)
  * Changes apply immediately. No save button needed.
  */
+import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchSettings, patchSettings } from '@/features/prep/api/settings-api';
 import { SegmentedControl, SegmentedControlItem } from '@/components/primitives/segmented-control';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { AppTheme, Density } from '@/features/prep/api/types';
+import { resetTourHotspots } from '@/tour/api';
 
 export function AppearanceSection() {
   const queryClient = useQueryClient();
@@ -18,6 +20,16 @@ export function AppearanceSection() {
     queryKey: ['settings'],
     queryFn: fetchSettings,
   });
+
+  const handleResetTips = async () => {
+    try {
+      await resetTourHotspots();
+      queryClient.invalidateQueries({ queryKey: ['currentUser'] });
+      toast.success('Page tips reset');
+    } catch {
+      toast.error('Failed to reset page tips');
+    }
+  };
 
   const mutation = useMutation({
     mutationFn: (patch: { theme?: AppTheme; density?: Density }) =>
@@ -64,7 +76,7 @@ export function AppearanceSection() {
         </div>
 
         {/* Row 2: Density */}
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 border-b border-border pb-5">
           <div>
             <p className="text-body-strong text-ink">Density</p>
           </div>
@@ -80,6 +92,23 @@ export function AppearanceSection() {
               </SegmentedControlItem>
             ))}
           </SegmentedControl>
+        </div>
+
+        {/* Row 3: Page tips */}
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-body-strong text-ink">Page tips</p>
+            <p className="text-caption text-ink-muted">Reset dismissed beacons and in-app tips.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleResetTips}
+              className="h-8 px-3 rounded-md border border-border bg-surface text-xs font-medium text-ink hover:bg-hover transition-colors cursor-pointer"
+            >
+              Reset page tips
+            </button>
+          </div>
         </div>
       </div>
 

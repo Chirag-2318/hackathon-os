@@ -35,5 +35,13 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     @Query("UPDATE Notification n SET n.readAt = :now WHERE n.userId = :userId AND n.roomId = :roomId AND n.readAt IS NULL")
     int markAllReadForUserAndRoom(@Param("userId") UUID userId, @Param("roomId") UUID roomId, @Param("now") Instant now);
 
+    Optional<Notification> findTopByUserIdAndRoomIdAndTypeAndLinkPathAndCreatedAtAfterOrderByCreatedAtDesc(
+            UUID userId, UUID roomId, String type, String linkPath, Instant after);
+
+    @Modifying
+    @Query("DELETE FROM Notification n WHERE n.createdAt < :cutoff")
+    int deleteOlderThan(@Param("cutoff") Instant cutoff);
+
     void deleteByUserId(UUID userId);
 }
+

@@ -10,19 +10,20 @@ export type NotificationType = 'mention' | 'blocker' | 'system' | 'other';
 
 export interface Notification {
   id: string;
-  /** Initials for avatar fallback (C09 §2.8 pastel) */
   avatarInitials?: string;
   avatarUrl?: string;
+  actorUsername?: string;
+  actorName?: string;
   title: string;
-  /** Single-line truncated body */
   body: string;
-  /** ISO-8601 timestamp */
   timestamp: string;
   read: boolean;
   type: NotificationType;
   roomId?: string;
   roomName?: string;
   link?: string;
+  deepLink?: string;
+  count?: number;
 }
 
 export interface NotificationsResponse {

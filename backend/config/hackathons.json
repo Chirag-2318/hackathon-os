@@ -1,0 +1,65 @@
+[
+    {
+        "title": "AMD Developer Hackathon: ACT III",
+        "organizer": "AMD x lablab.ai",
+        "url": "https://lablab.ai/ai-hackathons/amd-developer-hackathon-act-iii",
+        "source": "lablab",
+        "mode": "HYBRID",
+        "starts_at": "2026-10-12T00:00:00Z",
+        "ends_at": "2026-10-18T23:59:00Z",
+        "registration_deadline": null,
+        "prize_text": "$16,000+ prize pool",
+        "themes": [
+            "AI agents",
+            "AMD GPUs",
+            "Industry, health, commerce"
+        ],
+        "location": "Online build; on-site in Rome, Milan and Imperia on 17-18 Oct",
+        "team_min": 1,
+        "team_max": 6,
+        "verified_at": "2026-10-13T00:00:00Z",
+        "active": true
+    },
+    {
+        "title": "Life After Code (GitLab Transcend)",
+        "organizer": "GitLab, with Google Cloud and Anthropic",
+        "url": "https://gitlab-transcend.devpost.com/",
+        "source": "devpost",
+        "mode": "ONLINE",
+        "starts_at": "2026-10-05T17:00:00Z",
+        "ends_at": "2026-10-27T13:00:00Z",
+        "registration_deadline": null,
+        "prize_text": "$45,000 in cash",
+        "themes": [
+            "DevOps",
+            "AI agents",
+            "Productivity"
+        ],
+        "location": null,
+        "team_min": null,
+        "team_max": null,
+        "verified_at": "2026-10-13T00:00:00Z",
+        "active": true
+    },
+    {
+        "title": "Nebius x NVIDIA Global AI Hackathon",
+        "organizer": "Nebius and NVIDIA",
+        "url": "https://nebiusglobalaihackathon.devpost.com/",
+        "source": "devpost",
+        "mode": "ONLINE",
+        "starts_at": "2026-08-26T16:00:00Z",
+        "ends_at": "2026-10-30T17:00:00Z",
+        "registration_deadline": null,
+        "prize_text": "$50,000+ in prizes",
+        "themes": [
+            "AI",
+            "Agents",
+            "Open-weight models"
+        ],
+        "location": null,
+        "team_min": null,
+        "team_max": null,
+        "verified_at": "2026-10-13T00:00:00Z",
+        "active": true
+    }
+]

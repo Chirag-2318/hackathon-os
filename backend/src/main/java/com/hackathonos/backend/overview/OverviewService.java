@@ -156,7 +156,7 @@ public class OverviewService {
     public NavBadgesDto getNavBadges(UUID roomId, User user) {
         roomAccess.requireMember(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
-        long openTasks = taskRepository.countByRoomIdAndStatusNot(room.getId(), "DONE");
+        long openTasks = taskRepository.findByRoomId(room.getId()).stream().filter(t -> !t.isConfirmedDone()).count();
         List<AttentionItem> attentionItems = attentionEngine.evaluate(room);
         long attentionCount = attentionItems.size();
         long github = attentionItems.stream()

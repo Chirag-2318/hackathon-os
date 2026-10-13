@@ -38,6 +38,8 @@ public class MemberService {
     private final MemberMapper memberMapper;
     private final ActivityLogger activityLogger;
     private final NotificationService notificationService;
+    private final com.hackathonos.backend.tasks.TaskRepository taskRepository;
+    private final com.hackathonos.backend.events.RoomEventService roomEventService;
 
     public MemberService(RoomMemberRepository memberRepository,
                          RoomMemberSkillRepository skillRepository,
@@ -47,7 +49,9 @@ public class MemberService {
                          RoomAccess roomAccess,
                          MemberMapper memberMapper,
                          ActivityLogger activityLogger,
-                         NotificationService notificationService) {
+                         NotificationService notificationService,
+                         com.hackathonos.backend.tasks.TaskRepository taskRepository,
+                         com.hackathonos.backend.events.RoomEventService roomEventService) {
         this.memberRepository = memberRepository;
         this.skillRepository = skillRepository;
         this.invitationRepository = invitationRepository;
@@ -57,6 +61,8 @@ public class MemberService {
         this.memberMapper = memberMapper;
         this.activityLogger = activityLogger;
         this.notificationService = notificationService;
+        this.taskRepository = taskRepository;
+        this.roomEventService = roomEventService;
     }
 
     /**
@@ -152,12 +158,20 @@ public class MemberService {
                 .orElseThrow(() -> new NotFoundException("MEMBER_NOT_FOUND", "Member not found"));
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
 
+        // Unassign member's tasks in this room (ideas stay untouched)
+        List<com.hackathonos.backend.tasks.Task> assignedTasks = taskRepository.findByRoomIdAndAssigneeId(roomId, targetUserId);
+        for (com.hackathonos.backend.tasks.Task t : assignedTasks) {
+            t.setAssigneeId(null);
+        }
+        taskRepository.saveAll(assignedTasks);
+
         skillRepository.deleteByMemberId(member.getId());
         memberRepository.delete(member);
 
         User targetUser = userRepository.findById(targetUserId).orElse(null);
         String name = targetUser != null ? targetUser.getName() : "Member";
         activityLogger.log(room, caller, "member_removed", "Removed " + name + " from the room");
+        roomEventService.recordEvent(roomId, "member.removed", "room_member", member.getId().toString(), caller.getId());
         if (targetUser != null) {
             notificationService.notifyUser(targetUser, room, NotificationType.MEMBER_LEFT, "Removed from room", "You were removed from " + room.getName());
         }
@@ -166,22 +180,36 @@ public class MemberService {
     /**
      * Removes the calling member from the room.
      * Blocks if caller is leader and room has other members, requiring transfer first.
+     * If caller is the sole member, archives the room.
      */
     @Transactional
     public void leaveRoom(User caller, UUID roomId) {
         RoomMember member = roomAccess.requireMember(roomId, caller);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
 
+        long count = memberRepository.countByRoomId(roomId);
         if ("LEADER".equalsIgnoreCase(member.getRole())) {
-            long count = memberRepository.countByRoomId(roomId);
             if (count > 1) {
                 throw new ConflictException("TRANSFER_LEADERSHIP_FIRST", "You must transfer leadership to another teammate before leaving the room.");
             }
+            // Sole member leaves: archive room
+            room.setArchivedAt(Instant.now());
+            room.setDeletedAt(Instant.now());
+            room.setUpdatedAt(Instant.now());
+            roomRepository.save(room);
         }
+
+        // Unassign caller's tasks
+        List<com.hackathonos.backend.tasks.Task> assignedTasks = taskRepository.findByRoomIdAndAssigneeId(roomId, caller.getId());
+        for (com.hackathonos.backend.tasks.Task t : assignedTasks) {
+            t.setAssigneeId(null);
+        }
+        taskRepository.saveAll(assignedTasks);
 
         skillRepository.deleteByMemberId(member.getId());
         memberRepository.delete(member);
         activityLogger.log(room, caller, "member_left", caller.getName() + " left the room");
+        roomEventService.recordEvent(roomId, "member.left", "room_member", member.getId().toString(), caller.getId());
     }
 
     /**

@@ -17,7 +17,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.scheduling.annotation.Scheduled;
+
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 @Service
@@ -61,13 +64,30 @@ public class NotificationService {
             return;
         }
 
+        String targetLink = linkPath != null ? linkPath : "/app";
+
+        // De-duplicate: collapse repeated notifications of the same type and entity within 10 minutes
+        Optional<Notification> recent = notificationRepository
+                .findTopByUserIdAndRoomIdAndTypeAndLinkPathAndCreatedAtAfterOrderByCreatedAtDesc(
+                        userId, roomId, type.name(), targetLink, Instant.now().minusSeconds(600));
+
+        if (recent.isPresent()) {
+            Notification existing = recent.get();
+            existing.setCount(existing.getCount() + 1);
+            existing.setTitle(title);
+            existing.setBody(body);
+            existing.setCreatedAt(Instant.now());
+            notificationRepository.save(existing);
+            return;
+        }
+
         Notification notification = new Notification(
                 userId,
                 roomId,
                 type.name(),
                 title,
                 body,
-                linkPath != null ? linkPath : "/app",
+                targetLink,
                 null
         );
         notificationRepository.save(notification);
@@ -116,8 +136,17 @@ public class NotificationService {
      * Used by room-specific activity panels.
      */
     public List<NotificationItemDto> listRoomNotifications(User user, UUID roomId) {
+        Room room = roomRepository.findById(roomId)
+                .orElseThrow(() -> new com.hackathonos.backend.common.error.NotFoundException("ROOM_NOT_FOUND", "Room not found"));
+        if (room.getDeletedAt() != null || room.getArchivedAt() != null) {
+            throw new com.hackathonos.backend.common.error.NotFoundException("ROOM_NOT_FOUND", "Room not found or has been archived");
+        }
+        if (!memberRepository.existsByRoomIdAndUserId(roomId, user.getId())) {
+            throw new com.hackathonos.backend.common.error.ForbiddenException("NOT_A_MEMBER", "You are not a member of this room");
+        }
+
         List<Notification> items = notificationRepository.findByUserIdAndRoomIdOrderByCreatedAtDesc(user.getId(), roomId);
-        String roomName = roomRepository.findById(roomId).map(Room::getName).orElse(null);
+        String roomName = room.getName();
 
         List<NotificationItemDto> dtos = new ArrayList<>();
         for (Notification n : items) {
@@ -168,6 +197,14 @@ public class NotificationService {
      */
     @Transactional
     public void markAllReadForRoom(User user, UUID roomId) {
+        Room room = roomRepository.findById(roomId)
+                .orElseThrow(() -> new com.hackathonos.backend.common.error.NotFoundException("ROOM_NOT_FOUND", "Room not found"));
+        if (room.getDeletedAt() != null || room.getArchivedAt() != null) {
+            throw new com.hackathonos.backend.common.error.NotFoundException("ROOM_NOT_FOUND", "Room not found or has been archived");
+        }
+        if (!memberRepository.existsByRoomIdAndUserId(roomId, user.getId())) {
+            throw new com.hackathonos.backend.common.error.ForbiddenException("NOT_A_MEMBER", "You are not a member of this room");
+        }
         notificationRepository.markAllReadForUserAndRoom(user.getId(), roomId, Instant.now());
     }
 
@@ -210,7 +247,26 @@ public class NotificationService {
         return map;
     }
 
+    @Scheduled(cron = "0 0 3 * * ?") // 3 AM daily cleanup
+    @Transactional
+    public void cleanupOldNotifications() {
+        Instant cutoff = Instant.now().minus(90, ChronoUnit.DAYS);
+        notificationRepository.deleteOlderThan(cutoff);
+    }
+
+    public Map<String, List<NotificationItemDto>> listGroupedNotifications(User user) {
+        List<Notification> items = notificationRepository.findByUserIdOrderByCreatedAtDesc(user.getId(), PageRequest.of(0, 60));
+        Map<UUID, String> roomNames = loadRoomNames(items);
+        Map<String, List<NotificationItemDto>> grouped = new LinkedHashMap<>();
+        for (Notification n : items) {
+            String roomName = n.getRoomId() != null ? roomNames.getOrDefault(n.getRoomId(), "General") : "General";
+            grouped.computeIfAbsent(roomName, k -> new ArrayList<>()).add(toDto(n, roomName));
+        }
+        return grouped;
+    }
+
     private NotificationItemDto toDto(Notification n, String roomName) {
+        String path = n.getLinkPath() != null ? n.getLinkPath() : "/app";
         return new NotificationItemDto(
                 n.getId(),
                 n.getRoomId(),
@@ -219,11 +275,14 @@ public class NotificationService {
                 n.getTitle(),
                 n.getBody(),
                 n.getBody(),
-                n.getLinkPath(),
-                n.getLinkPath(),
+                path,
+                path,
+                path,
+                n.getCount(),
                 n.getReadAt() != null,
                 n.getReadAt(),
                 n.getCreatedAt()
         );
     }
 }
+

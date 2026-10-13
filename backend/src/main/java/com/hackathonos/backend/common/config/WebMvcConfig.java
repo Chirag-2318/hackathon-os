@@ -26,10 +26,18 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     private final CurrentUser currentUser;
     private final AppProperties appProperties;
+    private final com.hackathonos.backend.common.security.RateLimitInterceptor rateLimitInterceptor;
 
-    public WebMvcConfig(CurrentUser currentUser, AppProperties appProperties) {
+    public WebMvcConfig(CurrentUser currentUser, AppProperties appProperties,
+                        com.hackathonos.backend.common.security.RateLimitInterceptor rateLimitInterceptor) {
         this.currentUser = currentUser;
         this.appProperties = appProperties;
+        this.rateLimitInterceptor = rateLimitInterceptor;
+    }
+
+    @Override
+    public void addInterceptors(org.springframework.web.servlet.config.annotation.InterceptorRegistry registry) {
+        registry.addInterceptor(rateLimitInterceptor);
     }
 
     @Override

@@ -1,5 +1,7 @@
 package com.hackathonos.backend.rooms.dto;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -17,7 +19,15 @@ public record CreateRoomRequest(
         String templateId,
 
         String eventStart,
-        String timezone
+        String timezone,
+
+        @Min(value = 1, message = "Duration must be at least 1 hour")
+        @Max(value = 168, message = "Duration cannot exceed 168 hours")
+        Integer durationHours,
+
+        String startsAt,
+        String freezeAt,
+        String endsAt
 ) {
     public CreateRoomRequest {
         if (templateId == null || templateId.isBlank()) {

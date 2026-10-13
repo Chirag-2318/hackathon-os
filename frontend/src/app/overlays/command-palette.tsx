@@ -44,16 +44,27 @@ import {
   RetroIcon,
   InviteIcon,
 } from '@/components/icons';
-import { Plus, KeyRound } from 'lucide-react';
+import { Plus, KeyRound, Sparkles, RefreshCw } from 'lucide-react';
 
 import * as React from 'react';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { apiFetch } from '@/api/client';
+import { resetTourHotspots } from '@/tour/api';
 import { FileText, BookOpen, Layers } from 'lucide-react';
 
 export function CommandPaletteOverlay() {
+  const queryClient = useQueryClient();
   const { isOpen, open, close, toggle } = useOverlay('command-palette');
   const createRoomModal = useOverlay('create-room-dialog');
   const joinCodeModal = useOverlay('join-code-dialog');
+
+  const { data: liveHackathonsData } = useQuery({
+    queryKey: ['live-hackathons'],
+    queryFn: () => apiFetch<{ items: Array<{ id: string; title: string; startsAt: string; endsAt: string; teamMax?: number; url: string }> }>('/api/v1/hackathons/live?limit=6'),
+    staleTime: 60_000,
+    enabled: isOpen,
+  });
   const inviteModal = useOverlay('invite-dialog');
 
   const navigate = useNavigate();
@@ -138,6 +149,32 @@ export function CommandPaletteOverlay() {
               </div>
               <span>Join with code</span>
             </CommandItem>
+
+            {liveHackathonsData?.items?.map((event) => (
+              <CommandItem
+                key={event.id}
+                value={`Plan: ${event.title}`}
+                onSelect={() =>
+                  handleSelect(() =>
+                    createRoomModal.open({
+                      prefill: {
+                        name: event.title.slice(0, 60),
+                        startsAt: event.startsAt,
+                        endsAt: event.endsAt,
+                        teamSize: event.teamMax,
+                      },
+                    })
+                  )
+                }
+                className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
+              >
+                <div className="size-6 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <Sparkles className="size-4" />
+                </div>
+                <span>Plan: {event.title}</span>
+              </CommandItem>
+            ))}
+
 
             {roomId && (
               <>

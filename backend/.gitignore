@@ -6,6 +6,9 @@ target/
 .env
 .env.*
 !.env.example
+uploads/
+**/uploads/
+
 
 ### STS ###
 .apt_generated

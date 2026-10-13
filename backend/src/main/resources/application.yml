@@ -1,5 +1,11 @@
 server:
   port: 8080
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${COOKIE_SECURE:false}
 
 spring:
   config:
@@ -9,7 +15,7 @@ spring:
   application:
     name: hackathon-os-backend
   profiles:
-    active: dev
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   threads:
     virtual:
       enabled: true
@@ -25,13 +31,12 @@ spring:
       ddl-auto: validate
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
     show-sql: false
 
   flyway:
     enabled: true
     clean-disabled: false
-
 
   security:
     oauth2:
@@ -40,15 +45,27 @@ spring:
           github:
             client-id: ${GITHUB_CLIENT_ID:dummy-github-client-id}
             client-secret: ${GITHUB_CLIENT_SECRET:dummy-github-client-secret}
+            scope:
+              - read:user
+              - user:email
           google:
             client-id: ${GOOGLE_CLIENT_ID:dummy-google-client-id}
             client-secret: ${GOOGLE_CLIENT_SECRET:dummy-google-client-secret}
+            scope:
+              - openid
+              - profile
+              - email
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
 
 springdoc:
   swagger-ui:
@@ -61,6 +78,8 @@ app:
   base-url: ${APP_BASE_URL:http://localhost:8080}
   upload-dir: ${APP_UPLOAD_DIR:./uploads}
   encryption-key: ${APP_ENCRYPTION_KEY:}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   github:
     token: ${APP_GITHUB_TOKEN:}
     use-fake: ${APP_GITHUB_USE_FAKE:false}
@@ -70,15 +89,35 @@ app:
     client-id: ${CANVA_CLIENT_ID:}
     client-secret: ${CANVA_CLIENT_SECRET:}
   ai:
+    base-url: ${AI_BASE_URL:${GROQ_BASE_URL:https://api.groq.com/openai/v1}}
+    api-key: ${AI_API_KEY:${GROQ_API_KEY:${XAI_API_KEY:}}}
+    model-default: ${AI_MODEL_DEFAULT:${GROQ_MODEL:openai/gpt-oss-120b}}
+    model-fast: ${AI_MODEL_FAST:${AI_MODEL_DEFAULT:${GROQ_MODEL:openai/gpt-oss-20b}}}
+    model-smart: ${AI_MODEL_SMART:${AI_MODEL_DEFAULT:${GROQ_MODEL:openai/gpt-oss-120b}}}
+    json-mode-supported: ${AI_JSON_MODE_SUPPORTED:true}
+    timeout-seconds: ${AI_TIMEOUT_SECONDS:45}
+    max-retries: ${AI_MAX_RETRIES:2}
+    max-concurrency: ${AI_MAX_CONCURRENCY:4}
+    user-rate-per-minute: ${AI_USER_RATE_PER_MINUTE:10}
+    enabled: ${AI_ENABLED:true}
+    stt:
+      base-url: ${STT_BASE_URL:${AI_BASE_URL:https://api.groq.com/openai/v1}}
+      api-key: ${STT_API_KEY:${AI_API_KEY:${GROQ_API_KEY:}}}
+      model: ${STT_MODEL:whisper-large-v3}
+    # Backward compatibility mappings for legacy references
     groq:
-      api-key: ${GROQ_API_KEY:${XAI_API_KEY:}}
-      base-url: ${GROQ_BASE_URL:${XAI_BASE_URL:https://api.groq.com/openai/v1}}
-      model: ${GROQ_MODEL:${XAI_MODEL:llama-3.3-70b-versatile}}
-      vision-model: ${GROQ_VISION_MODEL:${XAI_VISION_MODEL:llama-3.2-11b-vision-preview}}
-      max-tokens: ${GROQ_MAX_TOKENS:${XAI_MAX_TOKENS:6000}}
-    xai:
-      api-key: ${XAI_API_KEY:${GROQ_API_KEY:}}
-      base-url: ${XAI_BASE_URL:${GROQ_BASE_URL:https://api.groq.com/openai/v1}}
-      model: ${XAI_MODEL:${GROQ_MODEL:llama-3.3-70b-versatile}}
-      vision-model: ${XAI_VISION_MODEL:${GROQ_VISION_MODEL:llama-3.2-11b-vision-preview}}
-      max-tokens: ${XAI_MAX_TOKENS:${GROQ_MAX_TOKENS:6000}}
+      api-key: ${AI_API_KEY:${GROQ_API_KEY:}}
+      base-url: ${AI_BASE_URL:${GROQ_BASE_URL:https://api.groq.com/openai/v1}}
+      model: ${AI_MODEL_DEFAULT:${GROQ_MODEL:openai/gpt-oss-120b}}
+      vision-model: ${AI_MODEL_DEFAULT:${GROQ_MODEL:openai/gpt-oss-120b}}
+      max-tokens: 6000
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+server:
+  error:
+    include-stacktrace: never
+    include-message: always

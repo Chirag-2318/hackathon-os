@@ -22,6 +22,11 @@ export interface CurrentUserDto {
   techStack?: string[];
   onboardingCompleted?: boolean;
   onboardedAt?: string;
+  tourStatus?: 'NOT_STARTED' | 'SKIPPED' | 'COMPLETED';
+  tourPath?: 'LEADER' | 'MEMBER' | null;
+  tourVersion?: number;
+  tourCompletedAt?: string | null;
+  hotspotsSeen?: string[];
 }
 
 export const authApi = {

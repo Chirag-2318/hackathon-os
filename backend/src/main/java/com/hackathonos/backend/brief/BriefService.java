@@ -23,6 +23,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.*;
 
@@ -207,27 +208,34 @@ public class BriefService {
     }
 
     /**
-     * Ingests a PDF document up to 10MB, verifies %PDF bytes, extracts text via PDFBox, and saves file.
+     * Ingests a document (.pdf, .md, or .txt) up to 10MB, extracts text, and saves file.
      */
     @Transactional
     public BriefResponseDto setPdfSource(UUID roomId, MultipartFile file, User user) {
         roomAccess.requireLeader(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
-        if (room.getBuildStartedAt() != null || room.getPlanStartedAt() != null) {
-            throw new ConflictException("BRIEF_LOCKED", "Cannot modify brief source once planning or build has started");
+        if (room.getBuildStartedAt() != null) {
+            throw new ConflictException("BRIEF_LOCKED", "Cannot modify brief source once build phase has started");
         }
 
         byte[] bytes;
         try {
             bytes = file.getBytes();
         } catch (Exception e) {
-            throw new BadRequestException("NOT_A_PDF", "Could not read uploaded file");
+            throw new BadRequestException("READ_FAILED", "Could not read uploaded file");
         }
 
-        String rawText = pdfParser.extractText(bytes);
+        String origName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "document.txt";
+        String lowerName = origName.toLowerCase();
+        String rawText;
+        if (lowerName.endsWith(".pdf")) {
+            rawText = pdfParser.extractText(bytes);
+        } else {
+            rawText = new String(bytes, StandardCharsets.UTF_8);
+        }
 
         // Store file on disk
-        String randomName = UUID.randomUUID() + ".pdf";
+        String randomName = UUID.randomUUID() + "_" + origName;
         File roomUploadDir = new File(uploadDir, "rooms/" + roomId);
         if (!roomUploadDir.exists()) {
             roomUploadDir.mkdirs();
@@ -236,23 +244,23 @@ public class BriefService {
         try (FileOutputStream fos = new FileOutputStream(targetFile)) {
             fos.write(bytes);
         } catch (Exception e) {
-            throw new BadRequestException("UPLOAD_FAILED", "Failed to store PDF file");
+            throw new BadRequestException("UPLOAD_FAILED", "Failed to store uploaded file");
         }
 
         UploadedFile uploadedFile = new UploadedFile(
                 roomId,
                 user.getId(),
-                file.getOriginalFilename(),
-                file.getContentType() != null ? file.getContentType() : "application/pdf",
+                origName,
+                file.getContentType() != null ? file.getContentType() : "text/plain",
                 file.getSize(),
                 targetFile.getAbsolutePath(),
                 "brief"
         );
         uploadedFileRepository.save(uploadedFile);
 
-        Brief brief = briefRepository.findByRoomId(roomId).orElseGet(() -> new Brief(roomId, "pdf"));
-        brief.setSource("pdf");
-        brief.setFileName(file.getOriginalFilename());
+        Brief brief = briefRepository.findByRoomId(roomId).orElseGet(() -> new Brief(roomId, lowerName.endsWith(".pdf") ? "pdf" : "manual"));
+        brief.setSource(lowerName.endsWith(".pdf") ? "pdf" : "manual");
+        brief.setFileName(origName);
         brief.setRawText(rawText);
         brief.setConfirmed(false);
         brief.setConfirmedFields(null);
@@ -356,8 +364,8 @@ public class BriefService {
     public BriefResponseDto setTextSource(UUID roomId, String text, User user) {
         roomAccess.requireLeader(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
-        if (room.getBuildStartedAt() != null || room.getPlanStartedAt() != null) {
-            throw new ConflictException("BRIEF_LOCKED", "Cannot modify brief source once planning or build has started");
+        if (room.getBuildStartedAt() != null) {
+            throw new ConflictException("BRIEF_LOCKED", "Cannot modify brief source once build phase has started");
         }
         if (text == null || text.trim().length() < 50 || text.trim().length() > 200000) {
             throw new BadRequestException("INVALID_TEXT", "Text must be between 50 and 200000 characters");
@@ -500,6 +508,167 @@ public class BriefService {
         ExtractionPromptResponse promptResp = getExtractionPrompt(roomId, user);
         String completion = aiService.complete(user.getId(), promptResp.prompt());
         return validateExtractedJson(roomId, completion, user);
+    }
+
+    /**
+     * Extracts structured brief parameters using AI gateway from raw pasted event details.
+     */
+    @Transactional
+    public ExtractBriefResponseDto extractBrief(UUID roomId, String text, User user) {
+        roomAccess.requireMember(roomId, user);
+        boolean isLeader = roomAccess.isLeader(roomId, user.getId());
+
+        if (text == null || text.isBlank()) {
+            throw new BadRequestException("INVALID_TEXT", "Text cannot be empty");
+        }
+        if (text.length() > 20000) {
+            throw new BadRequestException("TEXT_TOO_LONG", "Text exceeds maximum 20,000 characters");
+        }
+
+        // Strip HTML
+        String stripped = text.replaceAll("<[^>]*>", " ").replaceAll("\\s+", " ").trim();
+        if (stripped.length() > 20000) {
+            stripped = stripped.substring(0, 20000);
+        }
+
+        String systemPrompt = """
+                You are an expert hackathon brief extractor.
+                From the provided announcement text, extract the exact hackathon parameters into valid JSON with these keys:
+                - "problemStatement": string or null
+                - "targetAudience": string or null
+                - "rubric": array of { "name": string, "weight": number } where weights sum to 100 (normalise if needed)
+                - "deadlines": array of { "label": string, "dateTime": string or null }
+                - "rules": array of strings
+                - "allowedTech": string or array of strings or null
+                - "forbiddenTech": string or array of strings or null
+                - "aiUsePolicy": "ALLOWED" | "RESTRICTED" | "FORBIDDEN" | "UNKNOWN"
+                - "deliverables": array of strings
+                - "tracks": array of strings
+                - "judgingFormat": string or null
+
+                Use null or empty arrays for anything not stated. Never invent values. Return ONLY valid JSON.
+                """;
+
+        ExtractBriefAiResult aiResult = aiService.json(
+                "brief.extract",
+                roomId,
+                user.getId(),
+                systemPrompt,
+                stripped,
+                ExtractBriefAiResult.class
+        );
+
+        // Normalize rubric weights to sum to 100
+        List<RubricCriterionDto> rubric = new ArrayList<>();
+        if (aiResult.rubric() != null && !aiResult.rubric().isEmpty()) {
+            int totalWeight = 0;
+            for (ExtractBriefAiResult.RubricItem item : aiResult.rubric()) {
+                String crit = item.name() != null ? item.name() : (item.criterion() != null ? item.criterion() : "");
+                int w = item.weight() != null ? Math.max(0, item.weight()) : 0;
+                totalWeight += w;
+                rubric.add(new RubricCriterionDto(crit, w));
+            }
+            if (totalWeight > 0 && totalWeight != 100) {
+                List<RubricCriterionDto> normalized = new ArrayList<>();
+                int currentSum = 0;
+                for (int i = 0; i < rubric.size(); i++) {
+                    var r = rubric.get(i);
+                    if (i == rubric.size() - 1) {
+                        normalized.add(new RubricCriterionDto(r.criterion(), Math.max(0, 100 - currentSum)));
+                    } else {
+                        int scaledW = (int) Math.round((r.weight() * 100.0) / totalWeight);
+                        currentSum += scaledW;
+                        normalized.add(new RubricCriterionDto(r.criterion(), scaledW));
+                    }
+                }
+                rubric = normalized;
+            }
+        }
+
+        // Map deadlines
+        String start = null;
+        String freeze = null;
+        String submission = null;
+        if (aiResult.deadlines() != null) {
+            for (ExtractBriefAiResult.DeadlineItem dl : aiResult.deadlines()) {
+                if (dl.dateTime() == null) continue;
+                String lbl = dl.label() != null ? dl.label().toLowerCase() : "";
+                if (start == null && (lbl.contains("start") || lbl.contains("kickoff") || lbl.contains("begin"))) {
+                    start = dl.dateTime();
+                } else if (freeze == null && lbl.contains("freeze")) {
+                    freeze = dl.dateTime();
+                } else if (submission == null && (lbl.contains("submit") || lbl.contains("end") || lbl.contains("deadline") || lbl.contains("due"))) {
+                    submission = dl.dateTime();
+                }
+            }
+        }
+        DeadlinesDto deadlinesDto = new DeadlinesDto(start, freeze, submission);
+
+        // Format rules/eligibility & techRules
+        String eligibility = aiResult.rules() != null ? String.join("\n", aiResult.rules()) : "";
+        StringBuilder trBuilder = new StringBuilder();
+        if (aiResult.allowedTech() != null) {
+            trBuilder.append("Allowed Tech: ").append(aiResult.allowedTech().toString()).append("\n");
+        }
+        if (aiResult.forbiddenTech() != null) {
+            trBuilder.append("Forbidden Tech: ").append(aiResult.forbiddenTech().toString());
+        }
+        String techRules = trBuilder.toString().trim();
+
+        String aiPolicy = aiResult.aiUsePolicy() != null ? aiResult.aiUsePolicy().trim().toUpperCase() : "UNKNOWN";
+        if (!List.of("ALLOWED", "RESTRICTED", "FORBIDDEN", "UNKNOWN").contains(aiPolicy)) {
+            aiPolicy = "UNKNOWN";
+        }
+
+        BriefFieldsDto fields = new BriefFieldsDto(
+                aiResult.problemStatement() != null ? aiResult.problemStatement() : "",
+                aiResult.targetAudience() != null ? aiResult.targetAudience() : "",
+                rubric,
+                deadlinesDto,
+                eligibility,
+                techRules,
+                aiPolicy,
+                aiResult.deliverables() != null ? aiResult.deliverables() : List.of(),
+                aiResult.tracks() != null ? aiResult.tracks() : List.of(),
+                aiResult.judgingFormat() != null ? aiResult.judgingFormat() : "",
+                List.of()
+        );
+
+        BriefResponseDto briefDto = null;
+        if (isLeader) {
+            Brief brief = briefRepository.findByRoomId(roomId)
+                    .orElseGet(() -> new Brief(roomId, "manual"));
+
+            brief.setRawText(text); // Saved as Source Text card
+            brief.setSource("manual");
+            brief.setProblemStatement(fields.problemStatement());
+            brief.setTargetAudience(fields.targetAudience());
+            brief.setDeadlines(briefMapper.toJson(fields.deadlines()));
+            brief.setEligibility(fields.eligibility());
+            brief.setTechRules(fields.techRules());
+            brief.setAiPolicy(fields.aiPolicy());
+            brief.setJudgingFormat(fields.judgingFormat());
+            brief.setDeliverables(briefMapper.toJson(fields.deliverables()));
+            brief.setTracksAndPrizes(briefMapper.toJson(fields.tracksAndPrizes()));
+            brief.setRisks(briefMapper.toJson(fields.risks()));
+
+            // Fill as unconfirmed - leader must confirm each one
+            brief.setConfirmed(false);
+            brief.setConfirmedFields(null);
+            brief.setUpdatedAt(Instant.now());
+            brief = briefRepository.save(brief);
+
+            rubricRepository.deleteByBriefId(brief.getId());
+            List<BriefRubricItem> savedRubric = new ArrayList<>();
+            int pos = 0;
+            for (RubricCriterionDto r : rubric) {
+                savedRubric.add(rubricRepository.save(new BriefRubricItem(brief.getId(), r.criterion(), r.weight(), pos++)));
+            }
+
+            briefDto = briefMapper.toDto(brief, savedRubric, true, true);
+        }
+
+        return new ExtractBriefResponseDto(isLeader, fields, briefDto, 9);
     }
 
     /**

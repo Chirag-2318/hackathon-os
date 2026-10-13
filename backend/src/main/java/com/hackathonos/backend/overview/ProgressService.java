@@ -84,7 +84,7 @@ public class ProgressService {
             if (!cursor.isAfter(nowTrunc)) {
                 long actualWeightAtT = 0;
                 for (Task t : tasks) {
-                    if ("DONE".equalsIgnoreCase(t.getStatus()) && t.getCompletedAt() != null && !t.getCompletedAt().isAfter(cursor)) {
+                    if (t.isConfirmedDone() && t.getCompletedAt() != null && !t.getCompletedAt().isAfter(cursor)) {
                         actualWeightAtT += (t.getEstimateMin() > 0 ? t.getEstimateMin() : 60);
                     }
                 }
@@ -99,7 +99,7 @@ public class ProgressService {
         long plannedNowWeight = 0;
         for (Task t : tasks) {
             int w = t.getEstimateMin() > 0 ? t.getEstimateMin() : 60;
-            if ("DONE".equalsIgnoreCase(t.getStatus())) {
+            if (t.isConfirmedDone()) {
                 actualNowWeight += w;
             }
             if (t.getDueAt() != null && !t.getDueAt().isAfter(now)) {

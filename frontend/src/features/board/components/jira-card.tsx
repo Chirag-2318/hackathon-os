@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
-  Flag, MoreHorizontal, Check, UserCheck, ShieldAlert, ArrowRight, CornerDownRight, GitBranch
+  Flag, MoreHorizontal, Check, UserCheck, ShieldAlert, ArrowRight, CornerDownRight, GitBranch, Lock, Unlock
 } from 'lucide-react';
 import type { Task, RoomMember, BoardPhase, TaskStatus } from '@/services/types';
 import {
@@ -67,13 +67,35 @@ export function JiraCard({
           e.preventDefault();
           return;
         }
-        setJustDragged(true);
         e.dataTransfer.setData('text/plain', task.id);
         e.dataTransfer.effectAllowed = 'move';
+
+        // Full card drag preview: full opacity, elevated shadow, 2deg tilt
+        const target = e.currentTarget as HTMLElement;
+        const clone = target.cloneNode(true) as HTMLElement;
+        clone.style.position = 'absolute';
+        clone.style.top = '-9999px';
+        clone.style.left = '-9999px';
+        clone.style.width = `${target.offsetWidth}px`;
+        clone.style.opacity = '1';
+        clone.style.transform = 'rotate(2deg)';
+        clone.style.boxShadow = '0 16px 32px rgba(16, 16, 20, 0.22)';
+        clone.style.pointerEvents = 'none';
+        clone.style.zIndex = '9999';
+        document.body.appendChild(clone);
+        const rect = target.getBoundingClientRect();
+        e.dataTransfer.setDragImage(clone, e.clientX - rect.left, e.clientY - rect.top);
+        setTimeout(() => {
+          if (document.body.contains(clone)) {
+            document.body.removeChild(clone);
+          }
+        }, 0);
+
+        setJustDragged(true);
         onDragStartTask?.(task.id);
       }}
       onDragEnd={() => {
-        setTimeout(() => setJustDragged(false), 100);
+        setJustDragged(false);
         onDragEndTask?.();
       }}
       onPointerDown={(e) => {
@@ -102,7 +124,9 @@ export function JiraCard({
         'hover:shadow-md hover:border-[#D6D6DA] dark:hover:border-border/80',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500',
         isBlocked && 'border-l-[3px] border-l-rose-500 dark:border-l-rose-500',
-        (isDragging || justDragged) && 'opacity-60 shadow-[0_12px_28px_rgba(16,16,20,0.18)] scale-[1.01]'
+        isDragging
+          ? 'opacity-30 border-dashed border-border bg-muted/40 shadow-none pointer-events-none'
+          : justDragged && 'opacity-60 shadow-md'
       )}
     >
       {/* Top row: Flag + BLOCKED Lozenge (only when relevant) */}
@@ -179,7 +203,7 @@ export function JiraCard({
         </div>
       </div>
 
-      {/* Labels Row: Role chip & PhaseChip */}
+      {/* Labels Row: Role chip & PhaseChip & Dependency/Review Chips */}
       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
         {task.role && (
           <span className="h-5 px-2 rounded-full text-[10px] font-medium bg-muted text-muted-foreground border border-border/40 inline-flex items-center">
@@ -187,6 +211,40 @@ export function JiraCard({
           </span>
         )}
         <PhaseChip name={phase.name} index={phaseIndex >= 0 ? phaseIndex : 0} />
+
+        {/* Blocked by chip (muted lock icon) */}
+        {task.isBlocked && (
+          <span className="h-5 px-2 rounded-full text-[10px] font-medium bg-muted text-muted-foreground border border-border/60 inline-flex items-center gap-1">
+            <Lock className="size-2.5" />
+            Blocked by {task.blockedByCount ?? (task.prerequisites?.filter(p => !p.confirmed).length || 1)}
+          </span>
+        )}
+
+        {/* Unblocks chip */}
+        {Boolean(task.unblocksCount && task.unblocksCount > 0) && (
+          <span className="h-5 px-2 rounded-full text-[10px] font-medium bg-muted/60 text-muted-foreground border border-border/40 inline-flex items-center gap-1">
+            <Unlock className="size-2.5" />
+            Unblocks {task.unblocksCount}
+          </span>
+        )}
+
+        {/* Done column leader confirmation chip */}
+        {isDone && (
+          task.reviewState === 'CONFIRMED' ? (
+            <span className="h-5 px-2 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 inline-flex items-center gap-1" title="Confirmed by leader">
+              <Check className="size-2.5 stroke-[2.5]" />
+              Confirmed
+            </span>
+          ) : task.reviewState === 'CHANGES_REQUESTED' ? (
+            <span className="h-5 px-2 rounded-full text-[10px] font-medium bg-rose-500/10 text-rose-600 border border-rose-500/20 inline-flex items-center gap-1">
+              Changes requested
+            </span>
+          ) : (
+            <span className="h-5 px-2 rounded-full text-[10px] font-medium bg-muted text-muted-foreground border border-border/60 inline-flex items-center gap-1">
+              Awaiting leader
+            </span>
+          )
+        )}
       </div>
 
       {/* Footer Row (Edge Aligned) */}

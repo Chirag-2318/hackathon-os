@@ -58,6 +58,20 @@ public class DocController {
                 .body(zipBytes);
     }
 
+    @GetMapping("/{docId}/download")
+    public ResponseEntity<byte[]> downloadDoc(
+            @PathVariable UUID roomId,
+            @PathVariable String docId,
+            @AuthenticationPrincipal User user
+    ) {
+        DocService.DocDownload download = docService.downloadDoc(roomId, docId, resolveUser(user));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + download.fileName() + "\"")
+                .contentType(MediaType.parseMediaType("text/markdown; charset=UTF-8"))
+                .body(download.content());
+    }
+
+
     @DeleteMapping("/comments/{commentId}")
     public ResponseEntity<Void> deleteComment(
             @PathVariable UUID roomId,
@@ -136,16 +150,22 @@ public class DocController {
         return docService.addComment(roomId, fileName, req.text(), resolveUser(user));
     }
 
-    @GetMapping("/{fileName}/download")
-    public ResponseEntity<byte[]> downloadDoc(
+    @PostMapping("/{fileName}/ai")
+    public DocAiResponse askDocAi(
             @PathVariable UUID roomId,
             @PathVariable String fileName,
+            @RequestBody DocAiRequest req,
             @AuthenticationPrincipal User user
     ) {
-        byte[] docBytes = docService.downloadDoc(roomId, fileName, resolveUser(user));
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
-                .contentType(MediaType.parseMediaType("text/markdown"))
-                .body(docBytes);
+        return docService.askDocAi(roomId, fileName, req, resolveUser(user));
+    }
+
+    @PostMapping("/ai")
+    public DocAiResponse askGeneralDocAi(
+            @PathVariable UUID roomId,
+            @RequestBody DocAiRequest req,
+            @AuthenticationPrincipal User user
+    ) {
+        return docService.askDocAi(roomId, "DECISIONS.md", req, resolveUser(user));
     }
 }

@@ -64,7 +64,12 @@ public class UserMapper {
                 user.getGoal(),
                 parseJsonList(user.getTechStack()),
                 user.isOnboardingCompleted(),
-                user.getOnboardedAt()
+                user.getOnboardedAt(),
+                user.getTourStatus(),
+                user.getTourPath(),
+                user.getTourVersion(),
+                user.getTourCompletedAt(),
+                parseJsonList(user.getHotspotsSeen())
         );
     }
 

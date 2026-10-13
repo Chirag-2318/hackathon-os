@@ -18,11 +18,28 @@ import java.util.UUID;
 public class PlanController {
 
     private final PlanService planService;
+    private final PlanPromptService planPromptService;
     private final CurrentUser currentUser;
 
-    public PlanController(PlanService planService, CurrentUser currentUser) {
+    public PlanController(PlanService planService, PlanPromptService planPromptService, CurrentUser currentUser) {
         this.planService = planService;
+        this.planPromptService = planPromptService;
         this.currentUser = currentUser;
+    }
+
+    @GetMapping("/plan/steps/{stepNumber}/prompt")
+    public PlanPromptResponseDto getStepPrompt(
+            @PathVariable UUID roomId,
+            @PathVariable int stepNumber) {
+        return planPromptService.getOrBuildPrompt(roomId, stepNumber, currentUser.get(), false);
+    }
+
+    @com.hackathonos.backend.common.security.RateLimited(key = "prompt_refresh", limit = 10, periodSeconds = 60)
+    @PostMapping("/plan/steps/{stepNumber}/prompt/refresh")
+    public PlanPromptResponseDto refreshStepPrompt(
+            @PathVariable UUID roomId,
+            @PathVariable int stepNumber) {
+        return planPromptService.getOrBuildPrompt(roomId, stepNumber, currentUser.get(), true);
     }
 
     @GetMapping("/plan")

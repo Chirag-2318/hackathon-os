@@ -12,6 +12,7 @@ public interface TaskDependencyRepository extends JpaRepository<TaskDependency, 
     List<TaskDependency> findByTaskId(UUID taskId);
     List<TaskDependency> findByTaskIdIn(Collection<UUID> taskIds);
     List<TaskDependency> findByDependsOnTaskId(UUID dependsOnTaskId);
+    List<TaskDependency> findByRoomId(UUID roomId);
     void deleteByTaskId(UUID taskId);
     void deleteByDependsOnTaskId(UUID dependsOnTaskId);
 }

@@ -14,6 +14,7 @@ import { CreateTaskModal } from './create-task-modal';
 import { TaskDetailModal } from './task-detail-modal';
 import { SegmentedControl, SegmentedControlItem } from '@/components/primitives/segmented-control';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState, ErrorState, celebrateAchievement } from '@/design';
 
 import { useCurrentUser } from '@/features/auth/useCurrentUser';
 
@@ -32,6 +33,8 @@ export function BoardPage() {
   const [hoursLeft, setHoursLeft] = useState<number | null>(null);
   const [currentPhaseName, setCurrentPhaseName] = useState<string>('Sprint');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<{ message: string; requestId?: string } | null>(null);
+  const [isLocked, setIsLocked] = useState<{ locked: boolean; reason: string } | null>(null);
 
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -48,6 +51,7 @@ export function BoardPage() {
       onlyMine: searchParams.get('mine') === 'true',
       blocked: searchParams.get('blocked') === 'true',
       dueSoon: searchParams.get('duesoon') === 'true',
+      needsConfirmation: searchParams.get('confirmation') === 'true',
       groupBy: (searchParams.get('groupby') as GroupByOption) || 'none',
     };
   }, [searchParams]);
@@ -85,8 +89,21 @@ export function BoardPage() {
             avatarUrl: m.avatarUrl,
           }));
       setMembers(resolvedMembers);
-    } catch (err) {
+      setError(null);
+      setIsLocked(null);
+    } catch (err: any) {
       console.error('Failed to load board data:', err);
+      if (err?.code === 'STAGE_LOCKED' || err?.message?.includes('STAGE_LOCKED') || err?.message?.includes('Plan must be validated')) {
+        setIsLocked({
+          locked: true,
+          reason: err?.message || 'Requires all 5 plan steps completed and validated before sprint board unlocks.',
+        });
+      } else if (!silent) {
+        setError({
+          message: err?.message || 'Failed to load sprint board tasks',
+          requestId: err?.requestId,
+        });
+      }
     } finally {
       if (!silent) setLoading(false);
     }
@@ -125,6 +142,7 @@ export function BoardPage() {
     if (next.onlyMine) nextParams.set('mine', 'true'); else nextParams.delete('mine');
     if (next.blocked) nextParams.set('blocked', 'true'); else nextParams.delete('blocked');
     if (next.dueSoon) nextParams.set('duesoon', 'true'); else nextParams.delete('duesoon');
+    if (next.needsConfirmation) nextParams.set('confirmation', 'true'); else nextParams.delete('confirmation');
     if (next.groupBy !== 'none') nextParams.set('groupby', next.groupBy); else nextParams.delete('groupby');
 
     setSearchParams(nextParams, { replace: true });
@@ -162,6 +180,17 @@ export function BoardPage() {
 
     try {
       await boardService.moveTask(roomId, taskId, newStatus, 0, (prevTask as any).version);
+
+      if (newStatus === 'done') {
+        const remainingOpen = tasks.filter(t => t.id !== taskId && t.status !== 'done').length;
+        const totalDoneBefore = tasks.filter(t => t.status === 'done').length;
+        if (totalDoneBefore === 0) {
+          celebrateAchievement('First task done! The momentum begins.');
+        } else if (remainingOpen === 0) {
+          celebrateAchievement('All tasks completed! Ready for the demo stage.');
+        }
+      }
+
       toast.success(`Moved ${prevTask.key} to ${newStatus === 'todo' ? 'To do' : newStatus === 'inprogress' ? 'In progress' : 'Done'}`, {
         action: {
           label: 'Undo',
@@ -302,6 +331,11 @@ export function BoardPage() {
         if (diffHours > 6) return false;
       }
 
+      // Needs confirmation filter
+      if (filterState.needsConfirmation && (task.status !== 'done' || task.reviewState !== 'AWAITING')) {
+        return false;
+      }
+
       return true;
     });
   }, [tasks, filterState, summaryFilter]);
@@ -352,6 +386,24 @@ export function BoardPage() {
       if (dragRef.current && dropTargetCol && roomId) {
         const draggedTask = dragRef.current.task;
         if (draggedTask.status !== dropTargetCol) {
+          const isMovingForward =
+            (draggedTask.status === 'todo' && (dropTargetCol === 'inprogress' || dropTargetCol === 'done')) ||
+            (draggedTask.status === 'inprogress' && dropTargetCol === 'done');
+
+          if (draggedTask.isBlocked && isMovingForward) {
+            const unconfirmed = (draggedTask.prerequisites || [])
+              .filter((p) => !p.confirmed)
+              .map((p) => p.title || p.key);
+            toast.error(
+              `You can't start this task yet. Finish: ${unconfirmed.length > 0 ? unconfirmed.join(', ') : 'prerequisites'}.`
+            );
+            dragRef.current = null;
+            setDraggingTaskId(null);
+            setDropTargetCol(null);
+            setDropIndex(null);
+            return;
+          }
+
           // If moving from TO DO to IN PROGRESS and unassigned, assign to current user
           let patch: Partial<Task> = { status: dropTargetCol };
           if (draggedTask.status === 'todo' && dropTargetCol === 'inprogress' && !draggedTask.assigneeId) {
@@ -374,7 +426,9 @@ export function BoardPage() {
             if (prev) {
               setTasks(ts => ts.map(t => t.id === draggedTask.id ? prev : t));
             }
-            if (err?.status === 409 || err?.message?.includes('TASK_CHANGED')) {
+            if (err?.code === 'TASK_BLOCKED' || err?.message?.includes('TASK_BLOCKED')) {
+              toast.error(err.message || 'Cannot advance task: prerequisites are not finished.');
+            } else if (err?.status === 409 || err?.message?.includes('TASK_CHANGED')) {
               toast.error('Task was updated by another team member. Reloading board...');
               loadData();
             } else if (err?.message?.includes('DEPENDENCY_CYCLE') || err?.code === 'DEPENDENCY_CYCLE') {
@@ -400,6 +454,12 @@ export function BoardPage() {
   const inProgressTasks = useMemo(() => filteredTasks.filter(t => t.status === 'inprogress'), [filteredTasks]);
   const doneTasks = useMemo(() => filteredTasks.filter(t => t.status === 'done'), [filteredTasks]);
 
+  const currentMember = members.find((m) => m.id === currentUserId) || members[0] || null;
+  const isLeader = currentMember?.role === 'leader';
+  const needsConfirmationCount = useMemo(() => {
+    return tasks.filter((t) => t.status === 'done' && t.reviewState === 'AWAITING').length;
+  }, [tasks]);
+
   return (
     <div className="flex flex-col gap-4 p-5 max-w-full min-h-[calc(100vh-64px)]">
       {/* 1 & 2: Header & Summary chips */}
@@ -418,23 +478,62 @@ export function BoardPage() {
       <BoardFilterBar
         members={members}
         currentUserId={currentUserId}
+        isLeader={isLeader}
+        needsConfirmationCount={needsConfirmationCount}
         filterState={filterState}
         onFilterChange={handleFilterChange}
         onClearFilters={handleClearFilters}
       />
 
       {/* Main Board / List View Area */}
-      {loading ? (
+      {isLocked?.locked ? (
+        <EmptyState
+          illustration="checklist"
+          headline="Board is Locked"
+          subtext={isLocked.reason}
+          primaryAction={{
+            label: 'Go to Plan Page',
+            onClick: () => navigate(`/app/room/${roomId}/plan`),
+          }}
+          secondaryAction={{
+            label: 'View Overview',
+            variant: 'secondary',
+            onClick: () => navigate(`/app/room/${roomId}/overview`),
+          }}
+          className="my-12 max-w-lg mx-auto"
+        />
+      ) : error ? (
+        <ErrorState
+          message={error.message}
+          requestId={error.requestId}
+          onRetry={() => {
+            setLoading(true);
+            loadData();
+          }}
+          className="my-8"
+        />
+      ) : loading ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Skeleton className="h-[500px] rounded-[16px]" />
           <Skeleton className="h-[500px] rounded-[16px]" />
           <Skeleton className="h-[500px] rounded-[16px]" />
         </div>
       ) : tasks.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-16 text-center rounded-[24px] border border-border bg-card shadow-xs">
-          <p className="text-base font-bold text-foreground">No tasks yet.</p>
-          <p className="text-xs text-muted-foreground mt-1">Tasks are created by your plan or by you.</p>
-        </div>
+        <EmptyState
+          illustration="clipboard"
+          headline="No tasks yet. Generate them from your plan."
+          subtext="Kickstart your sprint by generating actionable engineering tasks from your validated plan."
+          primaryAction={{
+            label: 'Generate from Plan',
+            onClick: () => navigate(`/app/room/${roomId}/plan`),
+          }}
+          secondaryAction={{
+            label: 'Create task manually',
+            variant: 'secondary',
+            onClick: () => setIsCreateModalOpen(true),
+          }}
+          className="my-8"
+        />
       ) : viewMode === 'list' ? (
         <BoardListView
           tasks={filteredTasks}

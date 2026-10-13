@@ -15,12 +15,15 @@ export interface BoardFilterState {
   onlyMine: boolean;
   blocked: boolean;
   dueSoon: boolean;
+  needsConfirmation?: boolean;
   groupBy: GroupByOption;
 }
 
 export interface BoardFilterBarProps {
   members: RoomMember[];
   currentUserId?: string;
+  isLeader?: boolean;
+  needsConfirmationCount?: number;
   filterState: BoardFilterState;
   onFilterChange: (updates: Partial<BoardFilterState>) => void;
   onClearFilters: () => void;
@@ -29,6 +32,8 @@ export interface BoardFilterBarProps {
 export function BoardFilterBar({
   members,
   currentUserId,
+  isLeader,
+  needsConfirmationCount,
   filterState,
   onFilterChange,
   onClearFilters,
@@ -39,6 +44,7 @@ export function BoardFilterBar({
     filterState.onlyMine ||
     filterState.blocked ||
     filterState.dueSoon ||
+    Boolean(filterState.needsConfirmation) ||
     filterState.groupBy !== 'none';
 
   return (
@@ -151,6 +157,28 @@ export function BoardFilterBar({
         >
           Due soon
         </button>
+
+        {isLeader && (
+          <button
+            onClick={() => onFilterChange({ needsConfirmation: !filterState.needsConfirmation })}
+            className={cn(
+              'h-7 px-3 rounded-full text-xs font-medium border transition-colors inline-flex items-center gap-1.5 select-none',
+              filterState.needsConfirmation
+                ? 'bg-amber-600 text-white border-amber-600'
+                : 'bg-background text-muted-foreground border-border hover:bg-muted'
+            )}
+          >
+            <span>Needs confirmation</span>
+            {typeof needsConfirmationCount === 'number' && (
+              <span className={cn(
+                'px-1.5 py-0.2 rounded-full text-[10px] font-bold',
+                filterState.needsConfirmation ? 'bg-white/20 text-white' : 'bg-muted text-foreground'
+              )}>
+                {needsConfirmationCount}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* Group By Dropdown */}

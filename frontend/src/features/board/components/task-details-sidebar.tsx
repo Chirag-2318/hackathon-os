@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronDown, User, Check, Clock } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { Task, RoomMember, BoardPhase, TaskStatus, TaskPriority } from '@/services/types';
 import { StatusLozenge, PriorityIcon, PhaseChip, EstimateChip, DueChip } from '@/features/build/ui';
 import { UserAvatar } from '@/components/ui/user-avatar';
@@ -76,18 +77,32 @@ export function TaskDetailsSidebar({
               <StatusLozenge status={task.status} showChevron />
             </button>
             {showStatusMenu && (
-              <div className="absolute right-0 top-7 z-50 p-1 rounded-xl bg-popover border border-border shadow-lg flex flex-col gap-1 w-36">
-                {(['todo', 'inprogress', 'done'] as const).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => handleSelectStatus(s)}
-                    className="w-full text-left p-1.5 rounded-lg hover:bg-muted text-xs flex items-center justify-between"
-                  >
-                    <StatusLozenge status={s} />
-                    {task.status === s && <Check className="size-3 text-muted-foreground ml-1" />}
-                  </button>
-                ))}
+              <div className="absolute right-0 top-7 z-50 p-1 rounded-xl bg-popover border border-border shadow-lg flex flex-col gap-1 w-44">
+                {(['todo', 'inprogress', 'done'] as const).map((s) => {
+                  const isForward =
+                    (task.status === 'todo' && (s === 'inprogress' || s === 'done')) ||
+                    (task.status === 'inprogress' && s === 'done');
+                  const isDisabled = Boolean(task.isBlocked && isForward);
+
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      disabled={isDisabled}
+                      onClick={() => !isDisabled && handleSelectStatus(s)}
+                      title={isDisabled ? 'Task is blocked by unfinished prerequisites' : undefined}
+                      className={cn(
+                        'w-full text-left p-1.5 rounded-lg text-xs flex items-center justify-between',
+                        isDisabled
+                          ? 'opacity-40 cursor-not-allowed'
+                          : 'hover:bg-muted cursor-pointer'
+                      )}
+                    >
+                      <StatusLozenge status={s} />
+                      {task.status === s && <Check className="size-3 text-muted-foreground ml-1" />}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

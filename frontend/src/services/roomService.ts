@@ -72,8 +72,24 @@ export const roomService = {
     return apiFetch<EventTemplate[]>('/api/v1/event-templates');
   },
 
-  async suggestName(): Promise<{ suggestion: string }> {
-    return apiFetch<{ suggestion: string }>('/api/v1/rooms/suggest-name');
+  async suggestName(): Promise<{ suggestion: string; names?: string[] }> {
+    try {
+      const res = await this.suggestRoomName();
+      return { suggestion: res.names?.[0] || 'Hackathon Sprint', names: res.names };
+    } catch {
+      return { suggestion: 'Hackathon Sprint', names: ['Hackathon Sprint'] };
+    }
+  },
+
+  async suggestRoomName(params?: {
+    description?: string;
+    templateId?: string;
+    currentName?: string;
+  }): Promise<{ names: string[] }> {
+    return apiFetch<{ names: string[] }>('/api/v1/ai/suggest-room-name', {
+      method: 'POST',
+      body: JSON.stringify(params || {}),
+    });
   },
 
   async getOverview(roomId: string): Promise<any> {
@@ -95,4 +111,48 @@ export const roomService = {
       method: 'POST',
     });
   },
+
+  async revokeJoinCode(roomId: string): Promise<void> {
+    return apiFetch<void>(`/api/v1/rooms/${roomId}/join-code/revoke`, {
+      method: 'POST',
+    });
+  },
+
+  async leaveRoom(roomId: string): Promise<void> {
+    return apiFetch<void>(`/api/v1/rooms/${roomId}/leave`, {
+      method: 'POST',
+    });
+  },
+
+  async archiveRoom(roomId: string): Promise<void> {
+    return apiFetch<void>(`/api/v1/rooms/${roomId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async removeMember(roomId: string, userId: string): Promise<void> {
+    return apiFetch<void>(`/api/v1/rooms/${roomId}/members/${userId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async transferLeadership(roomId: string, userId: string): Promise<any> {
+    return apiFetch<any>(`/api/v1/rooms/${roomId}/members/${userId}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role: 'LEADER' }),
+    });
+  },
+
+  async revertStage(roomId: string): Promise<any> {
+    return apiFetch<any>(`/api/v1/rooms/${roomId}/stage/revert`, {
+      method: 'POST',
+    });
+  },
+
+  async advanceStage(roomId: string, targetStage: string): Promise<any> {
+    return apiFetch<any>(`/api/v1/rooms/${roomId}/stage/advance?targetStage=${encodeURIComponent(targetStage)}`, {
+      method: 'POST',
+    });
+  },
 };
+

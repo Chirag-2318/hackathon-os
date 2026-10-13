@@ -7,6 +7,7 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/jetbrains-mono";
 @import "./components/icons/icons.css";
+@import "./design/tokens.css";
 
 /*
  * Phase 1 — Design Tokens (Section 5 of redesign spec)
@@ -980,5 +981,64 @@
     transition: none !important;
   }
 }
+
+/* ────────────────────────────────────────────────────────
+   AI Editor (@kobra/ai-editor) Custom Styles
+   ──────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s linear infinite;
+}
+
+.editor-mark[data-format="bold"] {
+  font-weight: 700;
+}
+
+.editor-mark[data-format="italic"] {
+  font-style: italic;
+}
+
+.editor-mark[data-format="underline"] {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.editor-mark[data-format="strikethrough"] {
+  text-decoration: line-through;
+}
+
+.editor-mark[data-format="code"] {
+  font-family: var(--font-mono, monospace);
+  background-color: var(--hover, rgba(120, 120, 120, 0.12));
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.editor-word {
+  display: inline;
+}
+
+.editor-orb {
+  display: inline-block;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 35%, #818cf8, #4f46e5);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+  transition: transform 0.3s ease;
+}
+
+.editor-orb[data-stirring] {
+  animation: spin 3s linear infinite;
+}
+
+::highlight(editor-ask) {
+  background-color: rgba(99, 102, 241, 0.25);
+  color: inherit;
+}
+
 
 

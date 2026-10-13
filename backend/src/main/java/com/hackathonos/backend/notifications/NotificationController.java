@@ -59,4 +59,17 @@ public class NotificationController {
         User user = currentUser.get();
         notificationService.markAllRead(user);
     }
+
+    @GetMapping("/api/v1/notifications/grouped")
+    public java.util.Map<String, List<NotificationItemDto>> getGroupedNotifications() {
+        User user = currentUser.get();
+        return notificationService.listGroupedNotifications(user);
+    }
+
+    @PatchMapping("/api/v1/notifications/{notificationId}/read")
+    public NotificationItemDto markReadGlobal(@PathVariable UUID notificationId) {
+        User user = currentUser.get();
+        return notificationService.markRead(user, notificationId);
+    }
 }
+

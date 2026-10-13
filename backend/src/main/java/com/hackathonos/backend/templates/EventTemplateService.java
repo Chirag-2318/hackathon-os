@@ -55,11 +55,17 @@ public class EventTemplateService {
                 });
     }
 
+    private List<EventTemplateDto> cachedTemplates;
+    private java.time.Instant cacheExpiry = java.time.Instant.MIN;
+
     /**
      * Returns all event templates ordered by sort_order.
-     * Used by the Create Room modal and Playbooks catalog to list preset formats.
+     * Cached in-memory with a 1-hour TTL.
      */
-    public List<EventTemplateDto> listAll() {
+    public synchronized List<EventTemplateDto> listAll() {
+        if (cachedTemplates != null && java.time.Instant.now().isBefore(cacheExpiry)) {
+            return cachedTemplates;
+        }
         List<EventTemplate> templates = templateRepository.findAllByOrderBySortOrderAsc();
         List<EventTemplateDto> dtos = new ArrayList<>();
         java.util.Set<String> seenNames = new java.util.HashSet<>();
@@ -68,8 +74,11 @@ public class EventTemplateService {
                 dtos.add(toDto(template));
             }
         }
+        cachedTemplates = dtos;
+        cacheExpiry = java.time.Instant.now().plusSeconds(3600);
         return dtos;
     }
+
 
     private EventTemplateDto toDto(EventTemplate template) {
         Object parsedPhases;

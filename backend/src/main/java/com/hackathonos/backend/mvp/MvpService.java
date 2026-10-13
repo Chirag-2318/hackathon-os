@@ -31,6 +31,7 @@ public class MvpService {
     private final ActivityLogger activityLogger;
     private final CheckpointService checkpointService;
     private final Clock clock;
+    private final com.hackathonos.backend.plan.PlanDownstreamSyncService syncService;
 
     public MvpService(
             MvpStateRepository mvpStateRepository,
@@ -43,7 +44,8 @@ public class MvpService {
             RoomAccess roomAccess,
             ActivityLogger activityLogger,
             CheckpointService checkpointService,
-            Clock clock
+            Clock clock,
+            com.hackathonos.backend.plan.PlanDownstreamSyncService syncService
     ) {
         this.mvpStateRepository = mvpStateRepository;
         this.flowStepRepository = flowStepRepository;
@@ -56,6 +58,7 @@ public class MvpService {
         this.activityLogger = activityLogger;
         this.checkpointService = checkpointService;
         this.clock = clock;
+        this.syncService = syncService;
     }
 
     /**
@@ -93,6 +96,7 @@ public class MvpService {
         mvpStateRepository.save(state);
 
         activityLogger.log(room, user, "MVP_UPDATED", "updated the MVP pitch");
+        syncService.reRenderMvpDocument(roomId, user);
         return buildResponse(roomId, state);
     }
 
@@ -125,6 +129,7 @@ public class MvpService {
         mvpStateRepository.save(state);
 
         activityLogger.log(room, user, "MVP_UPDATED", "updated the MVP core flow");
+        syncService.reRenderMvpDocument(roomId, user);
         return buildResponse(roomId, state);
     }
 
@@ -154,6 +159,7 @@ public class MvpService {
         mvpStateRepository.save(state);
 
         activityLogger.log(room, user, "MVP_UPDATED", "updated the MVP reality ledger");
+        syncService.reRenderMvpDocument(roomId, user);
         return buildResponse(roomId, state);
     }
 
@@ -176,6 +182,7 @@ public class MvpService {
 
         checkpointService.evaluate(room);
         activityLogger.log(room, user, "MVP_UPDATED", "updated MVP health checks");
+        syncService.reRenderMvpDocument(roomId, user);
         return buildResponse(roomId, state);
     }
 
@@ -199,6 +206,7 @@ public class MvpService {
         mvpStateRepository.save(state);
 
         activityLogger.log(room, user, "MVP_UPDATED", "updated the MVP judge prep");
+        syncService.reRenderMvpDocument(roomId, user);
         return buildResponse(roomId, state);
     }
 
@@ -228,6 +236,7 @@ public class MvpService {
         mvpStateRepository.save(state);
 
         activityLogger.log(room, user, "MVP_UPDATED", "updated the MVP cut list");
+        syncService.reRenderMvpDocument(roomId, user);
         return buildResponse(roomId, state);
     }
 

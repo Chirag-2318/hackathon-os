@@ -7,11 +7,15 @@ import { useMotionModeSync } from '@/shared/motion/use-motion-mode';
 
 const lastErrorToastTimes = new Map<string, number>();
 
-function showThrottledErrorToast(requestType: string, message: string) {
+function showThrottledErrorToast(requestType: string, rawMessage: string) {
   const now = Date.now();
   const lastTime = lastErrorToastTimes.get(requestType) ?? 0;
   if (now - lastTime >= 60_000) {
     lastErrorToastTimes.set(requestType, now);
+    let message = rawMessage;
+    if (message.includes('<!doctype') || message.includes('<!DOCTYPE') || message.includes("Unexpected token '<'")) {
+      message = 'Backend service is starting or unreachable. Please retry.';
+    }
     toast.error(message);
   }
 }

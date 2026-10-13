@@ -2,6 +2,7 @@ package com.hackathonos.backend.tasks;
 
 import com.hackathonos.backend.common.security.CurrentUser;
 import com.hackathonos.backend.tasks.dto.*;
+import com.hackathonos.backend.users.User;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -14,17 +15,35 @@ public class TaskController {
 
     private final TaskService taskService;
     private final CurrentUser currentUser;
+    private final com.hackathonos.backend.common.idempotency.IdempotencyService idempotencyService;
 
-    public TaskController(TaskService taskService, CurrentUser currentUser) {
+    public TaskController(TaskService taskService, CurrentUser currentUser, com.hackathonos.backend.common.idempotency.IdempotencyService idempotencyService) {
         this.taskService = taskService;
         this.currentUser = currentUser;
+        this.idempotencyService = idempotencyService;
     }
 
     @PostMapping("/tasks")
     @ResponseStatus(HttpStatus.CREATED)
-    public TaskDetailDto createTask(@PathVariable UUID roomId, @Valid @RequestBody CreateTaskRequest request) {
-        return taskService.createTask(roomId, currentUser.get(), request);
+    public TaskDetailDto createTask(
+            @PathVariable UUID roomId,
+            @Valid @RequestBody CreateTaskRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
+    ) {
+        User user = currentUser.get();
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            var cached = idempotencyService.get(user.getId(), idempotencyKey);
+            if (cached.isPresent() && cached.get() instanceof TaskDetailDto dto) {
+                return dto;
+            }
+        }
+        TaskDetailDto result = taskService.createTask(roomId, user, request);
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            idempotencyService.put(user.getId(), idempotencyKey, result);
+        }
+        return result;
     }
+
 
     @GetMapping("/tasks/{taskIdOrKey}")
     public TaskDetailDto getTask(@PathVariable UUID roomId, @PathVariable String taskIdOrKey) {
@@ -102,6 +121,20 @@ public class TaskController {
     @PutMapping("/tasks/{taskId}/dependencies")
     public TaskDetailDto updateDependencies(@PathVariable UUID roomId, @PathVariable UUID taskId, @RequestBody UpdateDependenciesRequest request) {
         return taskService.updateDependencies(roomId, currentUser.get(), taskId, request);
+    }
+
+    @PostMapping("/tasks/{taskId}/confirm")
+    public TaskDetailDto confirmTask(@PathVariable UUID roomId, @PathVariable UUID taskId) {
+        return taskService.confirmTask(roomId, currentUser.get(), taskId);
+    }
+
+    @PostMapping("/tasks/{taskId}/request-changes")
+    public TaskDetailDto requestChanges(
+            @PathVariable UUID roomId,
+            @PathVariable UUID taskId,
+            @RequestBody(required = false) RequestChangesRequest request
+    ) {
+        return taskService.requestChanges(roomId, currentUser.get(), taskId, request);
     }
 
     @DeleteMapping("/tasks/{taskId}")

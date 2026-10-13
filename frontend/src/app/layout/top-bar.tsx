@@ -15,6 +15,7 @@ import { KbdChip } from '@/shared/ui/primitives/KbdChip';
 import { SearchIcon } from '@/components/icons';
 import { NotificationsPopover } from './notifications-popover';
 import { AvatarMenuPopover } from './avatar-menu-popover';
+import { useLiveContext, LiveIndicator } from '@/design';
 
 interface PanelHeaderProps {
   inRoom?: boolean;
@@ -47,6 +48,7 @@ const SECTION_MAP: Record<string, { group?: string; label: string }> = {
   submission: { group: 'Present', label: 'Submission' },
   submit: { group: 'Present', label: 'Submission' },
   readiness: { group: 'Review', label: 'Readiness' },
+  summary: { group: 'Review', label: 'Summary' },
   retro: { group: 'Review', label: 'Retro' },
   notifications: { label: 'Notifications' },
 };
@@ -64,9 +66,12 @@ export function PanelHeader({ inRoom: inRoomProp = false, pageName = 'Home' }: P
   const subSection = roomMatch && roomMatch[2] ? roomMatch[2] : 'overview';
 
   const currentRoom = homeData?.roomList?.find((r: any) => r.id === roomId);
-  const roomTitle = currentRoom?.title ?? currentRoom?.name ?? 'Hackathon Workspace';
+  const roomTitle = (roomId === 'sample-room' ? 'Team Orbit' : undefined) ?? currentRoom?.title ?? currentRoom?.name ?? 'Hackathon Workspace';
 
   const sectionMeta = SECTION_MAP[subSection] || { label: subSection || 'Overview' };
+
+  const { isReconnecting } = useLiveContext();
+
 
   // Show bottom border only after panel has scrolled
   const panelRef = React.useRef<Element | null>(null);
@@ -91,16 +96,19 @@ export function PanelHeader({ inRoom: inRoomProp = false, pageName = 'Home' }: P
       )}
     >
       {/* Left: breadcrumb */}
-      <nav className="flex items-center gap-1 text-[13px] leading-[16px] font-medium shrink-0 min-w-0" aria-label="Breadcrumb" data-testid="header-breadcrumb">
+      <nav className="flex items-center gap-1.5 text-[13px] leading-[16px] font-medium shrink-0 min-w-0" aria-label="Breadcrumb" data-testid="header-breadcrumb">
         {inRoom ? (
           <>
             <Link to="/app/rooms" className="text-ink-2 hover:text-ink transition-colors shrink-0">
               My rooms
             </Link>
             <ChevronRight size={12} className="text-ink-3 shrink-0" />
-            <Link to={`/app/room/${roomId}/overview`} className="text-ink-2 hover:text-ink transition-colors truncate max-w-[180px]">
-              {roomTitle}
-            </Link>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Link to={`/app/room/${roomId}/overview`} className="text-ink-2 hover:text-ink transition-colors truncate max-w-[180px]">
+                {roomTitle}
+              </Link>
+              <LiveIndicator isReconnecting={isReconnecting} />
+            </div>
             {subSection !== 'overview' && sectionMeta.group && sectionMeta.group.toLowerCase() !== sectionMeta.label.toLowerCase() && (
               <>
                 <ChevronRight size={12} className="text-ink-3 shrink-0" />
@@ -136,6 +144,7 @@ export function PanelHeader({ inRoom: inRoomProp = false, pageName = 'Home' }: P
           )}
           aria-label="Search tasks, docs, rules (Ctrl K)"
           data-testid="header-search"
+          data-tour="search-box"
         >
           <SearchIcon size={14} className="shrink-0 text-ink-2 group-hover:text-ink" />
           <span className="flex-1 text-left truncate">Search tasks, docs, rules</span>

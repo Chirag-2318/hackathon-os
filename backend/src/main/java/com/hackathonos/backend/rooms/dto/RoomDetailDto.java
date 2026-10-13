@@ -1,6 +1,7 @@
 package com.hackathonos.backend.rooms.dto;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public record RoomDetailDto(
@@ -24,7 +25,14 @@ public record RoomDetailDto(
         Instant buildStartedAt,
         boolean archived,
         Instant serverNow,
-        Instant createdAt
+        Instant createdAt,
+        RoomClockDto clock,
+        boolean aiAllowed,
+        RoomProgressSummaryDto progressSummary,
+        List<StageUnlockRuleDto> unlockRules,
+        String workflowStage,
+        NextStepDto nextStep
 ) {
     public record StageDone(boolean brief, boolean ideate, boolean plan) {}
 }
+

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useOverlay } from '@/app/providers/overlay-store';
 import {
   Dialog,
@@ -10,171 +10,181 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { KeyRound, Loader2, Check } from 'lucide-react';
+import { KeyRound, Loader2, Check, ArrowRight, ShieldAlert } from 'lucide-react';
+import { UserAvatar } from '@/components/ui/user-avatar';
+import { apiFetch } from '@/design/api';
 
-import { apiClient } from '@/lib/apiClient';
+function formatCode(raw: string): string {
+  const clean = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+  if (clean.length > 4) {
+    return `${clean.slice(0, 4)}-${clean.slice(4)}`;
+  }
+  return clean;
+}
 
-async function submitJoinCode(code: string): Promise<{ success: boolean; roomId?: string; error?: string }> {
-  const data = await apiClient<{ roomId: string }>('/api/v1/rooms/join', {
-    method: 'POST',
-    body: JSON.stringify({ code }),
-  });
-  return { success: true, roomId: data.roomId };
+function unformatCode(formatted: string): string {
+  return formatted.replace(/[^A-Z0-9]/g, '').toUpperCase();
 }
 
 export function JoinCodeDialogOverlay() {
   const { isOpen, close } = useOverlay('join-code-dialog');
   const navigate = useNavigate();
 
-  const [digits, setDigits] = useState(['', '', '', '']);
+  const [rawInput, setRawInput] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-  const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
+  const [confirmedRoom, setConfirmedRoom] = useState<{ id: string; name: string; leader?: any } | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
-      setDigits(['', '', '', '']);
+      setRawInput('');
       setError(null);
-      setSuccess(false);
-      setTimeout(() => inputsRef.current[0]?.focus(), 50);
+      setConfirmedRoom(null);
+      setTimeout(() => inputRef.current?.focus(), 80);
     }
   }, [isOpen]);
 
   const joinMutation = useMutation({
-    mutationFn: submitJoinCode,
-    onSuccess: (result) => {
-      if (result.success && result.roomId) {
-        setSuccess(true);
-        setTimeout(() => {
+    mutationFn: async (code: string) => {
+      return apiFetch<{ roomId: string; roomName?: string }>('/api/v1/rooms/join', {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+      });
+    },
+    onSuccess: async (result) => {
+      if (result?.roomId) {
+        // Fetch room detail to show leader avatar and confirm step before final entry
+        try {
+          const detail = await apiFetch<any>(`/api/v1/rooms/${result.roomId}/overview`);
+          setConfirmedRoom({
+            id: result.roomId,
+            name: detail.name || detail.room?.name || 'Hackathon Room',
+            leader: detail.leader || detail.team?.find((m: any) => m.role === 'LEADER') || { username: 'leader', name: 'Team Leader' },
+          });
+        } catch {
+          // If overview fails or permissions check, go straight to room
           close();
           navigate(`/app/room/${result.roomId}/overview`);
-        }, 800);
-      } else {
-        setError(result.error ?? 'Invalid room code');
+        }
       }
     },
     onError: (err: any) => {
-      if (err?.code === 'INVALID_CODE') {
-        setError('No room found with that code');
-      } else if (err?.code === 'TOO_MANY_ATTEMPTS') {
-        setError(err.message || 'Too many attempts. Please wait a moment and try again.');
-      } else {
-        setError(err?.message ?? 'Invalid room code. Please check and try again.');
-      }
+      setError(err?.message || 'Invalid join code. Please check with your leader or try again.');
     },
   });
 
-  const codeString = digits.join('');
-
-  const handleChange = (index: number, value: string) => {
-    const char = value.slice(-1).toUpperCase();
-    const next = [...digits];
-    next[index] = char;
-    setDigits(next);
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatCode(e.target.value);
+    setRawInput(formatted);
     setError(null);
 
-    // Auto-advance
-    if (char && index < 3) {
-      inputsRef.current[index + 1]?.focus();
+    const clean = unformatCode(formatted);
+    if (clean.length === 8 && !joinMutation.isPending && !confirmedRoom) {
+      joinMutation.mutate(clean);
     }
   };
 
-  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !digits[index] && index > 0) {
-      inputsRef.current[index - 1]?.focus();
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      if (codeString.length === 4 && !joinMutation.isPending) {
-        joinMutation.mutate(codeString);
-      }
-    }
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData('text').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (!pasted) return;
-
-    const newDigits = ['', '', '', ''];
-    for (let i = 0; i < 4; i++) {
-      newDigits[i] = pasted[i] || '';
-    }
-    setDigits(newDigits);
-    setError(null);
-
-    const nextIndex = Math.min(pasted.length, 3);
-    inputsRef.current[nextIndex]?.focus();
-
-    if (pasted.length >= 4) {
-      joinMutation.mutate(newDigits.join(''));
+  const handleConfirmEnter = () => {
+    if (confirmedRoom) {
+      close();
+      navigate(`/app/room/${confirmedRoom.id}/overview`);
     }
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={(openState) => { if (!openState) close(); }}>
-      <DialogContent className="sm:max-w-[400px] rounded-[var(--r-card)] bg-surface border border-border p-6 text-center">
+      <DialogContent className="sm:max-w-[420px] rounded-[22px] bg-card border border-border p-6 text-center text-ink shadow-xl font-[var(--font-inter)]">
         <DialogHeader className="flex flex-col items-center mb-4">
-          <div className="size-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-2">
+          <div className="size-11 rounded-2xl bg-blue-500/10 text-blue-600 flex items-center justify-center mb-2.5">
             <KeyRound className="size-5" />
           </div>
-          <DialogTitle className="text-xl font-bold text-ink">Join with code</DialogTitle>
-          <DialogDescription className="text-sm text-ink-2">
-            Enter the 4-character room access code shared by your team leader.
+          <DialogTitle className="text-lg font-bold text-ink">
+            {confirmedRoom ? 'Join Room' : 'Enter room code'}
+          </DialogTitle>
+          <DialogDescription className="text-xs text-ink-2">
+            {confirmedRoom
+              ? 'You have been verified. Confirm to enter this team workspace.'
+              : 'Enter the 8-character code provided by your hackathon team leader.'}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col items-center gap-6 py-2">
-          {/* 4-box code input */}
-          <div className="flex items-center justify-center gap-3" onPaste={handlePaste}>
-            {digits.map((digit, i) => (
+        {!confirmedRoom ? (
+          <div className="flex flex-col items-center gap-5 py-2">
+            <div className="w-full">
               <input
-                key={i}
-                ref={(el) => { inputsRef.current[i] = el; }}
+                ref={inputRef}
                 type="text"
-                maxLength={1}
-                value={digit}
-                onChange={(e) => handleChange(i, e.target.value)}
-                onKeyDown={(e) => handleKeyDown(i, e)}
-                disabled={joinMutation.isPending || success}
-                className={`size-14 text-center text-2xl font-bold uppercase rounded-[var(--r-control)] border-2 bg-card text-ink transition-all outline-none ${
-                  error
-                    ? 'border-danger focus:border-danger ring-danger/20'
-                    : success
-                    ? 'border-success-fg bg-success-bg/20'
-                    : 'border-border focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10'
-                }`}
-                aria-label={`Code digit ${i + 1}`}
+                placeholder="XXXX-XXXX"
+                value={rawInput}
+                onChange={handleInputChange}
+                disabled={joinMutation.isPending}
+                maxLength={9} // 8 chars + 1 hyphen
+                className="w-full h-14 text-center text-2xl font-mono font-bold tracking-widest uppercase rounded-[14px] border-2 bg-surface text-ink transition-all outline-none border-border focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                aria-label="8-character room code"
               />
-            ))}
-          </div>
+              <p className="text-[11px] text-ink-3 mt-2">
+                Auto-submits when 8 characters are entered
+              </p>
+            </div>
 
-          {error && <p className="text-xs text-danger font-medium">{error}</p>}
-          {success && (
-            <p className="text-xs text-success-fg font-medium flex items-center gap-1">
-              <Check className="size-3.5" /> Room found! Entering room…
-            </p>
-          )}
+            {error && (
+              <div className="flex items-center gap-1.5 p-2 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-300">
+                <ShieldAlert className="size-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
 
-          <div className="flex w-full items-center justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={close} disabled={joinMutation.isPending}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => joinMutation.mutate(codeString)}
-              disabled={joinMutation.isPending || codeString.length < 4 || success}
-              className="bg-ink text-white hover:bg-ink/90 font-medium"
-            >
-              {joinMutation.isPending ? (
-                <>
-                  <Loader2 className="size-4 animate-spin mr-2" />
-                  Joining…
-                </>
-              ) : (
-                'Join Room'
-              )}
-            </Button>
+            {joinMutation.isPending && (
+              <div className="flex items-center gap-2 text-xs text-blue-600 font-medium">
+                <Loader2 className="size-4 animate-spin" />
+                <span>Verifying room code…</span>
+              </div>
+            )}
+
+            <div className="flex w-full items-center justify-end gap-2 pt-2 border-t border-border/50">
+              <Button variant="outline" size="sm" onClick={close} disabled={joinMutation.isPending}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => joinMutation.mutate(unformatCode(rawInput))}
+                disabled={joinMutation.isPending || unformatCode(rawInput).length < 8}
+                className="bg-ink text-white hover:bg-ink/90 font-medium"
+              >
+                Join
+              </Button>
+            </div>
           </div>
-        </div>
+        ) : (
+          /* Confirm step showing room name and leader avatar */
+          <div className="flex flex-col items-center gap-5 py-2 animate-in zoom-in-95 duration-200">
+            <div className="w-full p-4 rounded-2xl bg-surface border border-border flex flex-col items-center text-center gap-3">
+              <div className="ring-4 ring-white dark:ring-zinc-900 rounded-full">
+                <UserAvatar user={confirmedRoom.leader} size={48} />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-ink">{confirmedRoom.name}</h4>
+                <p className="text-xs text-ink-2 mt-0.5">
+                  Led by <span className="font-semibold">{confirmedRoom.leader?.displayName || confirmedRoom.leader?.name || confirmedRoom.leader?.username || '@leader'}</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex w-full items-center justify-between gap-2 pt-2 border-t border-border/50">
+              <Button variant="outline" size="sm" onClick={() => setConfirmedRoom(null)}>
+                Change code
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleConfirmEnter}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium gap-1.5"
+              >
+                <span>Enter Workspace</span>
+                <ArrowRight className="size-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

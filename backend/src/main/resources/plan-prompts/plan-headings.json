@@ -1,0 +1,133 @@
+{
+  "PRD.md": {
+    "h1Prefix": "PRD:",
+    "h2Headings": [
+      "Identity",
+      "Problem and target user",
+      "Rubric strategy",
+      "Core scenarios",
+      "Functional requirements",
+      "Non-functional requirements",
+      "User flow",
+      "Out of scope",
+      "Demo success criteria",
+      "Assumptions and risks",
+      "Reality check"
+    ],
+    "requiresRealityCheck": true
+  },
+  "MVP.md": {
+    "h1Prefix": "MVP:",
+    "h2Headings": [
+      "Core flow",
+      "Wow moment",
+      "Reality ledger",
+      "Scope",
+      "Cut list",
+      "Health checklist",
+      "What breaks first",
+      "Differentiation"
+    ],
+    "requiresRealityCheck": false
+  },
+  "TECH_STACK.md": {
+    "h1Prefix": "Tech stack:",
+    "h2Headings": [
+      "Decision summary",
+      "New-tech budget",
+      "Rejected options",
+      "Cost and limits",
+      "Accounts and setup",
+      "Rule compliance",
+      "Reality check"
+    ],
+    "requiresRealityCheck": true
+  },
+  "ARCHITECTURE.md": {
+    "h1Prefix": "Architecture:",
+    "h2Headings": [
+      "Overview",
+      "System diagram",
+      "Core flow sequence",
+      "Data model",
+      "Components",
+      "API contract",
+      "External services and fallbacks",
+      "Repository and branches",
+      "Environments and demo setup",
+      "Security and secrets",
+      "Failure modes",
+      "Reality check"
+    ],
+    "requiresRealityCheck": true
+  },
+  "PHASES.md": {
+    "h1Prefix": "Phases:",
+    "h2Headings": [
+      "Clock model",
+      "Phases",
+      "Checkpoints",
+      "Feature freeze rules",
+      "Workload and energy plan",
+      "Risk windows",
+      "Buffer and submission plan",
+      "Reality check"
+    ],
+    "requiresRealityCheck": true
+  },
+  "DESIGN.md": {
+    "h1Prefix": "Design:",
+    "h2Headings": [
+      "Design intent",
+      "Feel and anti-patterns",
+      "Design tokens",
+      "Screen inventory",
+      "Key screens",
+      "Component list",
+      "Interaction and motion",
+      "Accessibility and responsive",
+      "Demo polish",
+      "Build instructions for the coding agent",
+      "Reality check"
+    ],
+    "requiresRealityCheck": true
+  },
+  "TASKS.md": {
+    "h1Prefix": "Tasks:",
+    "h2Headings": [
+      "Tasks",
+      "Critical path",
+      "Workload summary",
+      "Assignment notes",
+      "Reality check"
+    ],
+    "requiresRealityCheck": true
+  },
+  "DEMO_SCRIPT.md": {
+    "h1Prefix": "Demo script:",
+    "h2Headings": [
+      "Format and limits",
+      "Roles on stage",
+      "Script",
+      "Demo insurance",
+      "Demo data and setup",
+      "Video shot list",
+      "Submission text",
+      "Rehearsal plan",
+      "Reality check"
+    ],
+    "requiresRealityCheck": true
+  },
+  "QNA.md": {
+    "h1Prefix": "Judge Q&A:",
+    "h2Headings": [
+      "How to use this",
+      "Questions",
+      "Code defense drills",
+      "Hard truths",
+      "Questions to ask the judges",
+      "Reality check"
+    ],
+    "requiresRealityCheck": true
+  }
+}

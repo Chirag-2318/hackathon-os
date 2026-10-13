@@ -9,6 +9,9 @@ import { cn } from 'cn';
 import { Mail, GitBranch, Users, Plus } from 'lucide-react';
 
 import { useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '@/design/api';
+import { queryKeys } from '@/design/queries';
 
 import { useOverlay } from '@/app/providers/overlay-store';
 import { UserAvatar } from '@/components/ui/user-avatar';
@@ -19,6 +22,13 @@ export function TeamPage() {
   const { data, isLoading } = useTeam(roomId || '');
   const [selectedMemberId, setSelectedMemberId] = React.useState<string | null>(null);
   const inviteModal = useOverlay('invite-dialog');
+
+  const { data: onlineMembers = [] } = useQuery({
+    queryKey: queryKeys.rooms.presence(roomId || ''),
+    queryFn: () => apiFetch<any[]>(`/api/v1/rooms/${roomId}/presence`),
+    enabled: Boolean(roomId),
+    refetchInterval: 15000,
+  });
 
   const isLeader = true; // Hardcoded mock role for this phase
 
@@ -98,6 +108,13 @@ export function TeamPage() {
               const memInitials = member.initials || (member.name ? member.name.slice(0, 2).toUpperCase() : member.avatarId || 'ME');
               const memName = member.name || member.fullName || member.displayName || 'Member';
 
+              const isMemberOnline = onlineMembers.some(
+                (om: any) =>
+                  (om.id && (om.id === memId || om.id === member.id)) ||
+                  (om.userId && (om.userId === memId || om.userId === member.userId)) ||
+                  (om.username && om.username === member.username)
+              );
+
               return (
                 <button
                   key={memId}
@@ -107,8 +124,14 @@ export function TeamPage() {
                     isSelected ? "bg-lav-100 border-lav-600" : "border-transparent hover:bg-hover-row"
                   )}
                 >
-                  <div className="w-10 h-10 rounded-full overflow-hidden shrink-0">
+                  <div className="relative w-10 h-10 shrink-0">
                     <UserAvatar user={member} size={40} />
+                    {isMemberOnline && (
+                      <span
+                        className="absolute bottom-0 right-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-zinc-900"
+                        title="Online now"
+                      />
+                    )}
                   </div>
                   <div className="flex flex-col flex-1 min-w-0">
                     <span className="text-body-strong text-ink truncate">
@@ -131,8 +154,19 @@ export function TeamPage() {
         {selectedMember && (
           <div className="flex flex-col gap-6 bg-surface-raised rounded-card border border-border p-6 shadow-e0">
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full overflow-hidden shrink-0">
+              <div className="relative w-14 h-14 shrink-0">
                 <UserAvatar user={selectedMember} size={56} />
+                {onlineMembers.some(
+                  (om: any) =>
+                    (om.id && (om.id === selectedMember.id || om.id === selectedMember.userId)) ||
+                    (om.userId && (om.userId === selectedMember.id || om.userId === selectedMember.userId)) ||
+                    (om.username && om.username === selectedMember.username)
+                ) && (
+                  <span
+                    className="absolute bottom-0 right-0 size-3 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-zinc-900"
+                    title="Online now"
+                  />
+                )}
               </div>
               <div className="flex flex-col min-w-0">
                 <h1 className="text-h3 truncate">

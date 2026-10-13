@@ -1,0 +1,7 @@
+-- V16: Product Tour tracking fields
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS tour_status VARCHAR(20) NOT NULL DEFAULT 'NOT_STARTED',
+    ADD COLUMN IF NOT EXISTS tour_path VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS tour_version INT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS tour_completed_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS hotspots_seen JSONB NOT NULL DEFAULT '[]'::jsonb;

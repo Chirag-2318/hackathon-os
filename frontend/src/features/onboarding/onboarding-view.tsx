@@ -11,7 +11,6 @@ import { StepRoleCards } from './components/step-role-cards';
 import { StepMilesTrack, type ExperienceLevel } from './components/step-miles-track';
 import { StepGoalCards, type UserGoal } from './components/step-goal-cards';
 import { StepTechStack } from './components/step-tech-stack';
-import { ConfettiCanvas } from './components/confetti';
 import { getPresetAvatarUrl } from './preset-avatars';
 import { onboardingApi } from './api';
 
@@ -39,7 +38,6 @@ export function OnboardingView() {
   // Reveal state
   const [isFlipped, setIsFlipped] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
-  const [showConfetti, setShowConfetti] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -87,7 +85,6 @@ export function OnboardingView() {
   useEffect(() => {
     if (step === 7) {
       setIsPrinting(true);
-      setShowConfetti(true);
       const flipTimer1 = setTimeout(() => setIsFlipped(true), 900);
       const flipTimer2 = setTimeout(() => setIsFlipped(false), 2400);
       const printTimer = setTimeout(() => setIsPrinting(false), 1400);
@@ -175,8 +172,6 @@ export function OnboardingView() {
                           radial-gradient(at 100% 100%, rgba(245, 158, 11, 0.03) 0px, transparent 50%)`,
       }}
     >
-      {showConfetti && <ConfettiCanvas />}
-
       {/* ── Top Bar: Back arrow + 6 Dash segments + Skip button ── */}
       <header className="h-16 px-6 sm:px-12 flex items-center justify-between shrink-0 select-none z-20">
         <div className="flex items-center gap-4">

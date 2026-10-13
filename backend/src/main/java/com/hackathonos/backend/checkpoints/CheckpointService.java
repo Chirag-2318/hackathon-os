@@ -33,6 +33,7 @@ public class CheckpointService {
     private final com.hackathonos.backend.submission.SubmissionRepository submissionRepository;
     private final RoomAccess roomAccess;
     private final Clock clock;
+    private final com.hackathonos.backend.events.RoomEventService roomEventService;
 
     public CheckpointService(
             RoomCheckpointRepository checkpointRepository,
@@ -42,7 +43,8 @@ public class CheckpointService {
             com.hackathonos.backend.demo.DemoMediaRepository demoMediaRepository,
             com.hackathonos.backend.submission.SubmissionRepository submissionRepository,
             RoomAccess roomAccess,
-            Clock clock
+            Clock clock,
+            com.hackathonos.backend.events.RoomEventService roomEventService
     ) {
         this.checkpointRepository = checkpointRepository;
         this.phaseRepository = phaseRepository;
@@ -52,6 +54,7 @@ public class CheckpointService {
         this.submissionRepository = submissionRepository;
         this.roomAccess = roomAccess;
         this.clock = clock;
+        this.roomEventService = roomEventService;
     }
 
     /**
@@ -209,6 +212,7 @@ public class CheckpointService {
         cp.setPassedBy(pass ? user.getId() : null);
         cp.setAutoPassed(false);
         checkpointRepository.save(cp);
+        roomEventService.recordEvent(roomId, "checkpoint.toggled", "checkpoint", cp.getId().toString(), user.getId());
 
         return toDto(cp, "passed");
     }

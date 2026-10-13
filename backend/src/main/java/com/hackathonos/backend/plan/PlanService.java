@@ -45,11 +45,11 @@ public class PlanService {
 
     public static final List<String> STEP_KEYS = List.of("prd", "tech", "phases", "tasks", "demo");
     public static final List<String> STEP_TITLES = List.of(
-            "PRD & MVP",
+            "PRD and MVP",
             "Tech stack and architecture",
-            "Phases",
+            "Phases and design",
             "Tasks",
-            "Demo & Q&A"
+            "Demo and Q&A"
     );
 
     private final PlanStepRepository stepRepository;
@@ -77,6 +77,11 @@ public class PlanService {
     private final AiService aiService;
     private final ObjectMapper objectMapper;
     private final com.hackathonos.backend.checkpoints.CheckpointService checkpointService;
+    private final com.hackathonos.backend.events.RoomEventService roomEventService;
+    private final PlanPromptService planPromptService;
+    private final PlanDocumentParser planDocumentParser;
+    private final PlanDownstreamSyncService planDownstreamSyncService;
+    private final com.hackathonos.backend.rooms.RoomService roomService;
 
     public PlanService(
             PlanStepRepository stepRepository,
@@ -103,7 +108,12 @@ public class PlanService {
             IdeasService ideasService,
             AiService aiService,
             ObjectMapper objectMapper,
-            com.hackathonos.backend.checkpoints.CheckpointService checkpointService) {
+            com.hackathonos.backend.checkpoints.CheckpointService checkpointService,
+            com.hackathonos.backend.events.RoomEventService roomEventService,
+            PlanPromptService planPromptService,
+            PlanDocumentParser planDocumentParser,
+            PlanDownstreamSyncService planDownstreamSyncService,
+            com.hackathonos.backend.rooms.RoomService roomService) {
         this.stepRepository = stepRepository;
         this.phaseRepository = phaseRepository;
         this.docRepository = docRepository;
@@ -129,6 +139,11 @@ public class PlanService {
         this.aiService = aiService;
         this.objectMapper = objectMapper;
         this.checkpointService = checkpointService;
+        this.roomEventService = roomEventService;
+        this.planPromptService = planPromptService;
+        this.planDocumentParser = planDocumentParser;
+        this.planDownstreamSyncService = planDownstreamSyncService;
+        this.roomService = roomService;
     }
 
     /**
@@ -220,12 +235,20 @@ public class PlanService {
             List<String> errors = parseStringList(step != null ? step.getErrors() : null);
             List<String> warnings = parseStringList(step != null ? step.getWarnings() : null);
 
-            String promptText = promptBuilder.buildPromptForStep(
+            PlanPromptResponseDto promptResp = null;
+            try {
+                promptResp = planPromptService.getOrAssemblePrompt(roomId, i + 1, false, user);
+            } catch (Exception ignored) {}
+
+            String promptText = promptResp != null ? promptResp.prompt() : promptBuilder.buildPromptForStep(
                     key, room, brief, rubric, members, memberUsers,
                     memberSkillsMap, approvedIdeas, authorNamesMap, validatedAnswers
             );
+            String mode = promptResp != null ? promptResp.mode() : "BALANCED";
+            String ideaVerdict = promptResp != null ? promptResp.ideaVerdict() : null;
+            boolean stale = promptResp != null && promptResp.stale();
             String expectedFormat = getExpectedFormat(key);
-            int charCount = answer != null ? answer.length() : 0;
+            int charCount = answer != null ? answer.length() : (promptText != null ? promptText.length() : 0);
 
             List<ContextFileDto> contextFiles = List.of(
                     new ContextFileDto("ideas.md", "/api/v1/rooms/" + roomId + "/ideas/export.md"),
@@ -244,18 +267,34 @@ public class PlanService {
                     promptText,
                     expectedFormat,
                     charCount,
-                    contextFiles
+                    contextFiles,
+                    mode,
+                    ideaVerdict,
+                    stale
             ));
         }
 
         // Context Pack readiness
         long approvedCount = approvedIdeas.size();
-        boolean rubricOk = brief != null && brief.isConfirmed() && !rubric.isEmpty();
+        boolean problemOk = brief != null && brief.getProblemStatement() != null && !brief.getProblemStatement().isBlank();
+        boolean weightsOk = !rubric.isEmpty() && rubric.stream().anyMatch(r -> r.getWeight() > 0);
+        boolean deadlinesOk = (room.getEventStart() != null && room.getEventEnd() != null)
+                || (brief != null && brief.getRawText() != null && (brief.getRawText().toLowerCase().contains("deadline") || brief.getRawText().toLowerCase().contains("schedule") || brief.getRawText().toLowerCase().contains("freeze")));
+        boolean rubricBriefOk = problemOk && weightsOk && deadlinesOk;
+
+        boolean everyMemberHasRoleTags = !members.isEmpty() && members.stream().allMatch(m -> {
+            User u = memberUsers.get(m.getUserId());
+            List<String> r = parseStringList(u != null ? u.getRoleTags() : null);
+            return !r.isEmpty();
+        });
+        boolean hasNotes = room.getPlanNotes() != null && !room.getPlanNotes().isBlank();
 
         ContextPackDto contextPack = new ContextPackDto(
                 new ContextPackDto.IdeaContextDto(approvedCount >= 1, approvedCount),
-                new ContextPackDto.RubricContextDto(rubricOk),
-                new ContextPackDto.SkillsContextDto(membersWithSkills >= 2, membersWithSkills)
+                new ContextPackDto.RubricContextDto(rubricBriefOk),
+                new ContextPackDto.SkillsContextDto(everyMemberHasRoleTags, membersWithSkills, members.size()),
+                new ContextPackDto.NotesContextDto(hasNotes, hasNotes),
+                new ContextPackDto.FilesContextDto(true, 2)
         );
 
         // Completion summary
@@ -264,6 +303,7 @@ public class PlanService {
             int docCount = docRepository.findByRoomId(roomId).size();
             int phaseCount = phaseRepository.findByRoomIdOrderByPositionAsc(roomId).size();
             List<Task> tasks = taskRepository.findByRoomIdAndSource(roomId, "PLAN");
+            if (tasks.isEmpty()) tasks = taskRepository.findByRoomId(roomId);
             int assigned = (int) tasks.stream().filter(t -> t.getAssigneeId() != null).count();
             int unassigned = tasks.size() - assigned;
             completion = new PlanCompletionSummaryDto(docCount, phaseCount, tasks.size(), assigned, unassigned, room.getUpdatedAt().toString());
@@ -276,7 +316,12 @@ public class PlanService {
 
         String statementPreview = (brief != null && brief.getProblemStatement() != null && !brief.getProblemStatement().isBlank())
                 ? brief.getProblemStatement()
-                : (brief != null && brief.getRawText() != null ? brief.getRawText().substring(0, Math.min(500, brief.getRawText().length())) : "");
+                : (brief != null && brief.getRawText() != null ? brief.getRawText().substring(0, Math.min(500, brief.getRawText().length())) : "No brief statement confirmed yet");
+        boolean briefConfirmed = brief != null && brief.isConfirmed();
+        int eventHours = 36;
+        if (room.getEventStart() != null && room.getEventEnd() != null) {
+            eventHours = (int) Math.max(1, Duration.between(room.getEventStart(), room.getEventEnd()).toHours());
+        }
 
         List<ApprovedIdeaSummaryDto> approvedIdeaDtos = approvedIdeas.stream()
                 .map(i -> new ApprovedIdeaSummaryDto(i.getId(), i.getText(), authorNamesMap.getOrDefault(i.getAuthorId(), "Team Member"), i.isPrimary()))
@@ -284,7 +329,11 @@ public class PlanService {
 
         PlanContextSummaryDto contextSummary = new PlanContextSummaryDto(
                 statementPreview,
+                statementPreview,
+                briefConfirmed,
+                eventHours,
                 approvedIdeaDtos,
+                new ArrayList<>(allSkills),
                 new ArrayList<>(allSkills)
         );
 
@@ -392,30 +441,56 @@ public class PlanService {
             }
         }
 
-        ValidationResult result = runValidator(roomId, req.stepKey(), req.answer());
+        Brief brief = briefRepository.findByRoomId(roomId).orElse(null);
+        List<BriefRubricItem> rubric = brief != null ? rubricRepository.findByBriefIdOrderByPositionAsc(brief.getId()) : Collections.emptyList();
+        List<RoomMember> members = memberRepository.findByRoomId(roomId);
+        Map<UUID, User> memberUsers = userRepository.findAllById(members.stream().map(RoomMember::getUserId).filter(Objects::nonNull).toList())
+                .stream().collect(Collectors.toMap(User::getId, u -> u));
+        List<Idea> approvedIdeas = ideaRepository.findByRoomIdAndStatus(roomId, "APPROVED");
+
+        long durationHours = 36;
+        if (room.getEventStart() != null && room.getEventEnd() != null) {
+            durationHours = Math.max(1, Duration.between(room.getEventStart(), room.getEventEnd()).toHours());
+        }
+
+        PlanDocumentParser.ParseResult parseResult = planDocumentParser.parseAndValidate(
+                req.stepKey(),
+                req.answer(),
+                room,
+                brief,
+                rubric,
+                members,
+                memberUsers,
+                approvedIdeas,
+                durationHours
+        );
 
         PlanStep step = stepRepository.findByRoomIdAndStepKey(roomId, req.stepKey())
                 .orElseGet(() -> new PlanStep(roomId, req.stepKey()));
         step.setAnswer(req.answer());
         step.setUpdatedAt(Instant.now());
 
-        if (!result.valid()) {
+        if (!parseResult.valid()) {
             step.setValidated(false);
-            step.setErrors(toJson(result.errors()));
-            step.setWarnings(toJson(result.warnings()));
+            step.setErrors(toJson(parseResult.errors()));
+            step.setWarnings(toJson(parseResult.warnings()));
             stepRepository.save(step);
 
-            String repairPrompt = "Your previous answer had these problems: " + String.join("; ", result.errors())
-                    + ". Fix ONLY those problems and reply again in the exact required format. Previous answer:\n" + req.answer();
-            return new ValidatePlanResponse(false, result.errors(), result.warnings(), result.summary(), repairPrompt, null, false, null);
+            String repairPrompt = "Your previous answer had these problems:\n" + String.join("\n", parseResult.errors())
+                    + "\n\nFix ONLY those problems and reply again in the exact required format with =====FILE: NAME.md===== and =====END FILE===== delimiters.\nPrevious answer:\n" + req.answer();
+            return new ValidatePlanResponse(false, parseResult.errors(), parseResult.warnings(), "Validation failed", repairPrompt, null, false, null);
         }
+
+        // Save documents and sync downstream
+        planDownstreamSyncService.syncStep(room, req.stepKey(), parseResult.files(), user);
 
         step.setValidated(true);
         step.setErrors(null);
-        step.setWarnings(toJson(result.warnings()));
-        step.setParsed(toJson(result.parsed()));
+        step.setWarnings(toJson(parseResult.warnings()));
+        step.setParsed(toJson(parseResult.files()));
         step.setValidatedAt(Instant.now());
         stepRepository.save(step);
+        roomEventService.recordEvent(roomId, "plan_step.validated", "plan_step", req.stepKey(), user.getId());
 
         String nextStepKey = stepIdx < STEP_KEYS.size() - 1 ? STEP_KEYS.get(stepIdx + 1) : null;
         boolean isDemo = "demo".equalsIgnoreCase(req.stepKey());
@@ -437,7 +512,7 @@ public class PlanService {
             planComplete = true;
         }
 
-        return new ValidatePlanResponse(true, Collections.emptyList(), result.warnings(), result.summary(), null, nextStepKey, planComplete, completion);
+        return new ValidatePlanResponse(true, Collections.emptyList(), parseResult.warnings(), "Validated successfully: " + String.join(", ", parseResult.files().keySet()), null, nextStepKey, planComplete, completion);
     }
 
     /**
@@ -453,38 +528,23 @@ public class PlanService {
         if (room.getBuildStartedAt() != null) {
             throw new ConflictException("PLAN_LOCKED", "Plan is locked");
         }
-
-        String contextMarkdown = getContextMarkdown(roomId, stepKey, user);
-        Brief brief = briefRepository.findByRoomId(roomId).orElse(null);
-        List<BriefRubricItem> rubric = brief != null ? rubricRepository.findByBriefIdOrderByPositionAsc(brief.getId()) : Collections.emptyList();
-        List<RoomMember> members = memberRepository.findByRoomId(roomId);
-        Map<UUID, User> memberUsers = userRepository.findAllById(members.stream().map(RoomMember::getUserId).filter(Objects::nonNull).toList())
-                .stream().collect(Collectors.toMap(User::getId, u -> u));
-
-        List<Idea> approvedIdeas = ideaRepository.findByRoomIdAndStatus(roomId, "APPROVED");
-        Set<UUID> ideaAuthorIds = approvedIdeas.stream().map(Idea::getAuthorId).collect(Collectors.toSet());
-        Map<UUID, String> authorNamesMap = userRepository.findAllById(ideaAuthorIds).stream()
-                .collect(Collectors.toMap(User::getId, u -> u.getName() != null && !u.getName().isBlank() ? u.getName() : "Team Member"));
-
-        Map<UUID, List<String>> memberSkillsMap = new HashMap<>();
-        for (RoomMember m : members) {
-            List<String> skills = skillRepository.findByMemberId(m.getId()).stream().map(RoomMemberSkill::getSkill).toList();
-            memberSkillsMap.put(m.getId(), skills);
+        if (!roomService.isAiAllowed(roomId)) {
+            throw new BadRequestException("AI_RESTRICTED_BY_EVENT", "AI generation is disabled by event rules");
         }
 
-        List<PlanStep> existingSteps = stepRepository.findByRoomId(roomId);
-        Map<String, String> validatedAnswers = new HashMap<>();
-        for (PlanStep s : existingSteps) {
-            if (s.isValidated() && s.getAnswer() != null) validatedAnswers.put(s.getStepKey(), s.getAnswer());
+        int stepIdx = STEP_KEYS.indexOf(stepKey.toLowerCase());
+        if (stepIdx < 0) {
+            throw new BadRequestException("INVALID_STEP", "Unknown step key: " + stepKey);
         }
 
-        String prompt = promptBuilder.buildPromptForStep(
-                stepKey, room, brief, rubric, members, memberUsers,
-                memberSkillsMap, approvedIdeas, authorNamesMap, validatedAnswers
-        );
-        String fullPrompt = prompt + "\n\nContext files:\n" + contextMarkdown;
+        PlanPromptResponseDto promptResp = planPromptService.getOrAssemblePrompt(roomId, stepIdx + 1, false, user);
+        String ideasMd = ideasService.exportIdeasMarkdown(roomId, user);
 
-        String answer = aiService.complete(user.getId(), fullPrompt);
+        String systemPrompt = "You are a senior technical architect and hackathon strategist. Produce the complete, real markdown documents requested with =====FILE: NAME.md===== and =====END FILE===== delimiters exactly as specified. Do not summarize or skip sections.";
+        String userMessage = promptResp.prompt() + "\n\nAttached IDEAS.MD:\n" + ideasMd;
+
+        String feature = "plan.generate." + stepKey.toLowerCase();
+        String answer = aiService.text(feature, roomId, user.getId(), systemPrompt, userMessage);
         return new GenerateStepResponse(answer);
     }
 
@@ -524,7 +584,7 @@ public class PlanService {
      */
     @Transactional
     public void enterBuild(UUID roomId, User user) {
-        roomAccess.requireMember(roomId, user);
+        roomAccess.requireLeader(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
         if (!room.isPlanDone()) {
             throw new BadRequestException("PLAN_NOT_COMPLETE", "Plan must be completed before entering build phase");

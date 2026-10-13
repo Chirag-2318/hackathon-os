@@ -1,6 +1,6 @@
 package com.hackathonos.backend.meta;
 
-import com.hackathonos.backend.ai.GroqClient;
+import com.hackathonos.backend.ai.AiService;
 import com.hackathonos.backend.common.config.AppProperties;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -12,11 +12,11 @@ import java.util.List;
 @RequestMapping("/api/v1/meta")
 public class MetaController {
 
-    private final GroqClient groqClient;
+    private final AiService aiService;
     private final AppProperties appProperties;
 
-    public MetaController(GroqClient groqClient, AppProperties appProperties) {
-        this.groqClient = groqClient;
+    public MetaController(AiService aiService, AppProperties appProperties) {
+        this.aiService = aiService;
         this.appProperties = appProperties;
     }
 
@@ -66,10 +66,9 @@ public class MetaController {
                         MetaConstants.DOC_MAX_CHARS,
                         MetaConstants.UPLOAD_MAX_MB
                 ),
-                groqClient.isConfigured(),
+                aiService.isConfigured(),
                 appProperties.getGithub().isLinkConfigured(),
                 appProperties.getCanva().isConfigured()
         );
     }
 }
-

@@ -88,13 +88,14 @@ export function BeforeWePlan({ roomId, contextSummary, initialNotes = '', onPlan
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
     const files = Array.from(fileList);
-    const isSinglePdf = files.length === 1 && files[0].name.toLowerCase().endsWith('.pdf');
+    const file = files[0];
+    const isDoc = file.name.toLowerCase().endsWith('.pdf') || file.name.toLowerCase().endsWith('.md') || file.name.toLowerCase().endsWith('.txt');
 
     setIsUpdatingBrief(true);
     setUpdateError('');
     try {
-      if (isSinglePdf) {
-        await briefService.setPdfSource(roomId, files[0]);
+      if (isDoc) {
+        await briefService.setPdfSource(roomId, file);
       } else {
         await briefService.setImagesSource(roomId, files);
       }
@@ -129,9 +130,16 @@ export function BeforeWePlan({ roomId, contextSummary, initialNotes = '', onPlan
         <div className="p-6 rounded-2xl bg-card border border-border shadow-xs flex flex-col justify-between gap-4">
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <FileText className="size-4 text-primary" /> Brief Statement
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <FileText className="size-4 text-primary" /> Brief Statement
+                </span>
+                {!contextSummary?.briefConfirmed && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                    unconfirmed
+                  </span>
+                )}
+              </div>
               <Button
                 variant="outline"
                 size="sm"
@@ -280,14 +288,14 @@ export function BeforeWePlan({ roomId, contextSummary, initialNotes = '', onPlan
               <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-xl cursor-pointer hover:bg-muted/30">
                 <input
                   type="file"
-                  accept=".pdf,image/png,image/jpeg,image/webp"
+                  accept=".pdf,.md,.txt,image/png,image/jpeg,image/webp"
                   multiple
                   onChange={handleUpdateFiles}
                   disabled={isUpdatingBrief}
                   className="hidden"
                 />
                 <Upload className="size-6 text-muted-foreground mb-2" />
-                <span className="text-xs font-semibold text-foreground">Select PDF or up to 5 images</span>
+                <span className="text-xs font-semibold text-foreground">Select .md, .txt, .pdf or images</span>
                 <span className="text-[11px] text-muted-foreground mt-0.5">Max 10MB per file</span>
               </label>
               {updateError && <span className="text-xs text-red-500">{updateError}</span>}

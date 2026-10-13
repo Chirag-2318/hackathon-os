@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HexFormat;
 
 @Component
 public class SecretCipher {
@@ -48,9 +49,20 @@ public class SecretCipher {
                 throw new IllegalStateException("app.encryption-key must be set in non-dev profile");
             }
         } else {
-            byte[] decoded = Base64.getDecoder().decode(keyBase64.trim());
-            if (decoded.length != 32) {
-                throw new IllegalStateException("app.encryption-key must be a Base64-encoded 32-byte key");
+            byte[] decoded = null;
+            try {
+                byte[] b64 = Base64.getDecoder().decode(keyBase64.trim());
+                if (b64.length == 32) decoded = b64;
+            } catch (Exception ignored) {}
+
+            if (decoded == null && keyBase64.trim().length() == 64) {
+                try {
+                    decoded = HexFormat.of().parseHex(keyBase64.trim());
+                } catch (Exception ignored) {}
+            }
+
+            if (decoded == null || decoded.length != 32) {
+                throw new IllegalStateException("app.encryption-key must be a Base64-encoded or 64-hex 32-byte key");
             }
             this.secretKey = new SecretKeySpec(decoded, "AES");
         }

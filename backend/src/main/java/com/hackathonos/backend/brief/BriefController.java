@@ -40,6 +40,7 @@ public class BriefController {
         return briefService.updateConfirmedField(roomId, request, currentUser.get());
     }
 
+    @com.hackathonos.backend.common.security.RateLimited(key = "brief_intake", limit = 10, periodSeconds = 60)
     @PostMapping("/source/link")
     public BriefResponseDto setLinkSource(
             @PathVariable UUID roomId,
@@ -47,6 +48,7 @@ public class BriefController {
         return briefService.setLinkSource(roomId, request.url(), currentUser.get());
     }
 
+    @com.hackathonos.backend.common.security.RateLimited(key = "brief_intake", limit = 10, periodSeconds = 60)
     @PostMapping(value = "/source/pdf", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public BriefResponseDto setPdfSource(
             @PathVariable UUID roomId,
@@ -54,6 +56,7 @@ public class BriefController {
         return briefService.setPdfSource(roomId, file, currentUser.get());
     }
 
+    @com.hackathonos.backend.common.security.RateLimited(key = "brief_intake", limit = 10, periodSeconds = 60)
     @PostMapping(value = "/source/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public BriefResponseDto setImagesSource(
             @PathVariable UUID roomId,
@@ -83,6 +86,13 @@ public class BriefController {
     @PostMapping("/extract/auto")
     public ValidateExtractResponse autoExtract(@PathVariable UUID roomId) {
         return briefService.autoExtract(roomId, currentUser.get());
+    }
+
+    @PostMapping("/extract")
+    public ExtractBriefResponseDto extractBrief(
+            @PathVariable UUID roomId,
+            @jakarta.validation.Valid @RequestBody ExtractBriefRequest request) {
+        return briefService.extractBrief(roomId, request.text(), currentUser.get());
     }
 
     @PostMapping("/confirm")

@@ -27,6 +27,30 @@ public class Room {
     @Column(name = "owner_id")
     private UUID ownerId;
 
+    @Column(name = "starts_at")
+    private Instant startsAt;
+
+    @Column(name = "freeze_at")
+    private Instant freezeAt;
+
+    @Column(name = "ends_at")
+    private Instant endsAt;
+
+    @Column(name = "duration_hours", nullable = false)
+    private int durationHours = 36;
+
+    @Column(name = "deadline_overridden", nullable = false)
+    private boolean deadlineOverridden = false;
+
+    @Column(name = "workflow_stage", nullable = false, length = 30)
+    private String workflowStage = "PLANNING";
+
+    @Column(name = "submitted_at")
+    private Instant submittedAt;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
     @Column(name = "event_start")
     private Instant eventStart;
 
@@ -63,8 +87,14 @@ public class Room {
     @Column(name = "task_counter", nullable = false)
     private int taskCounter = 0;
 
-    @Column(name = "join_code", nullable = false, unique = true, length = 4)
+    @Column(name = "join_code", nullable = false, unique = true, length = 16)
     private String joinCode;
+
+    @Column(name = "code_revoked", nullable = false)
+    private boolean codeRevoked = false;
+
+    @Column(name = "code_expires_at")
+    private Instant codeExpiresAt;
 
     @Column(name = "archived_at")
     private Instant archivedAt;
@@ -78,17 +108,20 @@ public class Room {
     public Room() {}
 
     public Room(String name, String description, String projectDescription, String templateId,
-                UUID ownerId, Instant eventStart, Instant eventEnd, String timezone,
+                UUID ownerId, Instant startsAt, Instant endsAt, String timezone,
                 String keyPrefix, String joinCode) {
         this.name = name;
         this.description = description;
         this.projectDescription = projectDescription;
         this.templateId = templateId;
         this.ownerId = ownerId;
-        this.eventStart = eventStart;
-        this.eventEnd = eventEnd;
+        this.startsAt = startsAt;
+        this.eventStart = startsAt;
+        this.endsAt = endsAt;
+        this.eventEnd = endsAt;
         this.timezone = timezone;
         this.stage = "brief";
+        this.workflowStage = "PLANNING";
         this.briefDone = false;
         this.ideateDone = false;
         this.planDone = false;
@@ -117,11 +150,41 @@ public class Room {
     public UUID getOwnerId() { return ownerId; }
     public void setOwnerId(UUID ownerId) { this.ownerId = ownerId; }
 
-    public Instant getEventStart() { return eventStart; }
-    public void setEventStart(Instant eventStart) { this.eventStart = eventStart; }
+    public Instant getStartsAt() { return startsAt != null ? startsAt : eventStart; }
+    public void setStartsAt(Instant startsAt) {
+        this.startsAt = startsAt;
+        this.eventStart = startsAt;
+    }
 
-    public Instant getEventEnd() { return eventEnd; }
-    public void setEventEnd(Instant eventEnd) { this.eventEnd = eventEnd; }
+    public Instant getFreezeAt() { return freezeAt; }
+    public void setFreezeAt(Instant freezeAt) { this.freezeAt = freezeAt; }
+
+    public Instant getEndsAt() { return endsAt != null ? endsAt : eventEnd; }
+    public void setEndsAt(Instant endsAt) {
+        this.endsAt = endsAt;
+        this.eventEnd = endsAt;
+    }
+
+    public int getDurationHours() { return durationHours; }
+    public void setDurationHours(int durationHours) { this.durationHours = durationHours; }
+
+    public boolean isDeadlineOverridden() { return deadlineOverridden; }
+    public void setDeadlineOverridden(boolean deadlineOverridden) { this.deadlineOverridden = deadlineOverridden; }
+
+    public String getWorkflowStage() { return workflowStage != null ? workflowStage : "PLANNING"; }
+    public void setWorkflowStage(String workflowStage) { this.workflowStage = workflowStage; }
+
+    public Instant getSubmittedAt() { return submittedAt; }
+    public void setSubmittedAt(Instant submittedAt) { this.submittedAt = submittedAt; }
+
+    public Instant getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(Instant deletedAt) { this.deletedAt = deletedAt; }
+
+    public Instant getEventStart() { return getStartsAt(); }
+    public void setEventStart(Instant eventStart) { setStartsAt(eventStart); }
+
+    public Instant getEventEnd() { return getEndsAt(); }
+    public void setEventEnd(Instant eventEnd) { setEndsAt(eventEnd); }
 
     public String getTimezone() { return timezone; }
     public void setTimezone(String timezone) { this.timezone = timezone; }
@@ -155,6 +218,12 @@ public class Room {
 
     public String getJoinCode() { return joinCode; }
     public void setJoinCode(String joinCode) { this.joinCode = joinCode; }
+
+    public boolean isCodeRevoked() { return codeRevoked; }
+    public void setCodeRevoked(boolean codeRevoked) { this.codeRevoked = codeRevoked; }
+
+    public Instant getCodeExpiresAt() { return codeExpiresAt; }
+    public void setCodeExpiresAt(Instant codeExpiresAt) { this.codeExpiresAt = codeExpiresAt; }
 
     public Instant getArchivedAt() { return archivedAt; }
     public void setArchivedAt(Instant archivedAt) { this.archivedAt = archivedAt; }

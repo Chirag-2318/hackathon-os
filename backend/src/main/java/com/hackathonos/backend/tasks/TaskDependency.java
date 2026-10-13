@@ -18,6 +18,9 @@ public class TaskDependency {
     @Column(name = "depends_on_task_id", nullable = false)
     private UUID dependsOnTaskId;
 
+    @Column(name = "room_id", nullable = false)
+    private UUID roomId;
+
     public TaskDependency() {}
 
     public TaskDependency(UUID taskId, UUID dependsOnTaskId) {
@@ -25,11 +28,20 @@ public class TaskDependency {
         this.dependsOnTaskId = dependsOnTaskId;
     }
 
+    public TaskDependency(UUID taskId, UUID dependsOnTaskId, UUID roomId) {
+        this.taskId = taskId;
+        this.dependsOnTaskId = dependsOnTaskId;
+        this.roomId = roomId;
+    }
+
     public UUID getTaskId() { return taskId; }
     public void setTaskId(UUID taskId) { this.taskId = taskId; }
 
     public UUID getDependsOnTaskId() { return dependsOnTaskId; }
     public void setDependsOnTaskId(UUID dependsOnTaskId) { this.dependsOnTaskId = dependsOnTaskId; }
+
+    public UUID getRoomId() { return roomId; }
+    public void setRoomId(UUID roomId) { this.roomId = roomId; }
 
     public static class TaskDependencyId implements Serializable {
         private UUID taskId;

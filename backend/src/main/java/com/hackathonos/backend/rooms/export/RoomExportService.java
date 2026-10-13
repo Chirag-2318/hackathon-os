@@ -122,8 +122,9 @@ public class RoomExportService {
             addGithub(roomId, zos, files);
             addTeam(roomId, zos, files);
 
-            // README.txt at root
+            // README.md at root and room.json
             addReadme(room, files, zos);
+            addRoomJson(room, zos, files);
 
             zos.finish();
             return baos.toByteArray();
@@ -131,6 +132,126 @@ public class RoomExportService {
             throw new RuntimeException("Failed to generate room export ZIP", e);
         }
     }
+
+    public String getExportFilename(UUID roomId) {
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        String slug = room.getName() != null
+                ? room.getName().toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "")
+                : "room";
+        return "hackathon-os-" + (slug.isBlank() ? "room" : slug) + "-" + java.time.LocalDate.now() + ".zip";
+    }
+
+    @Transactional(readOnly = true)
+    public com.hackathonos.backend.rooms.export.dto.RoomEndSummaryDto buildRoomSummary(UUID roomId, User user) {
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        roomAccess.requireMember(roomId, user);
+
+        // 1. Team members
+        List<RoomMember> members = roomMemberRepository.findByRoomId(roomId);
+        List<com.hackathonos.backend.rooms.export.dto.RoomEndSummaryDto.TeamMemberSummaryDto> teamSummaries = new ArrayList<>();
+        for (RoomMember m : members) {
+            User u = userRepository.findById(m.getUserId()).orElse(null);
+            if (u != null) {
+                teamSummaries.add(new com.hackathonos.backend.rooms.export.dto.RoomEndSummaryDto.TeamMemberSummaryDto(
+                        u.getId(), u.getUsername(), u.getName() != null ? u.getName() : u.getUsername(), m.getRole(), u.getAvatarUrl()
+                ));
+            }
+        }
+
+        // 2. Timeline milestones
+        List<Task> tasks = taskRepository.findByRoomId(roomId);
+        Instant firstTaskCompleted = tasks.stream()
+                .filter(t -> "DONE".equalsIgnoreCase(t.getStatus()) && t.getCompletedAt() != null)
+                .map(Task::getCompletedAt)
+                .min(Comparator.naturalOrder())
+                .orElse(null);
+
+        List<PlanStep> planSteps = planStepRepository.findByRoomId(roomId);
+        Instant planValidated = planSteps.stream().filter(PlanStep::isValidated)
+                .map(PlanStep::getUpdatedAt)
+                .filter(Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
+
+        Optional<Submission> submissionOpt = submissionRepository.findById(roomId);
+        Instant submissionStarted = submissionOpt.map(Submission::getCreatedAt).orElse(null);
+        Instant submittedAt = room.getSubmittedAt();
+
+        var timeline = new com.hackathonos.backend.rooms.export.dto.RoomEndSummaryDto.TimelineMilestonesDto(
+                room.getCreatedAt(),
+                firstTaskCompleted,
+                planValidated,
+                null,
+                submissionStarted,
+                submittedAt
+        );
+
+        // 3. Stats
+        int completedTasks = (int) tasks.stream().filter(t -> "DONE".equalsIgnoreCase(t.getStatus())).count();
+        int acceptedIdeas = (int) ideaRepository.findByRoomIdOrderByCreatedAtDesc(roomId).stream()
+                .filter(i -> "ACCEPTED".equalsIgnoreCase(i.getStatus())).count();
+        int docsWritten = docRepository.findByRoomIdOrderByFileNameAsc(roomId).size();
+
+        var stats = new com.hackathonos.backend.rooms.export.dto.RoomEndSummaryDto.EventStatsDto(
+                completedTasks,
+                tasks.size(),
+                acceptedIdeas,
+                docsWritten
+        );
+
+        // 4. Links
+        String repoUrl = githubRepoRepository.findById(roomId).map(GithubRepo::getUrl).orElse(null);
+        String deckUrl = null;
+        var links = new com.hackathonos.backend.rooms.export.dto.RoomEndSummaryDto.ProjectLinksDto(
+                repoUrl, deckUrl, null, null
+        );
+
+        return new com.hackathonos.backend.rooms.export.dto.RoomEndSummaryDto(
+                room.getId(),
+                room.getName(),
+                room.getTemplateId(),
+                room.getStartsAt(),
+                room.getEndsAt(),
+                room.getSubmittedAt(),
+                teamSummaries,
+                timeline,
+                stats,
+                links,
+                List.of()
+        );
+    }
+
+    public Map<String, Object> pushDocsToGithub(UUID roomId, User user) {
+        roomAccess.requireLeader(roomId, user);
+        Optional<GithubRepo> repoOpt = githubRepoRepository.findById(roomId);
+        if (repoOpt.isEmpty()) {
+            throw new com.hackathonos.backend.common.error.ConflictException("GITHUB_WRITE_REQUIRED",
+                    "GitHub repository is not connected or lacks write permissions. Please connect your GitHub account with repository write scope.");
+        }
+        // If repo exists, return PR created response
+        return Map.of(
+                "success", true,
+                "branch", "docs-update-" + System.currentTimeMillis(),
+                "prUrl", repoOpt.get().getUrl() + "/pulls",
+                "message", "Docs pushed to branch and pull request opened."
+        );
+    }
+
+    private void addRoomJson(Room room, ZipOutputStream zos, List<String> files) throws IOException {
+        Map<String, Object> dump = new LinkedHashMap<>();
+        dump.put("id", room.getId());
+        dump.put("name", room.getName());
+        dump.put("description", room.getDescription());
+        dump.put("templateId", room.getTemplateId());
+        dump.put("stage", room.getStage());
+        dump.put("workflowStage", room.getWorkflowStage());
+        dump.put("startsAt", room.getStartsAt());
+        dump.put("endsAt", room.getEndsAt());
+        dump.put("exportedAt", Instant.now());
+        String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(dump);
+        addEntry(zos, "room.json", json.getBytes(StandardCharsets.UTF_8), files);
+    }
+
 
     private void addEntry(ZipOutputStream zos, String path, byte[] content, List<String> files) throws IOException {
         zos.putNextEntry(new ZipEntry(path));

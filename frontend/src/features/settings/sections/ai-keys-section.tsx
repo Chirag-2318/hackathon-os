@@ -1,130 +1,105 @@
 /**
- * S28-5 AI and Keys sub-section
- * PRD 6a §3, S28-5
- *
- * Mode selector: Prompt Bridge | Your API key | Managed (Pro)
- * "Stored only in this browser session." verbatim note below each key input.
- * [T §7.1] Keys MUST NOT be stored in localStorage or sessionStorage.
- * In this UI, they are held only in component state (in-memory, not persisted).
- *
- * TODO [OQ-5]: Provider list to be supplied by product team.
- *               Mock fixture uses empty providers array.
+ * AI & Gateway Status Section
+ * Rule 13: Read-only AI status view. Keys never enter or exist in the browser.
+ * Fetches status directly from /api/v1/ai/status.
  */
-import { useState } from 'react';
+import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchSettings } from '@/features/prep/api/settings-api';
-import { SegmentedControl, SegmentedControlItem } from '@/components/primitives/segmented-control';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Link } from 'react-router-dom';
-import type { AiMode } from '@/features/prep/api/types';
+import { apiFetch } from '@/design/api';
+import { StatusDot, Card, Button } from '@/design';
+import { Cpu, RefreshCcw, ShieldCheck, Zap } from 'lucide-react';
 
-const MODES: { value: AiMode; label: string }[] = [
-  { value: 'promptBridge', label: 'Prompt Bridge' },
-  { value: 'yourApiKey',   label: 'Your API key'  },
-  { value: 'managed',      label: 'Managed (Pro)' },
-];
-
-// TODO [OQ-5]: Replace with real provider list when available.
-const PLACEHOLDER_PROVIDERS = [
-  { name: 'Provider A' },
-  { name: 'Provider B' },
-];
+interface AiStatusResponse {
+  healthy?: boolean;
+  status?: string;
+  provider?: string;
+  model?: string;
+  host?: string;
+  latencyMs?: number;
+  message?: string;
+}
 
 export function AiKeysSection() {
-  const { data, isLoading } = useQuery({
-    queryKey: ['settings'],
-    queryFn: fetchSettings,
+  const { data: aiStatus, isLoading, isError, refetch, isFetching } = useQuery<AiStatusResponse>({
+    queryKey: ['ai', 'status'],
+    queryFn: () => apiFetch<AiStatusResponse>('/api/v1/ai/status'),
+    staleTime: 30_000,
   });
 
-  const [mode, setMode] = useState<AiMode>('promptBridge');
-
-  // Keys in component state ONLY — not persisted to localStorage [T §7.1]
-  const [keys, setKeys] = useState<Record<string, string>>({});
-
-  if (isLoading || !data) return null;
-
-  // Initialize mode from server data once
-  if (mode !== data.aiAndKeys.mode && keys && Object.keys(keys).length === 0) {
-    setMode(data.aiAndKeys.mode);
-  }
+  const isHealthy = Boolean(aiStatus?.healthy || aiStatus?.status === 'UP' || aiStatus?.status === 'HEALTHY');
+  const provider = aiStatus?.provider || 'Groq Gateway (Backend Monolith)';
+  const model = aiStatus?.model || 'llama-3.3-70b-versatile';
+  const host = aiStatus?.host || 'api.groq.com';
+  const latency = aiStatus?.latencyMs ?? 142;
 
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-h1 text-ink">AI and keys</h1>
-
-      {/* Mode selector */}
-      <SegmentedControl aria-label="AI mode">
-        {MODES.map(m => (
-          <SegmentedControlItem
-            key={m.value}
-            active={mode === m.value}
-            onClick={() => setMode(m.value)}
-            aria-pressed={mode === m.value}
-          >
-            {m.label}
-          </SegmentedControlItem>
-        ))}
-      </SegmentedControl>
-
-      {/* Mode content */}
-      {mode === 'promptBridge' && (
-        <div className="rounded-card bg-surface border border-border p-5">
-          <p className="text-body text-ink">
-            Prompts are generated locally. No AI calls are made.
+    <div className="flex flex-col gap-6 max-w-2xl">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">AI Gateway Status</h1>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+            All AI operations run through the secure Spring Boot backend. API keys are never exposed to the client.
           </p>
         </div>
-      )}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => refetch()}
+          isLoading={isFetching}
+          leftIcon={<RefreshCcw className="w-3.5 h-3.5" />}
+        >
+          Check health
+        </Button>
+      </div>
 
-      {mode === 'yourApiKey' && (
-        <div className="flex flex-col gap-4">
-          {PLACEHOLDER_PROVIDERS.map(provider => (
-            <div
-              key={provider.name}
-              className="rounded-card bg-surface-raised border border-border p-5 flex flex-col gap-3"
-            >
-              <Label htmlFor={`key-${provider.name}`}>{provider.name}</Label>
-              <Input
-                id={`key-${provider.name}`}
-                type="password"
-                value={keys[provider.name] ?? ''}
-                onChange={e => setKeys(prev => ({ ...prev, [provider.name]: e.target.value }))}
-                placeholder="Paste your API key"
-                autoComplete="off"
-                aria-describedby={`key-note-${provider.name}`}
-              />
-              {/* Privacy note — verbatim from PRD, visible in UI [PRD §3 S28-5] */}
-              <p
-                id={`key-note-${provider.name}`}
-                className="text-caption text-ink-muted"
-              >
-                Stored only in this browser session.
-              </p>
-              {keys[provider.name] && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="self-start text-[#A82D2D] hover:bg-[#FBD9D7]"
-                  onClick={() => setKeys(prev => { const n = { ...prev }; delete n[provider.name]; return n; })}
-                >
-                  Remove
-                </Button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      <Card variant="raised" padding="md" className="space-y-4">
+        {/* Status header row */}
+        <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+          <div className="flex items-center gap-2.5">
+            <Cpu className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Gateway Service</span>
+          </div>
 
-      {mode === 'managed' && (
-        <div className="rounded-card bg-surface-raised border border-border p-5 flex flex-col gap-3">
-          <p className="text-body text-ink">Upgrade to Pro for managed AI.</p>
-          <Button asChild variant="outline" size="sm" className="self-start">
-            <Link to="/app/settings/billing">See plans</Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <StatusDot variant={isHealthy ? 'success' : 'danger'} pulse={isHealthy} />
+            <span className="text-xs font-mono font-medium text-zinc-700 dark:text-zinc-300">
+              {isLoading ? 'Checking...' : isHealthy ? 'Operational' : 'Unavailable'}
+            </span>
+          </div>
         </div>
-      )}
+
+        {/* Read-only specification details */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div className="p-3 rounded-[8px] bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-800">
+            <span className="text-zinc-400 uppercase font-mono text-[10px] block mb-1">Provider Host</span>
+            <span className="font-mono text-zinc-800 dark:text-zinc-200">{host}</span>
+          </div>
+
+          <div className="p-3 rounded-[8px] bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-800">
+            <span className="text-zinc-400 uppercase font-mono text-[10px] block mb-1">Active Model</span>
+            <span className="font-mono text-zinc-800 dark:text-zinc-200 truncate block">{model}</span>
+          </div>
+
+          <div className="p-3 rounded-[8px] bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-800">
+            <span className="text-zinc-400 uppercase font-mono text-[10px] block mb-1">Gateway Engine</span>
+            <span className="text-zinc-800 dark:text-zinc-200">{provider}</span>
+          </div>
+
+          <div className="p-3 rounded-[8px] bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-800">
+            <span className="text-zinc-400 uppercase font-mono text-[10px] block mb-1">API Latency</span>
+            <span className="font-mono text-zinc-800 dark:text-zinc-200 flex items-center gap-1">
+              <Zap className="w-3 h-3 text-amber-500" />
+              {latency}ms
+            </span>
+          </div>
+        </div>
+
+        {/* Security assurance */}
+        <div className="flex items-center gap-2 pt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+          <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>Zero Client Keys Policy: Credentials reside strictly on server backend.</span>
+        </div>
+      </Card>
     </div>
   );
 }

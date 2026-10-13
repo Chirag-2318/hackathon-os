@@ -1,16 +1,20 @@
-import React, { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ideaService, briefService } from '@/services';
-import type { Idea, IdeaLink } from '@/services/types';
-import { Button } from '@/components/ui/button';
-import { Download, Sparkles, AlertCircle } from 'lucide-react';
-import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
+import { ideaService, briefService, roomService } from '@/services';
+import type { Idea, IdeaLink, RoomMember } from '@/services/types';
 import { ApiError } from '@/lib/apiClient';
 import { useCurrentUser } from '@/features/auth/useCurrentUser';
-import { IdeaComposer } from './components/idea-composer';
-import { IdeaFeedCard } from './components/idea-feed-card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ErrorState, OfflineBanner } from '@/design';
+import { toast } from 'sonner';
+
+import { IdeateHeader } from './components/ideate-header';
+import { IdeateComposer, type IdeateComposerRef } from './components/ideate-composer';
+import { IdeateFilterBar, type IdeateSort, type IdeateViewMode } from './components/ideate-filter-bar';
+import { IdeateCard } from './components/ideate-card';
+import { IdeateRightRail } from './components/ideate-right-rail';
+import { IdeateEmptyState, type IdeateTab } from './components/ideate-empty-state';
 
 export function IdeatePage() {
   const { roomId, id } = useParams<{ roomId?: string; id?: string }>();
@@ -19,9 +23,30 @@ export function IdeatePage() {
   const queryClient = useQueryClient();
   const { data: user } = useCurrentUser();
 
-  const [feedFilter, setFeedFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [feedFilter, setFeedFilter] = useState<IdeateTab>('all');
+  const [sort, setSort] = useState<IdeateSort>('newest');
+  const [viewMode, setViewMode] = useState<IdeateViewMode>('cards');
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
 
-  const { data: ideateData } = useQuery({
+  const composerRef = useRef<IdeateComposerRef>(null);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const {
+    data: ideateData,
+    isLoading: loadingIdeate,
+    error: ideateError,
+    refetch: refetchIdeate,
+  } = useQuery({
     queryKey: ['ideate', activeRoomId],
     queryFn: () => ideaService.getIdeateData(activeRoomId),
     enabled: Boolean(activeRoomId),
@@ -34,13 +59,15 @@ export function IdeatePage() {
     enabled: Boolean(activeRoomId),
   });
 
+  const { data: members = [] } = useQuery({
+    queryKey: ['room-members', activeRoomId],
+    queryFn: () => roomService.getMembers(activeRoomId).catch(() => []),
+    enabled: Boolean(activeRoomId),
+  });
+
   const isLocked = Boolean(ideateData?.ideationDone);
   const permissions = ideateData?.permissions as any;
-  const canFinish = Boolean(
-    permissions?.canFinish ||
-    permissions?.canDone ||
-    permissions?.isLeader
-  );
+  const canFinish = Boolean(permissions?.canFinish || permissions?.canDone || permissions?.isLeader);
   const canReopen = Boolean(permissions?.canReopen);
   const canDecide = Boolean(permissions?.canDecide ?? true);
   const canPost = Boolean(permissions?.canPost ?? true);
@@ -48,6 +75,7 @@ export function IdeatePage() {
   const ideas = ideateData?.ideas || [];
   const counts = ideateData?.counts || { total: 0, pending: 0, approved: 0, rejected: 0 };
 
+  // Mutations with optimistic updates
   const createMutation = useMutation({
     mutationFn: (draft: { text: string; links: IdeaLink[]; notes: string[] }) =>
       ideaService.createIdea(activeRoomId, draft),
@@ -71,12 +99,36 @@ export function IdeatePage() {
 
   const deleteMutation = useMutation({
     mutationFn: (ideaId: string) => ideaService.deleteIdea(activeRoomId, ideaId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ideate', activeRoomId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ideate', activeRoomId] });
+      toast.info('Idea deleted');
+    },
   });
 
   const approveMutation = useMutation({
     mutationFn: (ideaId: string) => ideaService.approveIdea(activeRoomId, ideaId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ideate', activeRoomId] }),
+    onMutate: async (ideaId: string) => {
+      await queryClient.cancelQueries({ queryKey: ['ideate', activeRoomId] });
+      const previous = queryClient.getQueryData(['ideate', activeRoomId]);
+      queryClient.setQueryData(['ideate', activeRoomId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          ideas: old.ideas.map((i: Idea) => (i.id === ideaId ? { ...i, status: 'approved' } : i)),
+          counts: {
+            ...old.counts,
+            approved: (old.counts?.approved || 0) + 1,
+            pending: Math.max(0, (old.counts?.pending || 1) - 1),
+          },
+        };
+      });
+      return { previous };
+    },
+    onError: (_err, _id, context: any) => {
+      if (context?.previous) queryClient.setQueryData(['ideate', activeRoomId], context.previous);
+      toast.error('Failed to approve idea');
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['ideate', activeRoomId] }),
   });
 
   const restoreMutation = useMutation({
@@ -86,15 +138,36 @@ export function IdeatePage() {
 
   const rejectMutation = useMutation({
     mutationFn: (ideaId: string) => ideaService.rejectIdea(activeRoomId, ideaId),
+    onMutate: async (ideaId: string) => {
+      await queryClient.cancelQueries({ queryKey: ['ideate', activeRoomId] });
+      const previous = queryClient.getQueryData(['ideate', activeRoomId]);
+      queryClient.setQueryData(['ideate', activeRoomId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          ideas: old.ideas.map((i: Idea) => (i.id === ideaId ? { ...i, status: 'rejected' } : i)),
+          counts: {
+            ...old.counts,
+            rejected: (old.counts?.rejected || 0) + 1,
+            pending: Math.max(0, (old.counts?.pending || 1) - 1),
+          },
+        };
+      });
+      return { previous };
+    },
     onSuccess: (_, ideaId) => {
       queryClient.invalidateQueries({ queryKey: ['ideate', activeRoomId] });
       toast('Idea rejected', {
-        duration: 8000,
+        duration: 6000,
         action: {
           label: 'Undo',
           onClick: () => restoreMutation.mutate(ideaId),
         },
       });
+    },
+    onError: (_err, _id, context: any) => {
+      if (context?.previous) queryClient.setQueryData(['ideate', activeRoomId], context.previous);
+      toast.error('Failed to reject idea');
     },
   });
 
@@ -131,169 +204,162 @@ export function IdeatePage() {
     },
   });
 
-  const handleDownloadMarkdown = async () => {
-    try {
-      await ideaService.exportIdeasMarkdown(activeRoomId);
-      toast.success('Downloaded ideas.md');
-    } catch (e: any) {
-      toast.error('Failed to download ideas.md');
+  // Filter & Sort
+  const filteredAndSortedIdeas = useMemo(() => {
+    let list = ideas.filter((i) => {
+      if (feedFilter === 'all') return true;
+      return i.status === feedFilter;
+    });
+
+    if (sort === 'attachments') {
+      list = [...list].sort((a, b) => {
+        const countA = (a.links?.length || 0) + (a.notes?.length || 0);
+        const countB = (b.links?.length || 0) + (b.notes?.length || 0);
+        return countB - countA;
+      });
+    } else {
+      list = [...list].sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeB - timeA;
+      });
     }
-  };
+    return list;
+  }, [ideas, feedFilter, sort]);
 
-  const filteredIdeas = ideas.filter((i) => {
-    if (feedFilter === 'all') return true;
-    return i.status === feedFilter;
-  });
-
-  const approvedCount = counts.approved;
-
-  return (
-    <div className="w-full flex flex-col gap-6 p-8 max-w-[1320px] mx-auto font-sans pb-20">
-      {/* Page Header */}
-      <div className="flex flex-col gap-1 pb-2">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Ideate</h1>
-          <span className={cn(
-            'px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wider uppercase',
-            isLocked ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'
-          )}>
-            {isLocked ? 'LOCKED' : 'OPEN'}
-          </span>
-
-          <div className="flex items-center gap-2 ml-auto">
-            <Button variant="outline" size="sm" onClick={handleDownloadMarkdown} className="text-xs h-8 gap-1.5">
-              <Download className="size-3.5" /> Download ideas.md
-            </Button>
-            {import.meta.env.DEV && ideas.length === 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => ideaService.seedSampleIdeas(activeRoomId).then(() => queryClient.invalidateQueries({ queryKey: ['ideate', activeRoomId] }))}
-                className="text-xs h-8 text-blue-600"
-              >
-                <Sparkles className="size-3.5 mr-1" /> Seed ideas
-              </Button>
-            )}
+  // Loading state
+  if (loadingIdeate && !ideateData) {
+    return (
+      <div className="w-full max-w-[1360px] mx-auto p-6 md:p-8 flex flex-col gap-8">
+        <Skeleton className="h-14 w-full rounded-2xl" />
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          <div className="lg:col-span-8 flex flex-col gap-6">
+            <Skeleton className="h-32 w-full rounded-2xl" />
+            <Skeleton className="h-10 w-full rounded-xl" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Skeleton className="h-44 w-full rounded-xl" />
+              <Skeleton className="h-44 w-full rounded-xl" />
+            </div>
+          </div>
+          <div className="lg:col-span-4 flex flex-col gap-6">
+            <Skeleton className="h-64 w-full rounded-2xl" />
           </div>
         </div>
-
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="line-clamp-1 flex-1">
-            {brief?.fields?.problemStatement || ideateData?.topic?.problemStatement || 'Problem statement from brief'}
-          </span>
-          <Link to={`/app/room/${activeRoomId}/brief`} className="text-blue-600 hover:underline font-semibold shrink-0">
-            Open brief &rarr;
-          </Link>
-        </div>
       </div>
+    );
+  }
 
-      {/* Main Grid: Left feed (7 cols), Right summary & actions (5 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Feed Card */}
-        <div className="lg:col-span-7 flex flex-col rounded-[24px] bg-card border border-border shadow-xs overflow-hidden">
-          <IdeaComposer
+  // Error state
+  if (ideateError && !ideateData) {
+    return (
+      <div className="w-full max-w-xl mx-auto p-8 my-auto">
+        <ErrorState
+          message={(ideateError as any)?.message || 'Failed to connect to the ideation room.'}
+          onRetry={() => refetchIdeate()}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full max-w-[1360px] mx-auto p-4 sm:p-6 lg:p-8 flex flex-col gap-6 pb-24">
+      {/* Offline banner */}
+      <OfflineBanner />
+
+      {/* Header */}
+      <IdeateHeader
+        roomId={activeRoomId}
+        isLocked={isLocked}
+        problemStatement={brief?.fields?.problemStatement || ideateData?.topic?.problemStatement}
+        onDownloadMarkdown={() => ideaService.exportIdeasMarkdown(activeRoomId)}
+        onSeedIdeas={() =>
+          ideaService.seedSampleIdeas(activeRoomId).then(() => {
+            queryClient.invalidateQueries({ queryKey: ['ideate', activeRoomId] });
+            toast.success('Sample ideas seeded');
+          })
+        }
+      />
+
+      {/* Main Layout: 68% Main Column / 32% Sticky Right Rail */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Main Column (~68% = 8 cols) */}
+        <main className="lg:col-span-8 flex flex-col gap-6 min-w-0">
+          {/* Composer */}
+          <IdeateComposer
+            ref={composerRef}
+            currentUser={user}
             isLocked={isLocked}
             canPost={canPost}
             isPending={createMutation.isPending}
-            onPost={(d) => createMutation.mutate(d)}
+            onPost={(d) => {
+              createMutation.mutate(d);
+            }}
           />
 
-          {/* Filter Pills */}
-          <div className="px-4 py-2 bg-muted/20 border-b border-border/60 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1">
-              {(['all', 'pending', 'approved', 'rejected'] as const).map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setFeedFilter(tab)}
-                  className={cn(
-                    'px-2.5 py-1 rounded-lg font-medium capitalize transition-colors',
-                    feedFilter === tab ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  {tab} ({tab === 'all' ? counts.total : counts[tab]})
-                </button>
-              ))}
-            </div>
-            <span className="text-[11px] text-muted-foreground font-mono">Live feed (15s poll)</span>
+          {/* Filter Bar */}
+          <IdeateFilterBar
+            activeTab={feedFilter}
+            onSelectTab={setFeedFilter}
+            counts={counts}
+            sort={sort}
+            onSelectSort={setSort}
+            viewMode={viewMode}
+            onSelectViewMode={setViewMode}
+          />
+
+          {/* ARIA Live notification for count / status updates */}
+          <div aria-live="polite" aria-atomic="true" className="sr-only">
+            Showing {filteredAndSortedIdeas.length} ideas in {feedFilter} filter.
           </div>
 
-          {/* Ideas List */}
-          <div className="divide-y divide-border/60">
-            {filteredIdeas.length === 0 ? (
-              <div className="p-8 text-center text-xs text-muted-foreground">
-                No ideas in this category yet.
-              </div>
-            ) : (
-              filteredIdeas.map((idea) => (
-                <IdeaFeedCard
+          {/* Ideas List or Tab-specific Empty State */}
+          {filteredAndSortedIdeas.length === 0 ? (
+            <IdeateEmptyState
+              tab={feedFilter}
+              isLocked={isLocked}
+              onFocusComposer={() => composerRef.current?.focus()}
+            />
+          ) : (
+            <div
+              className={
+                viewMode === 'cards'
+                  ? 'grid grid-cols-1 md:grid-cols-2 gap-4'
+                  : 'flex flex-col gap-3'
+              }
+            >
+              {filteredAndSortedIdeas.map((idea) => (
+                <IdeateCard
                   key={idea.id}
                   idea={idea}
                   isMine={user?.id ? idea.authorId === String(user.id) : true}
                   canDecide={canDecide}
                   isLocked={isLocked}
+                  viewMode={viewMode}
                   onApprove={(id) => approveMutation.mutate(id)}
                   onReject={(id) => rejectMutation.mutate(id)}
                   onStar={(id, isPrimary) => starMutation.mutate({ ideaId: id, isPrimary })}
                   onUpdate={(i) => updateMutation.mutate(i)}
                   onDelete={(id) => deleteMutation.mutate(id)}
                 />
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Right Rail: Decisions and Completion */}
-        <div className="lg:col-span-5 flex flex-col gap-4">
-          <div className="rounded-[24px] bg-card border border-border p-6 flex flex-col gap-4 shadow-xs">
-            <h3 className="text-sm font-bold text-foreground">Ideation Progress</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 rounded-xl bg-muted/40 border border-border/60">
-                <span className="text-[11px] text-muted-foreground uppercase font-semibold">Total</span>
-                <p className="text-xl font-mono font-bold mt-0.5">{counts.total}</p>
-              </div>
-              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600">
-                <span className="text-[11px] uppercase font-semibold">Approved</span>
-                <p className="text-xl font-mono font-bold mt-0.5">{counts.approved}</p>
-              </div>
+              ))}
             </div>
+          )}
+        </main>
 
-            <div className="pt-2 border-t border-border/60 flex flex-col gap-2">
-              {!isLocked ? (
-                <>
-                  {approvedCount === 0 && (
-                    <p className="text-xs text-amber-600 flex items-center gap-1.5">
-                      <AlertCircle className="size-3.5 shrink-0" />
-                      At least one approved idea is required to complete ideation.
-                    </p>
-                  )}
-                  {canFinish && (
-                    <Button
-                      onClick={() => doneMutation.mutate()}
-                      disabled={approvedCount === 0 || doneMutation.isPending}
-                      className="w-full text-xs font-semibold h-9"
-                    >
-                      {doneMutation.isPending ? 'Completing...' : 'Mark ideation done & proceed'}
-                    </Button>
-                  )}
-                </>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  <p className="text-xs text-emerald-600 font-medium">
-                    Ideation is complete! Your team is ready to plan.
-                  </p>
-                  <Button onClick={() => navigate(`/app/room/${activeRoomId}/plan`)} className="w-full text-xs h-9">
-                    Go to Plan &rarr;
-                  </Button>
-                  {canReopen && (
-                    <Button variant="outline" onClick={() => reopenMutation.mutate()} className="w-full text-xs h-9">
-                      Reopen ideation
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+        {/* Right Rail (~32% = 4 cols) */}
+        <div className="lg:col-span-4 min-w-0">
+          <IdeateRightRail
+            roomId={activeRoomId}
+            isLocked={isLocked}
+            canFinish={canFinish}
+            canReopen={canReopen}
+            counts={counts}
+            ideas={ideas}
+            members={members}
+            isDonePending={doneMutation.isPending}
+            onMarkDone={() => doneMutation.mutate()}
+            onReopen={() => reopenMutation.mutate()}
+          />
         </div>
       </div>
     </div>

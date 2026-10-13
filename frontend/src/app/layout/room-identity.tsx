@@ -7,6 +7,7 @@ import { InvitePopover } from '@/features/room/invite-popover';
 import { ChevronDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getRoomCover } from '@/shared/utils/room-cover';
+import { useLiveContext, LiveIndicator } from '@/design';
 
 export interface RoomIdentityProps {
   roomId: string;
@@ -35,6 +36,7 @@ export function RoomIdentity({
 }: RoomIdentityProps) {
   const navigate = useNavigate();
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
+  const { isReconnecting } = useLiveContext();
 
   const cover = React.useMemo(() => getRoomCover(roomId), [roomId]);
 
@@ -145,12 +147,12 @@ export function RoomIdentity({
 
       {/* 2. Room Switcher Row */}
       {!isCollapsed ? (
-        <div className="flex items-center justify-between gap-2 mt-0.5">
+        <div className="flex items-center justify-between gap-1 mt-0.5 min-w-0">
           <Popover open={switcherOpen} onOpenChange={setSwitcherOpen}>
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="flex items-center gap-2.5 min-w-0 flex-1 text-left p-1 rounded-[var(--r-control)] hover:bg-hover transition-colors cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-ink"
+                className="flex items-center gap-2 min-w-0 flex-1 text-left p-1 rounded-[var(--r-control)] hover:bg-hover transition-colors cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-ink"
                 aria-label="Switch room"
               >
                 {/* 32px room tile with deterministic generative gradient */}
@@ -161,21 +163,10 @@ export function RoomIdentity({
                   {initials}
                 </div>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1">
-                    <span className="text-[14px] font-semibold text-ink leading-tight truncate">
-                      {roomTitle}
-                    </span>
-                    <ChevronDown className="size-3.5 text-ink-3 shrink-0 group-hover:text-ink transition-colors" />
-                  </div>
-                  {/* Phase chip with semantic dot */}
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className={cn('size-1.5 rounded-full shrink-0', phaseInfo.dotColor)} />
-                    <span className="text-[11px] font-medium text-ink-2 leading-none truncate capitalize">
-                      {phaseInfo.label}
-                    </span>
-                  </div>
-                </div>
+                <span className="text-[14px] font-semibold text-ink leading-tight truncate min-w-0 flex-1">
+                  {roomTitle}
+                </span>
+                <ChevronDown className="size-3.5 text-ink-3 shrink-0 group-hover:text-ink transition-colors" />
               </button>
             </PopoverTrigger>
 
@@ -219,39 +210,25 @@ export function RoomIdentity({
             </PopoverContent>
           </Popover>
 
-          {/* Right side: 24px Progress Ring + Invite Icon */}
-          <div className="flex items-center gap-1 shrink-0">
-            <Tooltip delayDuration={150}>
-              <TooltipTrigger asChild>
-                {progressRing}
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs font-mono font-medium">
-                Hour {hourOfEvent} of {totalHours}
-              </TooltipContent>
-            </Tooltip>
+          {/* Right side: Invite Icon only */}
+          <div className="flex items-center shrink-0">
             <InvitePopover roomId={roomId} />
           </div>
         </div>
       ) : (
-        /* Collapsed mode: tile with ring & invite */
+        /* Collapsed mode: tile & invite */
         <div className="flex flex-col items-center gap-2 py-1">
           <Tooltip delayDuration={100}>
             <TooltipTrigger asChild>
               <div
-                className="relative size-8 rounded-xl text-xs font-bold flex items-center justify-center text-ink cursor-pointer border border-black/5"
+                className="size-8 rounded-xl text-xs font-bold flex items-center justify-center text-ink cursor-pointer border border-black/5"
                 style={{ background: cover.gradient }}
               >
                 {initials}
-                <div className="absolute -inset-1 pointer-events-none">
-                  {progressRing}
-                </div>
               </div>
             </TooltipTrigger>
             <TooltipContent side="right">
               <p className="font-semibold">{roomTitle}</p>
-              <p className="text-[11px] text-muted-foreground capitalize">
-                {phaseInfo.label} · Hour {hourOfEvent} of {totalHours}
-              </p>
             </TooltipContent>
           </Tooltip>
           <InvitePopover roomId={roomId} />

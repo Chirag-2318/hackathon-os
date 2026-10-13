@@ -39,6 +39,8 @@ public class InviteService {
     private final ActivityLogger activityLogger;
     private final NotificationService notificationService;
     private final AppProperties appProperties;
+    private final com.hackathonos.backend.templates.EventTemplateRepository templateRepository;
+    private final com.hackathonos.backend.events.RoomEventService roomEventService;
 
     public InviteService(InviteRepository inviteRepository,
                          RoomRepository roomRepository,
@@ -50,7 +52,9 @@ public class InviteService {
                          JoinAttemptLimiter attemptLimiter,
                          ActivityLogger activityLogger,
                          NotificationService notificationService,
-                         AppProperties appProperties) {
+                         AppProperties appProperties,
+                         com.hackathonos.backend.templates.EventTemplateRepository templateRepository,
+                         com.hackathonos.backend.events.RoomEventService roomEventService) {
         this.inviteRepository = inviteRepository;
         this.roomRepository = roomRepository;
         this.memberRepository = memberRepository;
@@ -62,6 +66,8 @@ public class InviteService {
         this.activityLogger = activityLogger;
         this.notificationService = notificationService;
         this.appProperties = appProperties;
+        this.templateRepository = templateRepository;
+        this.roomEventService = roomEventService;
     }
 
     /**
@@ -159,10 +165,15 @@ public class InviteService {
 
         Room room = roomRepository.findByIdAndArchivedAtIsNull(invite.getRoomId())
                 .orElseThrow(() -> new NotFoundException("ROOM_NOT_FOUND", "Room not found"));
+        if (room.getDeletedAt() != null) {
+            throw new NotFoundException("ROOM_NOT_FOUND", "Room not found");
+        }
 
         if (memberRepository.existsByRoomIdAndUserId(room.getId(), caller.getId())) {
             return new JoinInviteResponse(room.getId());
         }
+
+        checkRoomCapacity(room);
 
         addMemberAndProcessInvites(caller, room, invite.getRole());
         invite.setUsedCount(invite.getUsedCount() + 1);
@@ -171,29 +182,50 @@ public class InviteService {
     }
 
     /**
-     * Joins a room using the 4-character join code. Throttled to 10 attempts per 10 minutes.
+     * Joins a room using the 8-character join code. Throttled to 10 attempts per minute.
+     * Returns the same generic error for invalid or revoked/expired codes to prevent enumeration.
      */
     @Transactional
     public JoinInviteResponse joinByCode(User caller, JoinCodeRequest request) {
         attemptLimiter.checkAndRecord(caller.getId());
 
-        Room room = roomRepository.findByJoinCodeIgnoreCaseAndArchivedAtIsNull(request.code().trim().toUpperCase())
-                .orElseThrow(() -> new NotFoundException("INVALID_CODE", "Invalid join code"));
+        String rawCode = request.code() != null ? request.code().trim().toUpperCase() : "";
+        Room room = roomRepository.findByJoinCodeIgnoreCaseAndArchivedAtIsNull(rawCode)
+                .orElse(null);
+
+        if (room == null || room.getDeletedAt() != null || room.isCodeRevoked()
+                || (room.getCodeExpiresAt() != null && Instant.now().isAfter(room.getCodeExpiresAt()))) {
+            throw new NotFoundException("INVALID_CODE", "Invalid join code");
+        }
 
         if (memberRepository.existsByRoomIdAndUserId(room.getId(), caller.getId())) {
             return new JoinInviteResponse(room.getId());
         }
 
+        checkRoomCapacity(room);
+
         addMemberAndProcessInvites(caller, room, "BUILDER");
         return new JoinInviteResponse(room.getId());
     }
 
+    private void checkRoomCapacity(Room room) {
+        if (room.getTemplateId() != null) {
+            templateRepository.findById(room.getTemplateId()).ifPresent(tpl -> {
+                long current = memberRepository.countByRoomId(room.getId());
+                if (tpl.getTeamMax() > 0 && current >= tpl.getTeamMax()) {
+                    throw new BadRequestException("ROOM_FULL", "Room has reached the maximum capacity of " + tpl.getTeamMax() + " members");
+                }
+            });
+        }
+    }
+
     private void addMemberAndProcessInvites(User caller, Room room, String role) {
         RoomMember member = new RoomMember(room.getId(), caller.getId(), role);
-        memberRepository.save(member);
+        member = memberRepository.save(member);
 
         matchPendingInvitation(caller, room.getId());
         activityLogger.log(room, caller, "member_joined", caller.getName() + " joined the room");
+        roomEventService.recordEvent(room.getId(), "member.joined", "room_member", member.getId().toString(), caller.getId());
 
         if (room.getOwnerId() != null && !room.getOwnerId().equals(caller.getId())) {
             userRepository.findById(room.getOwnerId()).ifPresent(leader ->

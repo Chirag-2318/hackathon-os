@@ -538,4 +538,74 @@ public class UserService {
 
         return getMe(user);
     }
+
+    /**
+     * Updates tour progression status and path, idempotently recording completion timestamp.
+     */
+    @Transactional
+    public UserDetailDto updateTour(User user, TourUpdateRequest request) {
+        String currentStatus = (user.getTourStatus() != null && !user.getTourStatus().isBlank())
+                ? user.getTourStatus().toUpperCase()
+                : "NOT_STARTED";
+        String newStatus = request.status() != null ? request.status().toUpperCase() : null;
+
+        if (newStatus != null) {
+            if ("NOT_STARTED".equals(currentStatus) || "SKIPPED".equals(currentStatus)) {
+                if ("SKIPPED".equals(newStatus) || "COMPLETED".equals(newStatus)) {
+                    user.setTourStatus(newStatus);
+                    if ("COMPLETED".equals(newStatus) && user.getTourCompletedAt() == null) {
+                        user.setTourCompletedAt(Instant.now());
+                    }
+                } else {
+                    throw new ConflictException("INVALID_TOUR_STATUS", "Tour can only transition to SKIPPED or COMPLETED");
+                }
+            } else if ("COMPLETED".equals(currentStatus)) {
+                // Idempotent repeat: already completed, keep COMPLETED status
+            } else if (newStatus.equals(currentStatus)) {
+                // Idempotent repeat
+            } else {
+                throw new ConflictException("TOUR_ALREADY_FINISHED", "Tour status transition not allowed once completed");
+            }
+        }
+        if (request.path() != null) {
+            user.setTourPath(request.path());
+        }
+        if (request.version() != null) {
+            user.setTourVersion(request.version());
+        }
+        user = userRepository.save(user);
+        return getMe(user);
+    }
+
+    /**
+     * Records a hotspot viewed by user, enforcing key character rules and a maximum of 50 keys idempotently.
+     */
+    @Transactional
+    public UserDetailDto addHotspot(User user, HotspotRequest request) {
+        List<String> current = new ArrayList<>(userMapper.parseJsonList(user.getHotspotsSeen()));
+        String key = request.key().trim();
+        if (!current.contains(key)) {
+            if (current.size() >= 50) {
+                throw new BadRequestException("MAX_HOTSPOTS_REACHED", "Maximum 50 hotspots can be recorded");
+            }
+            current.add(key);
+            try {
+                user.setHotspotsSeen(objectMapper.writeValueAsString(current));
+            } catch (Exception e) {
+                user.setHotspotsSeen("[]");
+            }
+            user = userRepository.save(user);
+        }
+        return getMe(user);
+    }
+
+    /**
+     * Resets viewed hotspots list, clearing page tips and beacons.
+     */
+    @Transactional
+    public UserDetailDto resetHotspots(User user) {
+        user.setHotspotsSeen("[]");
+        user = userRepository.save(user);
+        return getMe(user);
+    }
 }

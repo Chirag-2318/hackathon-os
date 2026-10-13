@@ -1,17 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { X, Flag, Copy, Trash2, Check, Plus } from 'lucide-react';
+import { X, Flag, Copy, Trash2, Check, Plus, AlertTriangle, MessageSquare, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useParams } from 'react-router-dom';
 import { boardService } from '@/services/boardService';
 import type { Task, RoomMember, BoardPhase, TaskStatus, TaskPriority } from '@/services/types';
-import { IssueKey, IssueTypeIcon, PhaseChip } from '@/features/build/ui';
+import { IssueKey, IssueTypeIcon, StatusLozenge } from '@/features/build/ui';
 import { MarkdownRenderer } from '@/utils/markdown';
 import { Button } from '@/components/ui/button';
 import { useCurrentUser } from '@/features/auth/useCurrentUser';
 import { TaskDetailsSidebar } from './components/task-details-sidebar';
 import { TaskActivitySection } from './components/task-activity-section';
+import { TaskPrerequisitesSection } from './components/task-prerequisites-section';
 
 export interface TaskDetailModalProps {
   task: Task;
@@ -36,6 +38,7 @@ export function TaskDetailModal({
   const { data: currentUser } = useCurrentUser();
   const currentUserId = currentUser?.id ? String(currentUser.id) : '';
   const currentMember = members.find((m) => m.id === currentUserId) || members[0] || null;
+  const isLeader = currentMember?.role === 'leader';
 
   const { roomId: paramRoomId } = useParams<{ roomId?: string }>();
   const activeRoomId = task.roomId || paramRoomId || '';
@@ -51,6 +54,32 @@ export function TaskDetailModal({
   // Subtasks
   const [newSubtaskText, setNewSubtaskText] = useState('');
   const [showAddSubtask, setShowAddSubtask] = useState(false);
+
+  // Leader review actions
+  const [showRequestChangesNote, setShowRequestChangesNote] = useState(false);
+  const [requestChangesNote, setRequestChangesNote] = useState('');
+  const [isReviewing, setIsReviewing] = useState(false);
+
+  // Focus trap and restore refs
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousActiveElementRef = useRef<HTMLElement | null>(null);
+
+  // Lock body scroll while open and restore on close
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
+    previousActiveElementRef.current = document.activeElement as HTMLElement | null;
+    modalRef.current?.focus();
+    return () => {
+      previousActiveElementRef.current?.focus();
+    };
+  }, []);
 
   // Sync when task prop changes
   useEffect(() => {
@@ -212,21 +241,87 @@ export function TaskDetailModal({
     onUpdateTask(updated);
   };
 
+  const handleConfirmDone = async () => {
+    setIsReviewing(true);
+    try {
+      const updated = await boardService.confirmTask(activeRoomId, task.id);
+      onUpdateTask(updated);
+      toast.success('Task confirmed done');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to confirm task');
+    } finally {
+      setIsReviewing(false);
+    }
+  };
+
+  const handleRequestChanges = async () => {
+    if (!requestChangesNote.trim()) {
+      toast.error('Please enter a note explaining what needs to be changed');
+      return;
+    }
+    setIsReviewing(true);
+    try {
+      const updated = await boardService.requestChanges(activeRoomId, task.id, requestChangesNote.trim());
+      onUpdateTask(updated);
+      setShowRequestChangesNote(false);
+      setRequestChangesNote('');
+      toast.success('Changes requested. Task moved back to In Progress');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to request changes');
+    } finally {
+      setIsReviewing(false);
+    }
+  };
+
   const subtasks = task.subtasks || [];
   const phase = phases.find((p) => p.id === task.phaseId) || phases[0];
 
-  return (
+  // Blocked prerequisites calculation
+  const prerequisites = task.prerequisites || [];
+  const unconfirmedPrereqs = prerequisites.filter((p) => !p.confirmed);
+  const unconfirmedTitles = unconfirmedPrereqs.map((p) => p.title || p.key);
+
+  const handleKeyDownModal = (e: React.KeyboardEvent) => {
+    if (e.key === 'Tab' && modalRef.current) {
+      const focusables = modalRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  };
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 100,
+      }}
+      className="bg-black/35 animate-in fade-in duration-160 p-3 sm:p-5"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <motion.div
-        initial={{ opacity: 0, scale: 0.97 }}
+        ref={modalRef}
+        tabIndex={-1}
+        onKeyDown={handleKeyDownModal}
+        initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.97 }}
-        className="w-full max-w-[860px] max-h-[92vh] flex flex-col rounded-[20px] bg-card border border-border shadow-2xl overflow-hidden"
+        exit={{ opacity: 0, scale: 0.98 }}
+        transition={{ duration: 0.16, ease: 'easeOut' }}
+        className="w-[min(920px,92vw)] max-h-[85vh] flex flex-col rounded-[20px] bg-card border border-border shadow-2xl overflow-hidden outline-none"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border/70 bg-card">
@@ -280,8 +375,92 @@ export function TaskDetailModal({
           </div>
         </div>
 
+        {/* Amber notice if blocked */}
+        {task.isBlocked && unconfirmedTitles.length > 0 && (
+          <div className="mx-6 mt-4 p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2 shrink-0">
+            <AlertTriangle className="size-4 shrink-0" />
+            <span className="font-medium">
+              You can't start this task yet. Finish: {unconfirmedTitles.join(', ')}.
+            </span>
+          </div>
+        )}
+
+        {/* Leader Review Banner in Done status */}
+        {task.status === 'done' && (
+          <div className="mx-6 mt-3 p-3 rounded-xl bg-muted/40 border border-border flex flex-col gap-2 shrink-0">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2 text-xs">
+                {task.reviewState === 'CONFIRMED' ? (
+                  <span className="flex items-center gap-1.5 text-emerald-600 font-bold">
+                    <Check className="size-4" /> Confirmed done by leader
+                  </span>
+                ) : task.reviewState === 'CHANGES_REQUESTED' ? (
+                  <span className="text-rose-600 font-semibold">
+                    Changes requested: {task.reviewNote || 'Please revise task deliverable'}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground font-medium">
+                    Awaiting leader confirmation
+                  </span>
+                )}
+              </div>
+
+              {isLeader && task.reviewState !== 'CONFIRMED' && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleConfirmDone}
+                    disabled={isReviewing}
+                    className="h-7 text-xs px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                  >
+                    Confirm done
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowRequestChangesNote(!showRequestChangesNote)}
+                    disabled={isReviewing}
+                    className="h-7 text-xs px-3"
+                  >
+                    Request changes
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {showRequestChangesNote && isLeader && (
+              <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+                <input
+                  type="text"
+                  value={requestChangesNote}
+                  onChange={(e) => setRequestChangesNote(e.target.value)}
+                  placeholder="Explain what needs to be revised..."
+                  className="flex-1 text-xs px-3 py-1.5 rounded-lg bg-card border border-border text-foreground outline-none focus:ring-1 focus:ring-rose-500"
+                />
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={handleRequestChanges}
+                  disabled={isReviewing || !requestChangesNote.trim()}
+                  className="h-7 text-xs px-3"
+                >
+                  Send
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowRequestChangesNote(false)}
+                  className="h-7 text-xs px-2"
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Content Body */}
-        <div className="flex-1 flex flex-col md:flex-row overflow-y-auto">
+        <div className="flex-1 flex flex-col md:flex-row overflow-y-auto min-h-0">
           {/* Main Left Content */}
           <div className="flex-1 p-6 flex flex-col gap-6 overflow-y-auto">
             {/* Title / Summary */}
@@ -401,6 +580,15 @@ export function TaskDetailModal({
               )}
             </div>
 
+            {/* Prerequisites & Unlocks Section */}
+            <TaskPrerequisitesSection
+              task={task}
+              allTasks={allTasks}
+              members={members}
+              activeRoomId={activeRoomId}
+              onUpdateTask={onUpdateTask}
+            />
+
             {/* Activity Stream */}
             <TaskActivitySection
               task={task}
@@ -423,6 +611,7 @@ export function TaskDetailModal({
           />
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }

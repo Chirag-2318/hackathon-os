@@ -35,12 +35,14 @@ public class UserController {
         return userService.getMe(user);
     }
 
+    @com.hackathonos.backend.common.security.RateLimited(key = "username_avail", limit = 30, periodSeconds = 60)
     @GetMapping("/api/v1/users/username-available")
     public UsernameAvailableResponse checkUsernameAvailable(@RequestParam("username") String username) {
         UUID currentUserId = currentUser.getOptional().map(User::getId).orElse(null);
         return userService.checkUsernameAvailability(username, currentUserId);
     }
 
+    @com.hackathonos.backend.common.security.RateLimited(key = "avatar_upload", limit = 10, periodSeconds = 60)
     @PostMapping(value = "/api/v1/users/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public AvatarUploadResponse uploadAvatar(@RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
         User user = currentUser.get();
@@ -51,6 +53,24 @@ public class UserController {
     public UserDetailDto completeOnboarding(@RequestBody OnboardingRequest request) {
         User user = currentUser.get();
         return userService.completeOnboarding(user, request);
+    }
+
+    @PostMapping("/api/v1/users/me/tour")
+    public UserDetailDto updateTour(@Valid @RequestBody TourUpdateRequest request) {
+        User user = currentUser.get();
+        return userService.updateTour(user, request);
+    }
+
+    @PostMapping("/api/v1/users/me/hotspots")
+    public UserDetailDto addHotspot(@Valid @RequestBody HotspotRequest request) {
+        User user = currentUser.get();
+        return userService.addHotspot(user, request);
+    }
+
+    @PostMapping("/api/v1/users/me/hotspots/reset")
+    public UserDetailDto resetHotspots() {
+        User user = currentUser.get();
+        return userService.resetHotspots(user);
     }
 
     @GetMapping("/api/v1/users/me/settings")

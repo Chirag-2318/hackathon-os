@@ -123,4 +123,28 @@ export const planService = {
   async unlockBuild(roomId: string): Promise<void> {
     await apiFetch<void>(`/api/v1/rooms/${roomId}/stage/unlock-build`, { method: 'POST' });
   },
+
+  async getStepPrompt(roomId: string, stepNumber: number): Promise<{
+    prompt: string;
+    charCount: number;
+    mode: string;
+    ideaVerdict?: string;
+    missingInputs: string[];
+    stale: boolean;
+    generatedAt: string;
+  }> {
+    return apiFetch(`/api/v1/rooms/${roomId}/plan/steps/${stepNumber}/prompt`);
+  },
+
+  async refreshStepPrompt(roomId: string, stepNumber: number): Promise<{
+    prompt: string;
+    charCount: number;
+    mode: string;
+    ideaVerdict?: string;
+    missingInputs: string[];
+    stale: boolean;
+    generatedAt: string;
+  }> {
+    return apiFetch(`/api/v1/rooms/${roomId}/plan/steps/${stepNumber}/prompt/refresh`, { method: 'POST' });
+  },
 };

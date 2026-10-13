@@ -13,6 +13,8 @@ import { CrNameField } from './create-room/cr-name-field';
 import { CrTemplateCard } from './create-room/cr-template-card';
 import { CrScheduleField } from './create-room/cr-schedule-field';
 import { CrMoreSection } from './create-room/cr-more-section';
+import { SectionErrorBoundary } from '@/design/components/error-state';
+import { useMeta } from '@/api/useMeta';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -44,10 +46,20 @@ function getModeHint(start: Date | null, end: Date | null): ModeHint {
   return null;
 }
 
+export interface CreateRoomPrefill {
+  name?: string;
+  startsAt?: string | Date;
+  endsAt?: string | Date;
+  durationHours?: number;
+  templateId?: string;
+  teamSize?: number;
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function CreateRoomDialogOverlay() {
-  const { isOpen, close, data } = useOverlay<{ defaultTemplateId?: string }>('create-room-dialog');
+export function CreateRoomDialogInner({ prefill: directPrefill }: { prefill?: CreateRoomPrefill } = {}) {
+  const { isOpen, close, data } = useOverlay<{ defaultTemplateId?: string; prefill?: CreateRoomPrefill }>('create-room-dialog');
+  const prefill = directPrefill || data?.prefill;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const setContext = useSidebarStore((s) => s.setContext);
@@ -84,6 +96,33 @@ export function CreateRoomDialogOverlay() {
     if (description || projectDescription) setMoreOpen(true);
   }, [description, projectDescription]);
 
+  // Apply prefill
+  useEffect(() => {
+    if (isOpen && prefill) {
+      if (prefill.name) {
+        setName(prefill.name.trim().slice(0, 60));
+      }
+      if (prefill.startsAt) {
+        const s = new Date(prefill.startsAt);
+        const validStart = isNaN(s.getTime()) ? getNextSaturday9AM() : (s.getTime() < Date.now() ? new Date() : s);
+        setStartValue(toInputValue(validStart));
+        let duration = prefill.durationHours;
+        if (!duration && prefill.endsAt) {
+          const e = new Date(prefill.endsAt);
+          if (!isNaN(e.getTime())) {
+            duration = Math.round((e.getTime() - new Date(prefill.startsAt).getTime()) / 3600_000);
+          }
+        }
+        const clampedDuration = Math.max(1, Math.min(168, duration || 36));
+        setEndValue(toInputValue(new Date(validStart.getTime() + clampedDuration * 3600_000)));
+        setEndManuallyEdited(true);
+      }
+      if (prefill.teamSize) {
+        setDescription((prev) => prev || `Teams of up to ${prefill.teamSize}`);
+      }
+    }
+  }, [isOpen, prefill]);
+
   // Apply defaultTemplateId from Playbooks if in templates; otherwise clear it
   useEffect(() => {
     if (isOpen && data?.defaultTemplateId) {
@@ -114,16 +153,38 @@ export function CreateRoomDialogOverlay() {
     }
   }, [isOpen]);
 
-  // Preselect only the first returned template if none selected or not in list
+  // Preselect closest template if prefilled, or first template
   useEffect(() => {
     if (templates.length > 0) {
-      if (!selectedTemplateId || !templates.some((t) => t.id === selectedTemplateId)) {
+      if (prefill?.templateId && templates.some((t) => t.id === prefill.templateId)) {
+        setSelectedTemplateId(prefill.templateId);
+      } else if (prefill?.durationHours || prefill?.endsAt) {
+        let duration = prefill.durationHours;
+        if (!duration && prefill.endsAt && prefill.startsAt) {
+          const e = new Date(prefill.endsAt);
+          const s = new Date(prefill.startsAt);
+          if (!isNaN(e.getTime()) && !isNaN(s.getTime())) {
+            duration = Math.round((e.getTime() - s.getTime()) / 3600_000);
+          }
+        }
+        const target = Math.max(1, Math.min(168, duration || 36));
+        let closest = templates[0];
+        let minDiff = Math.abs(closest.durationHours - target);
+        for (const t of templates) {
+          const diff = Math.abs(t.durationHours - target);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closest = t;
+          }
+        }
+        setSelectedTemplateId(closest.id);
+      } else if (!selectedTemplateId || !templates.some((t) => t.id === selectedTemplateId)) {
         setSelectedTemplateId(templates[0].id);
       }
     } else {
       setSelectedTemplateId(null);
     }
-  }, [templates, selectedTemplateId]);
+  }, [templates, selectedTemplateId, prefill]);
 
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId) ?? templates[0] ?? null;
 
@@ -167,13 +228,43 @@ export function CreateRoomDialogOverlay() {
   })();
 
   // Suggest name
+  const { data: meta } = useMeta();
+  const aiAllowed = meta?.aiEnabled ?? true;
+  const [alternativeNames, setAlternativeNames] = useState<string[]>([]);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
+
   const suggestMutation = useMutation({
-    mutationFn: () => roomService.suggestName(),
+    mutationFn: () => roomService.suggestRoomName({
+      description: (description ?? '').trim() || undefined,
+      templateId: selectedTemplateId || undefined,
+      currentName: (name ?? '').trim() || undefined,
+    }),
     onSuccess: (res) => {
-      setName(res.suggestion);
+      const names = Array.isArray(res?.names) ? res.names.filter(Boolean) : [];
+      if (names.length > 0) {
+        setName(names[0] ?? '');
+        setAlternativeNames(names.slice(1).map(n => n ?? ''));
+      }
+      setSuggestError(null);
       setSubmitError(null);
     },
+    onError: (err: any) => {
+      setSuggestError(err?.message || 'Failed to suggest names. Please try again.');
+    },
   });
+
+  const handleSelectAlternative = (selectedAlt: string) => {
+    if (!selectedAlt) return;
+    const oldName = (name ?? '').trim();
+    setName(selectedAlt);
+    setAlternativeNames((prev) => {
+      const filtered = prev.filter((n) => n !== selectedAlt);
+      if (oldName && !filtered.includes(oldName)) {
+        filtered.push(oldName);
+      }
+      return filtered;
+    });
+  };
 
   // Create room
   const createMutation = useMutation({
@@ -206,15 +297,19 @@ export function CreateRoomDialogOverlay() {
 
   const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-  const nameError = name.trim().length > 0 && name.trim().length < 3
+  const safeName = (name ?? '').trim();
+  const safeDesc = (description ?? '').trim();
+  const safeProjDesc = (projectDescription ?? '').trim();
+
+  const nameError = safeName.length > 0 && safeName.length < 3
     ? 'Name must be at least 3 characters.'
-    : name.trim().length > 60
+    : safeName.length > 60
     ? 'Name must be 60 characters or fewer.'
     : null;
 
   const isFormValid =
-    name.trim().length >= 3 &&
-    name.trim().length <= 60 &&
+    safeName.length >= 3 &&
+    safeName.length <= 60 &&
     !!selectedTemplateId &&
     !endError;
 
@@ -226,15 +321,15 @@ export function CreateRoomDialogOverlay() {
     setSubmitError(null);
 
     createMutation.mutate({
-      name: name.trim(),
-      description: description.trim() || undefined,
-      projectDescription: projectDescription.trim() || undefined,
+      name: safeName,
+      description: safeDesc || undefined,
+      projectDescription: safeProjDesc || undefined,
       templateId: selectedTemplateId,
       eventStart: startDate?.toISOString(),
       eventEnd: endDate?.toISOString(),
       timezone: userTimezone,
     });
-  }, [isFormValid, name, description, projectDescription, selectedTemplateId, startDate, endDate, userTimezone, createMutation]);
+  }, [isFormValid, safeName, safeDesc, safeProjDesc, selectedTemplateId, startDate, endDate, userTimezone, createMutation]);
 
   const handleClose = () => {
     if (createMutation.isPending) return;
@@ -326,12 +421,20 @@ export function CreateRoomDialogOverlay() {
           <CrNameField
             value={name}
             onChange={setName}
-            onClearError={() => setSubmitError(null)}
+            onClearError={() => {
+              setSubmitError(null);
+              setSuggestError(null);
+            }}
             isSuggesting={suggestMutation.isPending}
             onSuggest={() => suggestMutation.mutate()}
             error={nameError ?? undefined}
             touched={nameTouched}
             onBlur={() => setNameTouched(true)}
+            alternativeNames={alternativeNames}
+            onSelectAlternative={handleSelectAlternative}
+            suggestError={suggestError}
+            onRetrySuggest={() => suggestMutation.mutate()}
+            aiAllowed={aiAllowed}
           />
 
           {/* 2. Event template */}
@@ -454,5 +557,13 @@ export function CreateRoomDialogOverlay() {
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function CreateRoomDialogOverlay({ prefill }: { prefill?: CreateRoomPrefill } = {}) {
+  return (
+    <SectionErrorBoundary fallbackMessage="Unable to load the Create Room dialog.">
+      <CreateRoomDialogInner prefill={prefill} />
+    </SectionErrorBoundary>
   );
 }

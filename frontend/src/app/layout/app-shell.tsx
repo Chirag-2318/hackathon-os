@@ -8,7 +8,6 @@
 import { cn } from 'cn';
 import { AppSidebar } from './sidebar';
 import { PanelHeader } from './top-bar';
-import { PhaseTrack } from './phase-track';
 import { useSidebarStore } from './use-sidebar-store';
 import type { ReactNode } from 'react';
 
@@ -21,7 +20,6 @@ interface AppShellProps {
 
 export function AppShell({
   children,
-  showPhaseTrack = false,
   pageName = 'Home',
   rightRail,
 }: AppShellProps) {
@@ -46,9 +44,6 @@ export function AppShell({
       >
         {/* Sticky header inside the panel */}
         <PanelHeader pageName={pageName} inRoom={inRoom} />
-
-        {/* Phase Track — room pages only */}
-        {showPhaseTrack && inRoom && <PhaseTrack />}
 
         {/* Page content */}
         <div className="flex-1 flex min-h-0">

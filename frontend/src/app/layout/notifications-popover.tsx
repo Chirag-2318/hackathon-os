@@ -1,21 +1,23 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useState, useMemo } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { BellIcon } from '@/components/icons';
-import { AlertTriangle, AtSign, Clock, MessageSquare, Check } from 'lucide-react';
+import { Settings, Check, CheckCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Notification, NotificationsResponse } from '@/features/notifications/api/types';
+import { UserAvatar } from '@/components/ui/user-avatar';
+import { getRoomCover } from '@/shared/utils/room-cover';
+import { useSyncTabTitleUnread } from '@/shared/hooks/use-unread-title';
+import type { Notification } from '@/features/notifications/api/types';
 import {
   useUserNotifications,
   useUnreadCount,
   useMarkAllUserNotificationsRead,
+  useMarkNotificationRead,
 } from '@/features/notifications/api/notifications-api';
-import { isUuid } from '@/shared/lib/uuid';
 
 interface NotificationsPopoverProps {
   currentRoomId?: string;
@@ -23,50 +25,91 @@ interface NotificationsPopoverProps {
 }
 
 function formatRelativeTime(isoString: string): string {
-  const diff = Date.now() - new Date(isoString).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+  try {
+    const diff = Date.now() - new Date(isoString).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  } catch {
+    return 'recently';
+  }
 }
 
 export function NotificationsPopover({ currentRoomId, roomList = [] }: NotificationsPopoverProps) {
   const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [activeTab, setActiveTab] = useState<'unread' | 'all'>('unread');
   const navigate = useNavigate();
 
-  // User-wide notifications and unread count
   const { data: allNotifications = [], refetch } = useUserNotifications();
   const { data: unreadCountServer = 0 } = useUnreadCount();
   const { mutate: markAllRead } = useMarkAllUserNotificationsRead();
+  const { mutate: markSingleRead } = useMarkNotificationRead();
+
+  const localUnreadCount = allNotifications.filter((n) => !n.read).length;
+  const unreadCount = Math.max(unreadCountServer, localUnreadCount);
+
+  // Sync tab title: e.g. "(3) Hackathon OS"
+  useSyncTabTitleUnread(unreadCount);
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
     if (nextOpen) refetch();
   };
 
-  const localUnreadCount = allNotifications.filter((n) => !n.read).length;
-  const unreadCount = Math.max(unreadCountServer, localUnreadCount);
+  const displayedList = useMemo(() => {
+    if (activeTab === 'unread') {
+      return allNotifications.filter((n) => !n.read);
+    }
+    return allNotifications;
+  }, [allNotifications, activeTab]);
 
-  const filteredNotifications =
-    filter === 'unread' ? allNotifications.filter((n) => !n.read) : allNotifications;
+  // Group notifications by room
+  const groupedByRoom = useMemo(() => {
+    const map = new Map<string, { roomName: string; items: Notification[] }>();
 
-  const handleRowClick = (item: Notification) => {
+    for (const item of displayedList) {
+      const rId = item.roomId || 'general';
+      const rName =
+        item.roomName ||
+        roomList.find((r) => r.id === rId)?.title ||
+        (rId === 'general' ? 'General' : 'Hackathon Room');
+
+      if (!map.has(rId)) {
+        map.set(rId, { roomName: rName, items: [] });
+      }
+      map.get(rId)!.items.push(item);
+    }
+
+    return Array.from(map.entries()).map(([roomId, data]) => ({
+      roomId,
+      roomName: data.roomName,
+      items: data.items,
+    }));
+  }, [displayedList, roomList]);
+
+  const handleItemClick = (item: Notification, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!item.read) {
+      markSingleRead(item.id);
+    }
     setOpen(false);
 
-    if (item.roomId && isUuid(item.roomId)) {
-      if (item.type === 'blocker') {
-        navigate(`/app/room/${item.roomId}/board`);
-      } else {
-        navigate(`/app/room/${item.roomId}/overview`);
-      }
-    } else if (item.link) {
-      navigate(item.link);
+    const targetUrl = item.deepLink || item.link;
+    if (targetUrl) {
+      navigate(targetUrl);
+    } else if (item.roomId) {
+      navigate(`/app/room/${item.roomId}/overview`);
     } else {
       navigate('/app/notifications');
     }
+  };
+
+  const handleMarkItemRead = (item: Notification, e: React.MouseEvent) => {
+    e.stopPropagation();
+    markSingleRead(item.id);
   };
 
   return (
@@ -89,12 +132,12 @@ export function NotificationsPopover({ currentRoomId, roomList = [] }: Notificat
                 'absolute -top-0.5 -right-0.5',
                 'flex items-center justify-center',
                 'min-w-4 h-4 px-1 rounded-full',
-                'bg-danger text-white text-[10px] font-semibold tabular-nums',
-                'ring-2 ring-surface'
+                'bg-rose-500 text-white text-[10px] font-semibold tabular-nums font-mono',
+                'ring-2 ring-white dark:ring-zinc-900 animate-in zoom-in-75'
               )}
               aria-label={`${unreadCount} notifications`}
             >
-              {unreadCount}
+              {unreadCount > 9 ? '9+' : unreadCount}
             </span>
           )}
         </button>
@@ -103,128 +146,187 @@ export function NotificationsPopover({ currentRoomId, roomList = [] }: Notificat
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="w-[380px] p-0 rounded-[20px] bg-card border border-border shadow-xl font-[var(--font-inter)] overflow-hidden z-50"
+        className="w-[380px] p-0 rounded-[18px] bg-card border border-border shadow-xl font-[var(--font-inter)] overflow-hidden z-50 text-ink"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-surface/50">
+        {/* Header with Title, Tab switcher, Mark All Read & Settings */}
+        <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border bg-surface/60">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold text-ink">Notifications</h3>
+            <span className="text-[13px] font-semibold text-ink">Notifications</span>
             {unreadCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-700 text-[10px] font-semibold tabular-nums">
-                {unreadCount} new
+              <span className="px-1.5 py-0.2 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[10px] font-mono font-medium">
+                {unreadCount}
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-3">
-            {unreadCount > 0 && (
+          <div className="flex items-center gap-1.5">
+            {/* Tabs: Unread / All */}
+            <div className="flex items-center p-0.5 rounded-lg bg-surface border border-border text-[11px] font-medium mr-1">
               <button
                 type="button"
-                onClick={() => markAllRead()}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
-              >
-                Mark all read
-              </button>
-            )}
-
-            {/* Compact Segmented Control */}
-            <div className="flex items-center p-0.5 rounded-lg bg-surface border border-border text-[11px] font-medium">
-              <button
-                type="button"
-                onClick={() => setFilter('all')}
+                onClick={() => setActiveTab('unread')}
                 className={cn(
                   'px-2 py-0.5 rounded-md transition-all cursor-pointer',
-                  filter === 'all' ? 'bg-card text-ink font-semibold shadow-2xs' : 'text-ink-2 hover:text-ink'
-                )}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilter('unread')}
-                className={cn(
-                  'px-2 py-0.5 rounded-md transition-all cursor-pointer',
-                  filter === 'unread' ? 'bg-card text-ink font-semibold shadow-2xs' : 'text-ink-2 hover:text-ink'
+                  activeTab === 'unread'
+                    ? 'bg-card text-ink font-semibold shadow-2xs'
+                    : 'text-ink-2 hover:text-ink'
                 )}
               >
                 Unread
               </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('all')}
+                className={cn(
+                  'px-2 py-0.5 rounded-md transition-all cursor-pointer',
+                  activeTab === 'all'
+                    ? 'bg-card text-ink font-semibold shadow-2xs'
+                    : 'text-ink-2 hover:text-ink'
+                )}
+              >
+                All
+              </button>
             </div>
+
+            {unreadCount > 0 && (
+              <button
+                type="button"
+                onClick={() => markAllRead()}
+                title="Mark all as read"
+                className="text-[11px] font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 p-1 rounded hover:bg-hover transition-colors cursor-pointer"
+              >
+                <CheckCheck className="size-3.5" />
+              </button>
+            )}
+
+            <Link
+              to="/app/settings/notifications"
+              onClick={() => setOpen(false)}
+              className="text-ink-3 hover:text-ink p-1 rounded hover:bg-hover transition-colors cursor-pointer"
+              title="Notification settings"
+            >
+              <Settings className="size-3.5" />
+            </Link>
           </div>
         </div>
 
-        {/* Header Label */}
-        <div className="px-4 py-1.5 bg-surface/80 border-b border-border/50">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
-            All Notifications
-          </span>
-        </div>
-
-        {/* Notifications list */}
-        <div className="max-h-[360px] overflow-y-auto divide-y divide-border/50">
-          {filteredNotifications.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-8 text-center gap-2">
-              <div className="size-10 rounded-full bg-surface border border-border flex items-center justify-center text-ink-3">
-                <Check className="size-5 text-emerald-600" />
+        {/* Grouped Notifications List */}
+        <div className="max-h-[380px] overflow-y-auto divide-y divide-border/40 panel-scroll">
+          {groupedByRoom.length === 0 ? (
+            /* Empty state: animated checkmark */
+            <div className="flex flex-col items-center justify-center p-8 text-center gap-2.5">
+              <div className="size-11 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                <Check className="size-5 stroke-[2.5] animate-in zoom-in-50 duration-300" />
               </div>
-              <p className="text-sm font-semibold text-ink">You're all caught up</p>
-              <p className="text-xs text-ink-2">No unread notifications at the moment.</p>
+              <p className="text-[13px] font-medium text-ink">Nothing new. Go build something.</p>
+              <p className="text-[11px] text-ink-3 max-w-[220px]">
+                You are all caught up across your hackathons and teams.
+              </p>
             </div>
           ) : (
-            filteredNotifications.map((item) => {
-              // Icon tile color mapping:
-              // amber = deadline / system, blue = mention, red = blocker, gray = other
-              let tileClass = 'bg-gray-100 text-gray-700';
-              let IconComp = MessageSquare;
-
-              if (item.type === 'mention') {
-                tileClass = 'bg-blue-100 text-blue-700';
-                IconComp = AtSign;
-              } else if (item.type === 'blocker') {
-                tileClass = 'bg-red-100 text-red-700';
-                IconComp = AlertTriangle;
-              } else if (item.type === 'system') {
-                tileClass = 'bg-amber-100 text-amber-800';
-                IconComp = Clock;
-              }
-
+            groupedByRoom.map((group) => {
+              const cover = getRoomCover(group.roomId);
               return (
-                <div
-                  key={item.id}
-                  onClick={() => handleRowClick(item)}
-                  className={cn(
-                    'group relative flex items-start h-[56px] px-4 py-2 gap-3 hover:bg-hover transition-colors cursor-pointer',
-                    !item.read ? 'bg-blue-50/20' : 'bg-card'
-                  )}
-                >
-                  {/* Blue unread dot at far left */}
-                  {!item.read && (
-                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 size-1.5 rounded-full bg-blue-600" />
-                  )}
-
-                  {/* Icon Tile (32px) */}
-                  <div className={cn('size-8 rounded-xl shrink-0 flex items-center justify-center text-xs', tileClass)}>
-                    <IconComp className="size-4" />
+                <div key={group.roomId} className="bg-card">
+                  {/* Room group header with small room cover tile */}
+                  <div className="sticky top-0 z-10 flex items-center gap-2 px-3 py-1.5 bg-surface/90 backdrop-blur-xs border-b border-border/40 text-[11px] font-medium text-ink-2">
+                    <div
+                      className="size-3.5 rounded-sm shrink-0 border border-black/10"
+                      style={{ background: cover.gradient }}
+                    />
+                    <span className="truncate flex-1 font-semibold text-ink-2">{group.roomName}</span>
+                    <span className="text-[10px] text-ink-3 font-mono">{group.items.length}</span>
                   </div>
 
-                  {/* Text content */}
-                  <div className="flex-1 min-w-0 pr-2">
-                    <div className="flex items-center justify-between gap-1">
-                      <p className="text-[13px] font-medium text-ink truncate group-hover:text-blue-600 transition-colors">
-                        {item.title}
-                      </p>
-                      <span className="text-[11px] text-ink-3 shrink-0 tabular-nums">
-                        {formatRelativeTime(item.timestamp)}
-                      </span>
-                    </div>
-                    <p className="text-[12px] text-ink-2 truncate leading-tight mt-0.5">
-                      {item.body}
-                    </p>
+                  {/* Items in room */}
+                  <div className="divide-y divide-border/20">
+                    {group.items.map((item) => {
+                      const actor = {
+                        username: item.actorUsername || 'system',
+                        name: item.actorName || item.actorUsername || 'Teammate',
+                        avatarUrl: item.avatarUrl,
+                      };
+
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={(e) => handleItemClick(item, e)}
+                          className={cn(
+                            'group relative flex items-start gap-2.5 px-3 py-2 hover:bg-hover transition-colors cursor-pointer text-left',
+                            !item.read ? 'bg-blue-50/20 dark:bg-blue-950/20' : 'bg-card'
+                          )}
+                        >
+                          {/* Left: unread dot */}
+                          <div className="pt-1 w-2 shrink-0 flex justify-center">
+                            {!item.read ? (
+                              <span className="size-1.5 rounded-full bg-blue-600 dark:bg-blue-400" />
+                            ) : (
+                              <span className="size-1.5" />
+                            )}
+                          </div>
+
+                          {/* Actor UserAvatar */}
+                          <div className="shrink-0 mt-0.5">
+                            <UserAvatar user={actor} size={24} />
+                          </div>
+
+                          {/* Message and entity text */}
+                          <div className="flex-1 min-w-0 pr-1">
+                            <div className="flex items-center gap-1.5 text-[12px] leading-snug">
+                              <span className="font-medium text-ink truncate">
+                                {item.title || item.body}
+                              </span>
+                              {item.count && item.count > 1 && (
+                                <span className="px-1 py-0.2 rounded text-[10px] font-mono font-bold bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 shrink-0">
+                                  x{item.count}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] text-ink-3 font-mono">
+                                {formatRelativeTime(item.timestamp)}
+                              </span>
+                              {item.body && item.title && (
+                                <span className="text-[11px] text-ink-2 truncate">
+                                  {item.body}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Hover action: Mark read */}
+                          {!item.read && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleMarkItemRead(item, e)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-[10px] text-ink-3 hover:text-blue-600 rounded hover:bg-card shrink-0"
+                              title="Mark read"
+                            >
+                              <Check className="size-3" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
             })
           )}
+        </div>
+
+        {/* Footer: link to full page */}
+        <div className="px-3 py-2 border-t border-border bg-surface/40 flex items-center justify-between text-[11px]">
+          <Link
+            to="/app/notifications"
+            onClick={() => setOpen(false)}
+            className="text-ink-2 hover:text-ink font-medium transition-colors"
+          >
+            Open full notifications →
+          </Link>
+          <span className="text-[10px] text-ink-3 font-mono">
+            {displayedList.length} items
+          </span>
         </div>
       </PopoverContent>
     </Popover>

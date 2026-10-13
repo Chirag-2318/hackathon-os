@@ -107,8 +107,9 @@ public class TasksValidator {
             }
             totalEstimateMin += task.estimateMin;
 
-            if (item.has("dependsOn") && item.get("dependsOn").isArray()) {
-                for (JsonNode d : item.get("dependsOn")) {
+            JsonNode depNode = item.has("dependsOn") ? item.get("dependsOn") : (item.has("blockedBy") ? item.get("blockedBy") : item.get("prerequisites"));
+            if (depNode != null && depNode.isArray()) {
+                for (JsonNode d : depNode) {
                     String dep = d.asText();
                     if (!allTaskIds.contains(dep)) {
                         warnings.add("Task '" + task.id + "' depends on unknown task '" + dep + "', dependency dropped");

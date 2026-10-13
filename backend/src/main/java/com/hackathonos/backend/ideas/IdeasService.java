@@ -50,6 +50,7 @@ public class IdeasService {
     private final ActivityLogger activityLogger;
     private final NotificationService notificationService;
     private final IdeasMapper ideasMapper;
+    private final com.hackathonos.backend.events.RoomEventService roomEventService;
 
     public IdeasService(
             IdeaRepository ideaRepository,
@@ -65,7 +66,8 @@ public class IdeasService {
             RoomStageService stageService,
             ActivityLogger activityLogger,
             NotificationService notificationService,
-            IdeasMapper ideasMapper) {
+            IdeasMapper ideasMapper,
+            com.hackathonos.backend.events.RoomEventService roomEventService) {
         this.ideaRepository = ideaRepository;
         this.linkRepository = linkRepository;
         this.noteRepository = noteRepository;
@@ -80,6 +82,7 @@ public class IdeasService {
         this.activityLogger = activityLogger;
         this.notificationService = notificationService;
         this.ideasMapper = ideasMapper;
+        this.roomEventService = roomEventService;
     }
 
     /**
@@ -178,6 +181,7 @@ public class IdeasService {
         List<IdeaNote> savedNotes = saveNotes(idea.getId(), req.notes());
 
         activityLogger.log(room, user, "IDEA_POSTED", "Posted an idea");
+        roomEventService.recordEvent(roomId, "idea.posted", "idea", idea.getId().toString(), user.getId());
 
         // Notify leader if poster is not the leader
         Optional<RoomMember> leaderMember = memberRepository.findByRoomIdAndRole(roomId, "leader").stream().findFirst();
@@ -276,6 +280,7 @@ public class IdeasService {
                         "Idea approved", "Your idea was approved by " + user.getName()));
 
         activityLogger.log(room, user, "IDEA_APPROVED", "Approved an idea");
+        roomEventService.recordEvent(roomId, "idea.approved", "idea", savedIdea.getId().toString(), user.getId());
 
         return loadFullIdeaDto(savedIdea, user.getId());
     }
@@ -313,6 +318,7 @@ public class IdeasService {
                         "Idea rejected", "Your idea was marked as rejected"));
 
         activityLogger.log(room, user, "IDEA_REJECTED", "Rejected an idea");
+        roomEventService.recordEvent(roomId, "idea.rejected", "idea", savedIdea.getId().toString(), user.getId());
 
         return loadFullIdeaDto(savedIdea, user.getId());
     }

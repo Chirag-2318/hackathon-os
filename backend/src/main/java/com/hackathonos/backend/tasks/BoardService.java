@@ -138,7 +138,7 @@ public class BoardService {
 
         for (Task t : tasks) {
             String normStatus = taskDtoMapper.normalizeStatus(t.getStatus());
-            boolean isDone = "done".equals(normStatus);
+            boolean isDone = t.isConfirmedDone();
 
             if (isDone) {
                 doneCount++;
@@ -226,7 +226,7 @@ public class BoardService {
             Task target = taskById.get(dep.getDependsOnTaskId());
             if (target != null) {
                 map.computeIfAbsent(dep.getTaskId(), k -> new ArrayList<>()).add(
-                        new TaskDependencyItemDto(target.getId(), target.getTaskKey(), target.getSummary(), taskDtoMapper.normalizeStatus(target.getStatus()))
+                        new TaskDependencyItemDto(target.getId(), target.getTaskKey(), target.getSummary(), taskDtoMapper.normalizeStatus(target.getStatus()), target.isConfirmedDone())
                 );
             }
         }
@@ -241,7 +241,7 @@ public class BoardService {
                 Task blocker = taskById.get(dep.getTaskId());
                 if (blocker != null) {
                     map.computeIfAbsent(dep.getDependsOnTaskId(), k -> new ArrayList<>()).add(
-                            new TaskDependencyItemDto(blocker.getId(), blocker.getTaskKey(), blocker.getSummary(), taskDtoMapper.normalizeStatus(blocker.getStatus()))
+                            new TaskDependencyItemDto(blocker.getId(), blocker.getTaskKey(), blocker.getSummary(), taskDtoMapper.normalizeStatus(blocker.getStatus()), blocker.isConfirmedDone())
                     );
                 }
             }

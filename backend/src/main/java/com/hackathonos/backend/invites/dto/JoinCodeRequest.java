@@ -5,6 +5,6 @@ import jakarta.validation.constraints.Size;
 
 public record JoinCodeRequest(
         @NotBlank(message = "Join code is required")
-        @Size(min = 4, max = 4, message = "Join code must be 4 characters")
+        @Size(min = 4, max = 16, message = "Join code must be between 4 and 16 characters")
         String code
 ) {}

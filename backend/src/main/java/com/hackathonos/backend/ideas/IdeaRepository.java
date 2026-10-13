@@ -19,6 +19,7 @@ public interface IdeaRepository extends JpaRepository<Idea, UUID> {
     Optional<Idea> findByRoomIdAndPrimaryTrue(UUID roomId);
     long countByRoomId(UUID roomId);
     long countByRoomIdAndStatus(UUID roomId, String status);
+    long countByAuthorIdAndStatus(UUID authorId, String status);
 
     @Modifying
     @Query("UPDATE Idea i SET i.primary = false WHERE i.roomId = :roomId")

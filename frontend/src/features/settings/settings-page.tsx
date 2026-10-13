@@ -9,7 +9,7 @@
  */
 import { NavLink, Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import {
-  User, Palette, Bell, Link2, Key, Shield, CreditCard,
+  User, Palette, Bell, Link2, Key, Shield, CreditCard, Cpu,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -27,6 +27,7 @@ const NAV_ITEMS = [
   { label: 'Appearance',    path: 'appearance',     icon: <Palette className="size-4" />       },
   { label: 'Notifications', path: 'notifications',  icon: <Bell className="size-4" />          },
   { label: 'Integrations',  path: 'integrations',   icon: <Link2 className="size-4" />         },
+  { label: 'AI Status',     path: 'ai-status',      icon: <Cpu className="size-4" />           },
   { label: 'Privacy',       path: 'privacy',        icon: <Shield className="size-4" />        },
   { label: 'Billing',       path: 'billing',        icon: <CreditCard className="size-4" />   },
 ] as const;

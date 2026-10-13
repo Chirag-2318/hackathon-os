@@ -95,4 +95,100 @@ public class ToolService {
                 .sorted((a, b) -> Long.compare(b.count(), a.count()))
                 .toList();
     }
+
+    /**
+     * Ranks tools by overlap with the user's tech_stack and role_tags.
+     * If no overlap exists, returns 4 top general picks with null reason.
+     */
+    @Transactional(readOnly = true)
+    public CatalogDtos.RecommendedToolsResponse getRecommendedTools(com.hackathonos.backend.users.User user) {
+        List<Tool> allTools = toolRepository.findAllByOrderBySortOrderAsc();
+        LocalDate now = LocalDate.now();
+
+        List<String> techTags = parseJsonList(user != null ? user.getTechStack() : null);
+        List<String> roleTags = parseJsonList(user != null ? user.getRoleTags() : null);
+
+        record ScoredTool(Tool tool, CatalogDtos.ToolItemDto item, int score, String reason) {}
+        List<ScoredTool> scored = new ArrayList<>();
+
+        for (Tool t : allTools) {
+            boolean isStale = t.getLastChecked() != null && ChronoUnit.DAYS.between(t.getLastChecked(), now) > 90;
+            CatalogDtos.ToolItemDto item = new CatalogDtos.ToolItemDto(
+                    t.getId(),
+                    t.getName(),
+                    t.getDescription(),
+                    t.getCategory(),
+                    t.getCost(),
+                    t.getLicense(),
+                    t.getUrl(),
+                    t.getDescription(),
+                    t.getNotes(),
+                    t.getLastChecked(),
+                    isStale,
+                    true
+            );
+
+            int score = 0;
+            String firstReason = null;
+            String textToSearch = (t.getName() + " " + (t.getDescription() != null ? t.getDescription() : "") + " " + t.getCategory() + " " + (t.getNotes() != null ? t.getNotes() : "")).toLowerCase(Locale.ROOT);
+
+            // Match tech stack first
+            for (String tech : techTags) {
+                if (tech != null && !tech.isBlank() && textToSearch.contains(tech.toLowerCase(Locale.ROOT))) {
+                    score++;
+                    if (firstReason == null) {
+                        firstReason = "Because you use " + tech;
+                    }
+                }
+            }
+
+            // Match role tags
+            for (String role : roleTags) {
+                if (role != null && !role.isBlank() && textToSearch.contains(role.toLowerCase(Locale.ROOT))) {
+                    score++;
+                    if (firstReason == null) {
+                        firstReason = "Because you do " + role;
+                    }
+                }
+            }
+
+            scored.add(new ScoredTool(t, item, score, firstReason));
+        }
+
+        boolean anyOverlap = scored.stream().anyMatch(s -> s.score > 0);
+        List<CatalogDtos.RecommendedToolDto> result = new ArrayList<>();
+
+        if (anyOverlap) {
+            scored.sort((a, b) -> {
+                if (b.score != a.score) return Integer.compare(b.score, a.score);
+                return Integer.compare(a.tool.getSortOrder(), b.tool.getSortOrder());
+            });
+            for (int i = 0; i < Math.min(4, scored.size()); i++) {
+                ScoredTool st = scored.get(i);
+                result.add(new CatalogDtos.RecommendedToolDto(st.item, st.reason));
+            }
+        } else {
+            scored.sort(Comparator.comparingInt(a -> a.tool.getSortOrder()));
+            for (int i = 0; i < Math.min(4, scored.size()); i++) {
+                ScoredTool st = scored.get(i);
+                result.add(new CatalogDtos.RecommendedToolDto(st.item, null));
+            }
+        }
+
+        return new CatalogDtos.RecommendedToolsResponse(result);
+    }
+
+    private List<String> parseJsonList(String json) {
+        if (json == null || json.isBlank() || "[]".equals(json.trim())) {
+            return Collections.emptyList();
+        }
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+                    json,
+                    new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {}
+            );
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
+    }
 }

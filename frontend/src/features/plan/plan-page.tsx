@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { planService, ideaService } from '@/services';
+import { planService, ideaService, roomService } from '@/services';
 import type { PlanData } from '@/services/types';
 import { fetchSettings } from '@/features/prep/api/settings-api';
 import { PlanStepper } from './components/plan-stepper';
@@ -16,8 +16,15 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/apiClient';
+import { getAiErrorMessage } from '@/design';
 
 import { BeforeWePlan } from './components/before-we-plan';
+
+const BuildPhaseTransitionOverlay = React.lazy(() =>
+  import('./components/build-phase-transition-overlay').then((m) => ({
+    default: m.BuildPhaseTransitionOverlay,
+  }))
+);
 
 const STEP_KEYS = ['prd', 'tech', 'phases', 'tasks', 'demo'] as const;
 
@@ -33,6 +40,11 @@ export function PlanPage() {
   const [clearedStepsList, setClearedStepsList] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isEnteringBuild, setIsEnteringBuild] = useState(false);
+  const [showTransitionOverlay, setShowTransitionOverlay] = useState(false);
+  const [transitionCounts, setTransitionCounts] = useState<{ docs: number; tasks: number }>({
+    docs: 9,
+    tasks: 38,
+  });
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data: plan, isLoading: loadingPlan } = useQuery({
@@ -41,6 +53,14 @@ export function PlanPage() {
     enabled: Boolean(activeRoomId),
   });
 
+  const { data: room } = useQuery({
+    queryKey: ['room', activeRoomId],
+    queryFn: () => roomService.getRoom(activeRoomId),
+    enabled: Boolean(activeRoomId),
+  });
+
+  const aiAllowed = (room as any)?.aiAllowed ?? true;
+
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: fetchSettings,
@@ -48,14 +68,29 @@ export function PlanPage() {
 
   const hasApiKey = (settings?.aiAndKeys?.providers?.length || 0) > 0;
 
+  const handleRefreshPrompt = async () => {
+    try {
+      await planService.refreshStepPrompt(activeRoomId, currentStepIndex + 1);
+      queryClient.invalidateQueries({ queryKey: ['plan', activeRoomId] });
+    } catch (e: any) {
+      toast.error('Failed to refresh prompt');
+    }
+  };
+
   const stepsList = Array.isArray(plan?.steps)
     ? plan.steps
     : (plan?.steps && typeof plan.steps === 'object')
     ? Object.entries(plan.steps).map(([key, val]: [string, any], index) => ({
         key,
         index: index + 1,
-        title: key.toUpperCase(),
-        status: (val?.validated ? 'validated' : 'upcoming') as const,
+        title: {
+          prd: 'PRD and MVP',
+          tech: 'Tech stack and architecture',
+          phases: 'Phases and design',
+          tasks: 'Tasks',
+          demo: 'Demo and Q&A',
+        }[key.toLowerCase()] || key.toUpperCase(),
+        status: (val?.validated ? 'validated' : 'upcoming') as 'validated' | 'upcoming',
         answer: val?.answer,
         validated: !!val?.validated,
         errors: val?.issues || [],
@@ -129,6 +164,10 @@ export function PlanPage() {
         } catch (_) {}
         queryClient.invalidateQueries({ queryKey: ['room', activeRoomId] });
         queryClient.invalidateQueries({ queryKey: ['nav-badges', activeRoomId] });
+        setTransitionCounts({
+          docs: (res.completion as any)?.docs ?? (res.completion as any)?.docsCount ?? plan?.completion?.docsCount ?? 9,
+          tasks: (res.completion as any)?.tasks ?? (res.completion as any)?.tasksCount ?? plan?.completion?.tasksCount ?? 38,
+        });
       }
     }
     return res;
@@ -141,10 +180,12 @@ export function PlanPage() {
       queryClient.invalidateQueries({ queryKey: ['plan', activeRoomId] });
       queryClient.invalidateQueries({ queryKey: ['room', activeRoomId] });
       queryClient.invalidateQueries({ queryKey: ['plan-state', activeRoomId] });
-      toast.success('Planning phase done! Jumping into the build phase...');
-      setTimeout(() => {
+      const storageKey = `plan_transition_${activeRoomId}`;
+      if (!sessionStorage.getItem(storageKey)) {
+        setShowTransitionOverlay(true);
+      } else {
         navigate(`/app/room/${activeRoomId}/board`);
-      }, 1000);
+      }
     }
   };
 
@@ -158,14 +199,8 @@ export function PlanPage() {
         toast.success(`Generated answer for ${currentStep?.title || currentStepKey}`);
       }
     } catch (err: any) {
-      if (err instanceof ApiError) {
-        if (err.code === 'AI_NOT_CONFIGURED') toast.error('The AI key is missing or invalid on the server.');
-        else if (err.code === 'AI_RATE_LIMIT') toast.error('AI rate limit reached (30 calls/hr). Try again later.');
-        else if (err.code === 'AI_FAILED') toast.error(`AI generation failed: ${err.message}`);
-        else toast.error(err.message);
-      } else {
-        toast.error('AI generation failed');
-      }
+      const mappedMsg = getAiErrorMessage(err?.code, err?.message || 'AI generation failed');
+      toast.error(mappedMsg);
     } finally {
       setIsGenerating(false);
     }
@@ -175,10 +210,19 @@ export function PlanPage() {
     setIsEnteringBuild(true);
     try {
       await planService.enterBuild(activeRoomId);
-      toast.success('Workspace unlocked! Build phase has begun.');
-      navigate(`/app/room/${activeRoomId}/board`);
+      const storageKey = `plan_transition_${activeRoomId}`;
+      if (!sessionStorage.getItem(storageKey)) {
+        setTransitionCounts({
+          docs: plan?.completion?.docsCount ?? (plan?.completion as any)?.docs ?? 9,
+          tasks: plan?.completion?.tasksCount ?? (plan?.completion as any)?.tasks ?? 38,
+        });
+        setShowTransitionOverlay(true);
+      } else {
+        navigate(`/app/room/${activeRoomId}/board`);
+      }
     } catch (e: any) {
       toast.error(e.message || 'Failed to enter build phase');
+    } finally {
       setIsEnteringBuild(false);
     }
   };
@@ -206,12 +250,28 @@ export function PlanPage() {
 
   if (plan.planLocked) {
     return (
-      <PlanLockedView
-        roomId={activeRoomId}
-        onEnterBuild={handleEnterBuild}
-        isEnteringBuild={isEnteringBuild}
-        isLeader={plan.permissions?.isLeader ?? true}
-      />
+      <>
+        <PlanLockedView
+          roomId={activeRoomId}
+          docsCount={plan?.completion?.docsCount ?? transitionCounts.docs}
+          tasksCount={plan?.completion?.tasksCount ?? transitionCounts.tasks}
+          phasesCount={plan?.completion?.phasesCount ?? 5}
+          onEnterBuild={handleEnterBuild}
+          isEnteringBuild={isEnteringBuild}
+          isLeader={plan.permissions?.isLeader ?? true}
+        />
+        {showTransitionOverlay && (
+          <React.Suspense fallback={null}>
+            <BuildPhaseTransitionOverlay
+              roomId={activeRoomId}
+              docsCount={transitionCounts.docs}
+              tasksCount={transitionCounts.tasks}
+              onNavigate={() => navigate(`/app/room/${activeRoomId}/board`)}
+              onComplete={() => setShowTransitionOverlay(false)}
+            />
+          </React.Suspense>
+        )}
+      </>
     );
   }
 
@@ -239,6 +299,11 @@ export function PlanPage() {
             stepName={currentStep?.title || 'Plan Step'}
             promptText={currentStep?.promptText || ''}
             answer={answers[currentStepIndex] || ''}
+            mode={(currentStep as any)?.mode || 'BALANCED'}
+            ideaVerdict={(currentStep as any)?.ideaVerdict}
+            stale={Boolean((currentStep as any)?.stale)}
+            aiAllowed={aiAllowed}
+            onRefreshPrompt={handleRefreshPrompt}
             onAnswerChange={handleAnswerChange}
             onValidate={handleValidateStep}
             onSuccess={handleStepSuccess}
@@ -254,10 +319,13 @@ export function PlanPage() {
         <div className="flex flex-col gap-6 w-72 shrink-0">
           <PlanRightRail
             roomId={activeRoomId}
-            hasIdeas={Boolean(plan?.contextPack?.idea?.ok ?? (plan?.contextPack as any)?.ideas?.ready ?? false)}
-            ideasCount={Number(plan?.contextPack?.idea?.approvedCount ?? (plan?.contextPack as any)?.ideas?.count ?? 0)}
-            hasBrief={Boolean(plan?.contextPack?.rubric?.ok ?? (plan?.contextPack as any)?.rubric?.ready ?? false)}
-            hasSkills={Boolean(plan?.contextPack?.skills?.ok ?? (plan?.contextPack as any)?.skills?.ready ?? false)}
+            hasIdeas={Boolean((plan?.contextPack as any)?.ideas?.ready ?? (plan?.contextPack as any)?.idea?.ok ?? false)}
+            ideasCount={Number((plan?.contextPack as any)?.ideas?.count ?? (plan?.contextPack as any)?.idea?.approvedCount ?? 0)}
+            hasBrief={Boolean((plan?.contextPack as any)?.rubric?.ready ?? (plan?.contextPack as any)?.rubric?.ok ?? false)}
+            hasSkills={Boolean((plan?.contextPack as any)?.skills?.ready ?? (plan?.contextPack as any)?.skills?.ok ?? false)}
+            hasNotes={Boolean((plan?.contextPack as any)?.notes?.ok ?? !!plan?.planNotes)}
+            membersCount={(plan?.contextPack as any)?.skills?.totalMembers || 1}
+            isLeader={Boolean((plan?.permissions as any)?.canEnterBuild ?? true)}
             onDownloadIdeas={() => ideaService.exportIdeasMarkdown(activeRoomId)}
             onDownloadContext={() => planService.downloadContext(activeRoomId, currentStepKey)}
           />
@@ -323,6 +391,19 @@ export function PlanPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Build Phase Transition Overlay */}
+      {showTransitionOverlay && (
+        <React.Suspense fallback={null}>
+          <BuildPhaseTransitionOverlay
+            roomId={activeRoomId}
+            docsCount={transitionCounts.docs}
+            tasksCount={transitionCounts.tasks}
+            onNavigate={() => navigate(`/app/room/${activeRoomId}/board`)}
+            onComplete={() => setShowTransitionOverlay(false)}
+          />
+        </React.Suspense>
+      )}
     </div>
   );
 }

@@ -122,6 +122,7 @@ function NavRow({
         ['--nav-icon-bg' as string]: a ? 'var(--active)' : 'var(--shell)',
       })}
       data-testid={`nav-row-${item.key}`}
+      data-tour={`nav-${item.key === 'my-rooms' ? 'rooms' : item.key}`}
     >
       {/* Icon */}
       <span className="shrink-0 flex items-center justify-center size-5" data-testid={`nav-icon-${item.key}`}>

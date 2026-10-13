@@ -62,4 +62,13 @@ public class CatalogDtos {
             List<ToolItemDto> tools,
             ToolFacetsDto facets
     ) {}
+
+    public record RecommendedToolDto(
+            ToolItemDto tool,
+            String reason
+    ) {}
+
+    public record RecommendedToolsResponse(
+            List<RecommendedToolDto> items
+    ) {}
 }

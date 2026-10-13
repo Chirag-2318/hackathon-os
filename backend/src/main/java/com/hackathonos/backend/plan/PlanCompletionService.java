@@ -134,72 +134,18 @@ public class PlanCompletionService {
     public PlanCompletionSummaryDto complete(Room room) {
         UUID roomId = room.getId();
 
-        // 1. Clean regeneration
-        cleanRegenerate(roomId);
-
-        // Load validated step answers
-        Map<String, String> answers = new HashMap<>();
-        for (PlanStep s : stepRepository.findByRoomId(roomId)) {
-            if (s.isValidated() && s.getAnswer() != null) {
-                answers.put(s.getStepKey(), s.getAnswer());
-            }
+        List<Doc> docs = docRepository.findByRoomId(roomId).stream()
+                .filter(d -> "PLAN".equalsIgnoreCase(d.getSource()) || isPlanDoc(d.getFileName()))
+                .toList();
+        List<PlanPhase> phases = phaseRepository.findByRoomIdOrderByPositionAsc(roomId);
+        List<Task> tasks = taskRepository.findByRoomIdAndSource(roomId, "PLAN");
+        if (tasks.isEmpty()) {
+            tasks = taskRepository.findByRoomId(roomId);
         }
+        int totalTasks = tasks.size();
+        int assignedCount = (int) tasks.stream().filter(t -> t.getAssigneeId() != null).count();
+        int unassignedCount = totalTasks - assignedCount;
 
-        // 2. Insert Plan Phases
-        String phasesAnswer = answers.getOrDefault("phases", "[]");
-        ValidationResult phasesResult = phasesValidator.validate(phasesAnswer);
-        @SuppressWarnings("unchecked")
-        List<PhasesValidator.NormalizedPhase> parsedPhases = (List<PhasesValidator.NormalizedPhase>) phasesResult.parsed();
-        if (parsedPhases == null) parsedPhases = Collections.emptyList();
-
-        Map<String, PlanPhase> createdPhases = new HashMap<>();
-        int pos = 0;
-        for (PhasesValidator.NormalizedPhase np : parsedPhases) {
-            String goalsJson = "[]";
-            try {
-                goalsJson = objectMapper.writeValueAsString(np.goals);
-            } catch (Exception ignored) {}
-
-            PlanPhase phase = new PlanPhase(
-                    roomId,
-                    np.id,
-                    pos++,
-                    np.name,
-                    BigDecimal.valueOf(np.startPct),
-                    BigDecimal.valueOf(np.endPct),
-                    np.exitCheckpoint,
-                    goalsJson
-            );
-            phase = phaseRepository.save(phase);
-            createdPhases.put(np.id, phase);
-        }
-
-        // 3. Generate 9 Docs
-        List<Doc> generatedDocs = generateDocs(room, answers, parsedPhases);
-
-        // 4. Generate Tasks & Assignments
-        String tasksAnswer = answers.getOrDefault("tasks", "[]");
-        Set<String> phaseKeys = createdPhases.keySet();
-        List<RoomMember> members = memberRepository.findByRoomId(roomId);
-        long hours = 36;
-        if (room.getEventStart() != null && room.getEventEnd() != null) {
-            hours = Math.max(1, Duration.between(room.getEventStart(), room.getEventEnd()).toHours());
-        }
-
-        ValidationResult tasksResult = tasksValidator.validate(tasksAnswer, phaseKeys, Collections.emptySet(), members.size(), hours);
-        @SuppressWarnings("unchecked")
-        List<TasksValidator.NormalizedTask> parsedTasks = (List<TasksValidator.NormalizedTask>) tasksResult.parsed();
-        if (parsedTasks == null) parsedTasks = Collections.emptyList();
-
-        UUID leaderId = members.stream()
-                .filter(m -> "leader".equalsIgnoreCase(m.getRole()))
-                .map(RoomMember::getUserId)
-                .findFirst()
-                .orElse(room.getOwnerId());
-
-        TaskGenerationResult taskGen = createTasksAndAssignments(room, parsedTasks, createdPhases, members, leaderId);
-
-        // 5. Complete stage & notification
         room.setPlanDone(true);
         if (room.getBuildStartedAt() == null) {
             room.setBuildStartedAt(Instant.now());
@@ -208,27 +154,34 @@ public class PlanCompletionService {
         stageService.recompute(room);
         roomRepository.save(room);
 
-        PlanCompletionSummaryDto summary = new PlanCompletionSummaryDto(
-                generatedDocs.size(),
-                createdPhases.size(),
-                taskGen.totalTasks(),
-                taskGen.assignedCount(),
-                taskGen.unassignedCount(),
-                DateTimeFormatter.ISO_INSTANT.format(Instant.now())
-        );
+        List<RoomMember> members = memberRepository.findByRoomId(roomId);
+        UUID leaderId = members.stream()
+                .filter(m -> "leader".equalsIgnoreCase(m.getRole()))
+                .map(RoomMember::getUserId)
+                .findFirst()
+                .orElse(room.getOwnerId());
 
         User leaderUser = leaderId != null ? userRepository.findById(leaderId).orElse(null) : null;
-        activityLogger.log(room, leaderUser, "PLAN_COMPLETE", "Plan completed with " + taskGen.totalTasks() + " tasks");
+        activityLogger.log(room, leaderUser, "PLAN_COMPLETE", "Plan completed with " + totalTasks + " tasks");
         notificationService.notifyRoomMembers(room, null, NotificationType.PLAN_COMPLETE,
                 "Plan complete", "Plan is complete! Team is ready to enter the build phase.");
 
         checkpointService.createForRoom(room);
-        mvpSeedService.seedFromPlan(room);
-        diagramSeedService.seedFromPlan(room);
-        demoSeedService.seedFromPlan(room);
-        qaSeedService.seedFromPlan(room);
 
-        return summary;
+        return new PlanCompletionSummaryDto(
+                docs.size(),
+                phases.size(),
+                totalTasks,
+                assignedCount,
+                unassignedCount,
+                DateTimeFormatter.ISO_INSTANT.format(Instant.now())
+        );
+    }
+
+    private boolean isPlanDoc(String fileName) {
+        if (fileName == null) return false;
+        return List.of("PRD.md", "MVP.md", "TECH_STACK.md", "ARCHITECTURE.md", "PHASES.md", "DESIGN.md", "TASKS.md", "DEMO_SCRIPT.md", "QNA.md")
+                .contains(fileName);
     }
 
     private void cleanRegenerate(UUID roomId) {
@@ -495,9 +448,19 @@ public class PlanCompletionService {
             Task task = createdTasks.get(pt.id);
             if (task != null && pt.dependsOn != null) {
                 for (String depId : pt.dependsOn) {
+                    if (depId == null || depId.isBlank()) continue;
                     Task depTask = createdTasks.get(depId);
-                    if (depTask != null) {
-                        dependencyRepository.save(new TaskDependency(task.getId(), depTask.getId()));
+                    if (depTask == null) {
+                        for (Task candidate : createdTasks.values()) {
+                            if (candidate.getTaskKey().equalsIgnoreCase(depId.trim())
+                                    || candidate.getSummary().equalsIgnoreCase(depId.trim())) {
+                                depTask = candidate;
+                                break;
+                            }
+                        }
+                    }
+                    if (depTask != null && !depTask.getId().equals(task.getId())) {
+                        dependencyRepository.save(new TaskDependency(task.getId(), depTask.getId(), room.getId()));
                     }
                 }
             }

@@ -219,7 +219,7 @@ function PitchPanel({ roomId, rehearse, meta }: { roomId: string; rehearse: any;
   const [loadingScript, setLoadingScript] = useState(true);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [selectedSlide, setSelectedSlide] = useState<any>(null);
+  const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
   const [rehearsalOpen, setRehearsalOpen] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
 
@@ -346,8 +346,9 @@ function PitchPanel({ roomId, rehearse, meta }: { roomId: string; rehearse: any;
           {slides.map((sl: any, i: number) => {
             const w = ((sl.seconds ?? 30) / Math.max(1, totalSec)) * 100;
             const c = spkColors[(sl.speakerIndex ?? 0) % 6];
+            const cardId = sl.id ? String(sl.id) : `slide-${i}`;
             return (
-              <button key={i} type="button" onClick={() => setSelectedSlide(sl)}
+              <button key={cardId} type="button" onClick={() => setExpandedCardIds(prev => ({ ...prev, [cardId]: !prev[cardId] }))}
                 title={sl.headline} style={{ width: `${w}%`, background: c, minWidth: 4 }}
                 className="flex items-center justify-center text-[9px] text-white font-bold px-1 transition-opacity hover:opacity-80">
                 <span className="stage-num" style={{ width: 14, height: 14, fontSize: 7, background: '#FFF1D6', color: '#17171A' }}>{i+1}</span>
@@ -362,21 +363,22 @@ function PitchPanel({ roomId, rehearse, meta }: { roomId: string; rehearse: any;
       </div>
 
       {/* Script cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
         {slides.map((sl: any, i: number) => {
-          const isSelected = selectedSlide === sl;
+          const cardId = sl.id ? String(sl.id) : `slide-${i}`;
+          const isExpanded = !!expandedCardIds[cardId];
           const c = spkColors[(sl.speakerIndex ?? 0) % 6];
           return (
-            <div key={i}
-              className={cn('stage-card stage-card-light p-4 space-y-2 cursor-pointer transition-all', isSelected && 'ring-2')}
+            <div key={cardId}
+              className={cn('stage-card stage-card-light p-4 space-y-2 cursor-pointer transition-all', isExpanded && 'ring-2')}
               style={{ '--ring-color': c } as React.CSSProperties}
-              onClick={() => setSelectedSlide(isSelected ? null : sl)}>
+              onClick={() => setExpandedCardIds(prev => ({ ...prev, [cardId]: !prev[cardId] }))}>
               <div className="flex items-center gap-2">
                 <span className="stage-num">{i + 1}</span>
                 <span className="font-semibold text-sm flex-1 truncate">{sl.headline}</span>
                 <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: c + '22', color: c }}>{sl.seconds ?? 30}s</span>
               </div>
-              {isSelected && (
+              {isExpanded && (
                 <div className="space-y-2 pt-1">
                   {['say','show','cue'].map(f => sl[f] && (
                     <div key={f}>
@@ -395,16 +397,16 @@ function PitchPanel({ roomId, rehearse, meta }: { roomId: string; rehearse: any;
       <div className="flex flex-wrap gap-2">
         <button type="button" id="copy-script-btn"
           onClick={() => navigator.clipboard.writeText(slides.map((s: any, i: number) => `${i+1}. ${s.headline}\n${s.say ?? ''}`).join('\n\n'))}
-          className="stage-pill stage-pill-ghost text-xs py-1.5">Copy script</button>
+          className="stage-pill text-xs py-1.5 text-zinc-100 bg-white/5 border border-white/20 hover:bg-white/10 hover:border-white/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 transition-colors">Copy script</button>
         <button type="button" id="download-script-btn"
           onClick={() => {
             const blob = new Blob([slides.map((s: any, i: number) => `# ${i+1}. ${s.headline}\n\n**Say:** ${s.say ?? ''}\n\n**Show:** ${s.show ?? ''}\n\n**Cue:** ${s.cue ?? ''}`).join('\n\n')], { type: 'text/markdown' });
             const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pitch-script.md'; a.click();
           }}
-          className="stage-pill stage-pill-ghost text-xs py-1.5">Download .md</button>
+          className="stage-pill text-xs py-1.5 text-zinc-100 bg-white/5 border border-white/20 hover:bg-white/10 hover:border-white/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 transition-colors">Download .md</button>
         <button type="button" id="regenerate-pitch-btn"
           onClick={() => { if (confirm('Replace the current script?')) setWizardOpen(true); }}
-          className="stage-pill stage-pill-ghost text-xs py-1.5">Regenerate</button>
+          className="stage-pill text-xs py-1.5 text-zinc-100 bg-white/5 border border-white/20 hover:bg-white/10 hover:border-white/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 transition-colors">Regenerate</button>
       </div>
 
       {/* Rehearsal sticky bar */}

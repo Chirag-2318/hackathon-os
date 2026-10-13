@@ -31,8 +31,8 @@ import java.util.zip.InflaterInputStream;
 public class SsrfGuard {
 
     private static final Logger log = LoggerFactory.getLogger(SsrfGuard.class);
-    private static final int TIMEOUT_MS = 8000;
-    private static final int MAX_BODY_BYTES = 2 * 1024 * 1024; // 2 MB
+    private static final int TIMEOUT_MS = 10000; // 10s
+    private static final int MAX_BODY_BYTES = 5 * 1024 * 1024; // 5 MB
     private static final int MAX_REDIRECTS = 3;
 
     private final BriefPdfParser pdfParser;

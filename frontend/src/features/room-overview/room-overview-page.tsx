@@ -18,7 +18,7 @@ import { apiFetch } from '@/api/client';
 import { PlanningOverview } from './components/PlanningOverview';
 import { cn } from '@/lib/utils';
 import {
-  Check, ChevronDown, ChevronRight, Flag, Link2, AlertCircle,
+  Check, ChevronDown, ChevronRight, Link2, AlertCircle,
   Users, BarChart2, Layers, Clock, Zap, X, Circle, Download,
 } from 'lucide-react';
 import { TagChip, TimeChip, InlineHighlight, Checkbox, PairedBarRow, type ChartHue } from '../home/components/HomeDesignSystem';
@@ -356,10 +356,14 @@ function FadeUp({ children, delay = 0, className }: {
 
 // ─── COMPONENT 1: PAGE HEADER ─────────────────────────────────────────────────
 function PageHeader() {
-  const { isDemo, room, phases } = React.useContext(RoomOverviewContext);
-  const title = room?.name || 'Hackathon Workspace';
-  const phaseLabel = !isDemo && phases.length > 0 ? phases[0].name.replace(/^Phase\s*\d+:\s*/i, '').toUpperCase() : 'POLISH PHASE';
+  const { isDemo, room, phases, overview } = React.useContext(RoomOverviewContext);
   const roomId = room?.id;
+  const isSampleRoom = roomId === 'sample-room';
+  const title = isSampleRoom ? 'Team Orbit' : (room?.name || 'Hackathon Workspace');
+  const templateChip = room?.template || (isSampleRoom ? 'SIH-Style' : 'CAMPUS');
+  const stageChip = room?.stageChip || (isSampleRoom ? 'BUILD' : (!isDemo && phases.length > 0 ? phases[0].name.replace(/^Phase\s*\d+:\s*/i, '').toUpperCase() : 'POLISH PHASE'));
+  const currentHour = overview?.clock?.currentHour ?? 0;
+  const totalHours = overview?.clock?.totalHours ?? (room?.durationHours || (isSampleRoom ? 36 : 48));
 
   const handleExportZip = () => {
     if (!roomId) return;
@@ -373,11 +377,11 @@ function PageHeader() {
         <h1 className="text-[24px] font-[600] text-[#141414] tracking-[-0.02em] shrink-0">
           {title}
         </h1>
-        <TagChip label="CAMPUS" color="green" />
-        <TagChip label={phaseLabel} color="blue" />
+        <TagChip label={templateChip} color="green" />
+        <TagChip label={stageChip} color="blue" />
         <div className="h-[28px] rounded-full flex items-center gap-1.5 px-3 bg-[#F0F0F0] text-[#7A7A7E] text-[12px] font-[600] uppercase tracking-[0.02em] shrink-0">
           <Clock className="w-3.5 h-3.5" />
-          Hour {ELAPSED_HOURS} of 48
+          Hour {currentHour} of {totalHours}
         </div>
       </div>
       {roomId && (
@@ -395,16 +399,11 @@ function PageHeader() {
 
 // ─── COMPONENT 2: STATUS BAND ─────────────────────────────────────────────────
 function StatusBand() {
-  const { isDemo, tasks, phases, overview } = React.useContext(RoomOverviewContext);
+  const { isDemo, tasks, overview } = React.useContext(RoomOverviewContext);
   const [mounted, setMounted] = useState(false);
   const [tickCounts, setTickCounts] = useState(0);
 
-  const clock = overview?.clock;
   const vitals = overview?.vitals;
-
-  const currentHour = clock ? clock.currentHour : ELAPSED_HOURS;
-  const totalHours = clock ? clock.totalHours : 48;
-  const timeRemaining = clock?.formattedRemaining || (clock?.hoursLeft !== undefined ? `${clock.hoursLeft}h ${clock.minutesLeft || 0}m` : '—');
 
   const totalCheckpoints = vitals?.checkpoints?.total ?? CHECKPOINTS_TOTAL;
   const passedCheckpoints = vitals?.checkpoints?.passed ?? CHECKPOINTS_PASSED;
@@ -423,16 +422,6 @@ function StatusBand() {
     return () => clearTimeout(t);
   }, [totalCheckpoints]);
 
-  const activePhases = (!isDemo && phases.length > 0)
-    ? phases.map(p => ({
-        label: p.name.replace(/^Phase\s*\d+:\s*/i, ''),
-        widthPct: p.endPct - p.startPct,
-      }))
-    : PHASES;
-
-  // Calculate elapsed width for phase bar
-  let elapsedWidth = (currentHour / totalHours) * 100;
-
   // Stacked task bar widths
   const openTasks = (!isDemo && tasks.length > 0) ? tasks.filter(t => t.status !== 'done') : [];
   const taskTotal = vitals?.tasks ? (vitals.tasks.open || 1) : ((!isDemo && tasks.length > 0) ? (openTasks.length || 1) : TASKS_SUMMARY.open);
@@ -446,104 +435,7 @@ function StatusBand() {
 
   return (
     <SectionCard>
-      {/* Section 1: Timeline */}
-      <div className="px-5 py-4">
-        {/* Above bar label row */}
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[13px] text-[#8A8A8E] font-[500]">Hour {currentHour} of {totalHours}</span>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[13px] text-[#8A8A8E] font-[500]">Submit in</span>
-            <TimeChip timeRemaining={timeRemaining} urgent={currentHour > 36} />
-          </div>
-        </div>
-
-        {/* Phase bar */}
-        <div className="relative">
-          {/* Milestone flags above bar */}
-          <div className="relative h-5 mb-1">
-            {MILESTONES.map((m) => {
-              const leftPct = (m.hourOffset / 48) * 100;
-              return (
-                <div
-                  key={m.id}
-                  className="absolute -translate-x-1/2 group"
-                  style={{ left: `${leftPct}%` }}
-                >
-                  <Flag
-                    className={cn(
-                      'w-3.5 h-3.5 cursor-default',
-                      m.passed ? 'text-[#141414]' : m.id === 'demo-video' ? 'text-[#B7791F]' : 'text-[#8A8A8E]'
-                    )}
-                    fill={m.passed ? '#141414' : 'none'}
-                    strokeWidth={m.passed ? 0 : 1.75}
-                  />
-                  {/* Tooltip */}
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-20">
-                    <div className="bg-[#222222] text-white text-[12px] px-2.5 py-1.5 rounded-[8px] whitespace-nowrap shadow-lg">
-                      <div className="font-[600]">{m.label}</div>
-                      <div className="text-[#9A9A9A] text-[11px]">{m.passed ? 'Passed' : m.id === 'demo-video' ? 'Fri 1:30 AM' : 'Fri 7:00 AM'}</div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Segmented bar */}
-          <div className="flex gap-[3px] h-[10px] w-full">
-            {PHASES.map((phase, idx) => {
-              const isPast = idx < CURRENT_PHASE_IDX;
-              const isCurrent = idx === CURRENT_PHASE_IDX;
-              return (
-                <div
-                  key={phase.label}
-                  className="relative h-full rounded-[5px] overflow-hidden"
-                  style={{ width: `${phase.widthPct}%`, backgroundColor: '#E8E8E8' }}
-                >
-                  <div
-                    className="absolute left-0 top-0 h-full rounded-[5px] transition-all duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-                    style={{
-                      width: mounted ? (isPast ? '100%' : isCurrent ? `${PHASE_PROGRESS_PCT}%` : '0%') : '0%',
-                      backgroundColor: isPast ? '#141414' : isCurrent ? '#2F9BEA' : 'transparent',
-                    }}
-                  />
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Pulsing "you are here" marker */}
-          <div
-            className="absolute top-[5px] -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-full bg-white border-[2.5px] border-[#2F9BEA] z-10 transition-all duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-            style={{
-              left: mounted ? `${elapsedWidth}%` : '0%',
-              animation: 'pulse-marker 2.4s infinite cubic-bezier(0.66, 0, 0, 1)',
-            }}
-          />
-
-          {/* Phase labels */}
-          <div className="flex gap-[3px] mt-2 w-full">
-            {PHASES.map((phase, idx) => (
-              <div
-                key={phase.label}
-                className={cn(
-                  'text-[11px] text-center truncate',
-                  idx === CURRENT_PHASE_IDX
-                    ? 'text-[#141414] font-[600]'
-                    : 'text-[#B4B4B8] font-[500]'
-                )}
-                style={{ width: `${phase.widthPct}%` }}
-              >
-                {phase.label}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <CardHairline />
-
-      {/* Section 2: Vitals grid */}
+      {/* Vitals grid */}
       <div className="grid grid-cols-4 divide-x divide-[#EEEEEE]">
         {/* 1. Checkpoints */}
         <div className="px-5 py-3.5">
@@ -1846,7 +1738,7 @@ export function RoomOverviewPage() {
         </FadeUp>
 
         {/* Status Band */}
-        <FadeUp delay={50}>
+        <FadeUp delay={25}>
           <div className="mb-4">
             <StatusBand />
           </div>

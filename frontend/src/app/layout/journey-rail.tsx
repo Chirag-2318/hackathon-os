@@ -135,9 +135,18 @@ export function JourneyRail({
       },
     ].filter((item) => !isModuleHidden(item.id));
 
+    const isSampleRoom = roomId === 'sample-room';
+    const planGroupActive = ['brief', 'ideate', 'plan', 'prep', 'crowd-check'].some(s => currentSubPath.startsWith(s));
+    const buildGroupActive = ['board', 'schedule', 'mvp', 'docs'].some(s => currentSubPath.startsWith(s));
+    const techGroupActive = ['github', 'apis', 'diagrams'].some(s => currentSubPath.startsWith(s));
+    const presentGroupActive = ['deck', 'pitch', 'pitch-kit', 'submission'].some(s => currentSubPath.startsWith(s));
+    const reviewGroupActive = ['readiness', 'summary', 'retro'].some(s => currentSubPath.startsWith(s));
+
     const isPlanDone = isBuildUnlocked || Boolean(stageDone.plan) || ['build', 'freeze', 'polish', 'submit', 'review'].includes(stage);
     const isPlanCurrent = ['brief', 'ideate', 'plan', 'crowd', 'before'].includes(stage) && !isPlanDone;
-    const planState: GroupState = isPlanDone ? 'done' : isPlanCurrent ? 'current' : 'upcoming';
+    const planState: GroupState = isSampleRoom
+      ? (planGroupActive ? 'current' : 'done')
+      : (isPlanDone ? 'done' : isPlanCurrent ? 'current' : 'upcoming');
 
     // 2. BUILD Group
     const vitalsTasks = overviewData?.vitals?.tasks;
@@ -147,13 +156,15 @@ export function JourneyRail({
 
     const isBuildDone = ['polish', 'deck', 'pitch', 'submit', 'submitted', 'review'].includes(stage);
     const isBuildCurrent = ['build', 'freeze'].includes(stage);
-    const buildState: GroupState = !isBuildUnlocked
+    const buildState: GroupState = isSampleRoom
+      ? (buildGroupActive ? 'current' : (techGroupActive || presentGroupActive || reviewGroupActive ? 'done' : 'upcoming'))
+      : (!isBuildUnlocked
       ? 'locked'
       : isBuildDone
       ? 'done'
       : isBuildCurrent
       ? 'current'
-      : 'upcoming';
+      : 'upcoming');
 
     const buildItems: JourneyItemDef[] = [
       {
@@ -188,13 +199,15 @@ export function JourneyRail({
     ].filter((item) => !isModuleHidden(item.id));
 
     // 3. TECH Group
-    const techState: GroupState = !isBuildUnlocked
+    const techState: GroupState = isSampleRoom
+      ? (techGroupActive ? 'current' : (presentGroupActive || reviewGroupActive ? 'done' : 'upcoming'))
+      : (!isBuildUnlocked
       ? 'locked'
       : ['submit', 'submitted', 'review'].includes(stage)
       ? 'done'
       : ['build', 'freeze', 'polish'].includes(stage)
       ? 'current'
-      : 'upcoming';
+      : 'upcoming');
 
     const techItems: JourneyItemDef[] = [
       {
@@ -221,7 +234,9 @@ export function JourneyRail({
     // 4. PRESENT Group
     const isPresentDone = ['submit', 'submitted', 'review'].includes(stage);
     const isPresentCurrent = ['polish', 'deck', 'pitch', 'rehearse'].includes(stage);
-    const presentState: GroupState = isPresentDone ? 'done' : isPresentCurrent ? 'current' : 'upcoming';
+    const presentState: GroupState = isSampleRoom
+      ? (presentGroupActive ? 'current' : (reviewGroupActive ? 'done' : 'upcoming'))
+      : (isPresentDone ? 'done' : isPresentCurrent ? 'current' : 'upcoming');
 
     const presentItems: JourneyItemDef[] = [
       {
@@ -248,7 +263,9 @@ export function JourneyRail({
     // 5. REVIEW Group
     const isReviewDone = stage === 'ended';
     const isReviewCurrent = ['review', 'after'].includes(stage);
-    const reviewState: GroupState = isReviewDone ? 'done' : isReviewCurrent ? 'current' : 'upcoming';
+    const reviewState: GroupState = isSampleRoom
+      ? (reviewGroupActive ? 'current' : 'upcoming')
+      : (isReviewDone ? 'done' : isReviewCurrent ? 'current' : 'upcoming');
 
     const reviewItems: JourneyItemDef[] = [
       {
@@ -256,6 +273,12 @@ export function JourneyRail({
         label: 'Readiness',
         path: `/app/room/${roomId}/readiness`,
         icon: (p: any) => <ReadinessIcon {...p} />,
+      },
+      {
+        id: 'summary',
+        label: 'Summary',
+        path: `/app/room/${roomId}/summary`,
+        icon: (p: any) => <RetroIcon {...p} />,
       },
       {
         id: 'retro',
@@ -349,10 +372,10 @@ export function JourneyRail({
 
   // Auto-expand group containing active route if route changes
   React.useEffect(() => {
-    if (activeGroupId && openGroup !== activeGroupId) {
+    if (activeGroupId && (roomId === 'sample-room' || openGroup !== activeGroupId)) {
       setOpenGroup(activeGroupId);
     }
-  }, [activeGroupId]);
+  }, [activeGroupId, roomId]);
 
   const handleToggleGroup = (groupId: string, isLocked: boolean) => {
     if (isLocked) {
@@ -458,6 +481,7 @@ export function JourneyRail({
                       <Link
                         key={item.id}
                         to={isLocked ? '#' : item.path}
+                        data-tour={`nav-${item.id === 'pitch-kit' ? 'pitch' : item.id}`}
                         onClick={(e) => {
                           if (isLocked) {
                             e.preventDefault();
@@ -583,6 +607,7 @@ export function JourneyRail({
 
                         <Link
                           to={item.path}
+                          data-tour={`nav-${item.id === 'pitch-kit' ? 'pitch' : item.id}`}
                           aria-current={isActive ? 'page' : undefined}
                           className={cn(
                             'group relative flex items-center h-8 px-2 rounded-[8px] gap-2 w-full outline-none transition-colors duration-150 cursor-pointer text-[13px] font-medium',

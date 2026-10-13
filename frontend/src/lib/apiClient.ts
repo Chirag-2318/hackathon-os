@@ -23,10 +23,15 @@ function getCookie(name: string): string | null {
   return match ? decodeURIComponent(match[2]) : null;
 }
 
+import { isSampleRoomTarget, handleSampleRoomRequest } from '@/tour/guided/sample-room-adapter';
+
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 const BASE_URL = API_BASE_URL;
 
 export async function apiClient<T>(path: string, options: RequestInit = {}): Promise<T> {
+  if (isSampleRoomTarget(path)) {
+    return handleSampleRoomRequest<T>(path, options);
+  }
   const method = (options.method ?? 'GET').toUpperCase();
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers: Record<string, string> = {
@@ -41,7 +46,8 @@ export async function apiClient<T>(path: string, options: RequestInit = {}): Pro
     }
   }
 
-  const url = path.startsWith('http') ? path : `${BASE_URL}${path}`;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const url = path.startsWith('http') ? path : `${BASE_URL}${normalizedPath}`;
 
   let res: Response;
   try {
@@ -60,9 +66,12 @@ export async function apiClient<T>(path: string, options: RequestInit = {}): Pro
 
   if (res.status === 401) {
     let body: any = {};
-    try {
-      body = await res.clone().json();
-    } catch {}
+    const ct = res.headers.get('content-type') || '';
+    if (ct.includes('application/json')) {
+      try {
+        body = await res.clone().json();
+      } catch {}
+    }
     if (body?.code === 'GITHUB_TOKEN_INVALID') {
       throw new ApiError(401, body.message || "The server's GitHub token is invalid. Check APP_GITHUB_TOKEN in .env.", 'GITHUB_TOKEN_INVALID');
     }
@@ -89,9 +98,14 @@ export async function apiClient<T>(path: string, options: RequestInit = {}): Pro
 
   if (!res.ok) {
     let body: any = {};
-    try {
-      body = await res.json();
-    } catch {
+    const ct = res.headers.get('content-type') || '';
+    if (ct.includes('application/json')) {
+      try {
+        body = await res.json();
+      } catch {
+        body = { message: res.statusText };
+      }
+    } else {
       body = { message: res.statusText };
     }
 
@@ -117,9 +131,27 @@ export async function apiClient<T>(path: string, options: RequestInit = {}): Pro
     return undefined as T;
   }
 
+  const trimmed = text.trim();
+  if (
+    contentType.includes('text/html') ||
+    trimmed.startsWith('<!DOCTYPE') ||
+    trimmed.startsWith('<!doctype') ||
+    trimmed.startsWith('<html')
+  ) {
+    throw new ApiError(
+      res.status,
+      `API returned HTML instead of JSON (${res.status} ${res.statusText})`,
+      'INVALID_CONTENT_TYPE'
+    );
+  }
+
   try {
     return JSON.parse(text) as T;
-  } catch {
-    return text as unknown as T;
+  } catch (err: any) {
+    throw new ApiError(
+      res.status,
+      `Failed to parse response JSON: ${err?.message || 'Invalid JSON format'}`,
+      'PARSE_ERROR'
+    );
   }
 }

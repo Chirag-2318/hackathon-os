@@ -226,6 +226,7 @@ graph TD
     "phaseId": "core",
     "role": "frontend",
     "estimateMin": 180,
+    "dependsOn": ["Set up database migrations and tables"],
     "acceptance": ["Displays real project data", "Responsive layout"]
   },
   {

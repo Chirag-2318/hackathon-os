@@ -34,6 +34,7 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
     long countByRoomIdAndAssigneeIdAndStatusNot(UUID roomId, UUID assigneeId, String status);
     long countByRoomIdAndFlaggedTrueAndStatusNot(UUID roomId, String status);
     long countByRoomIdAndAssigneeIdIsNullAndStatusNot(UUID roomId, String status);
+    long countByAssigneeIdAndConfirmedAtIsNotNull(UUID assigneeId);
 
     @Modifying
     @Query("DELETE FROM Task t WHERE t.roomId = :roomId AND t.source = 'PLAN'")

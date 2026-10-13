@@ -70,6 +70,9 @@ const ReadinessPage = lazy(() =>
   import('@/features/readiness/readiness-page').then((m) => ({ default: m.ReadinessPage }))
 );
 const RetroPage = lazy(() => import('@/features/retro/retro-page').then((m) => ({ default: m.RetroPage })));
+const RoomSummaryPage = lazy(() =>
+  import('@/features/summary/room-summary-page').then((m) => ({ default: m.RoomSummaryPage }))
+);
 const PrepPage = lazy(() => import('@/features/prep/prep-page').then((m) => ({ default: m.PrepPage })));
 const CrowdCheckPage = lazy(() =>
   import('@/features/prep/crowd-check-page').then((m) => ({ default: m.CrowdCheckPage }))
@@ -129,8 +132,24 @@ const DevFlowPage = import.meta.env.DEV
 
 function PageSuspenseFallback() {
   return (
-    <div className="flex items-center justify-center min-h-[50vh] p-8 text-sm text-ink-muted animate-pulse">
-      Loading...
+    <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 gap-3 animate-in fade-in duration-200">
+      <div className="relative size-10 flex items-center justify-center">
+        <div
+          className="absolute inset-0 rounded-full border-2 border-indigo-600/20 border-t-indigo-600 animate-spin"
+          style={{ animationDuration: '650ms' }}
+        />
+        <span className="font-[var(--font-display)] font-bold text-sm text-indigo-600 dark:text-indigo-400">
+          H
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5 text-xs font-mono font-medium text-muted-foreground">
+        <span>Initializing room</span>
+        <span className="inline-flex gap-0.5">
+          <span className="size-1 rounded-full bg-indigo-600 animate-pulse" />
+          <span className="size-1 rounded-full bg-indigo-600 animate-pulse [animation-delay:200ms]" />
+          <span className="size-1 rounded-full bg-indigo-600 animate-pulse [animation-delay:400ms]" />
+        </span>
+      </div>
     </div>
   );
 }
@@ -158,10 +177,12 @@ function HomeShellLayout() {
   })();
 
   return (
-    <ResponsiveShell showPhaseTrack={false} pageName={pageName}>
+    <ResponsiveShell pageName={pageName}>
       <GlobalOverlays />
       <Suspense fallback={<PageSuspenseFallback />}>
-        <Outlet />
+        <div key={location.pathname} className="page-transition min-h-full">
+          <Outlet />
+        </div>
       </Suspense>
     </ResponsiveShell>
   );
@@ -169,6 +190,12 @@ function HomeShellLayout() {
 
 import { toast } from 'sonner';
 import { isUuid } from '@/shared/lib/uuid';
+import { useRoomLive, usePresenceHeartbeat, LiveContext } from '@/design';
+
+function RoomsWildcardRedirect() {
+  const { roomId, '*': splat } = useParams<{ roomId: string; '*'?: string }>();
+  return <Navigate to={`/app/room/${roomId}/${splat || ''}`} replace />;
+}
 
 /** Layout route for room pages */
 function RoomShellLayout() {
@@ -176,20 +203,34 @@ function RoomShellLayout() {
   const location = useLocation();
   const { roomId } = useParams<{ roomId?: string }>();
 
-  if (!roomId || !isUuid(roomId)) {
+  const isTourActive = typeof window !== 'undefined' && sessionStorage.getItem('tour_active') === '1';
+  const isSampleRoom = roomId === 'sample-room';
+
+  if (isSampleRoom) {
+    if (!isTourActive) {
+      return <Navigate to="/app/home" replace />;
+    }
+  } else if (!roomId || !isUuid(roomId)) {
     toast.error('That room link is not valid');
     return <Navigate to="/app/rooms" replace />;
   }
 
+  const liveState = useRoomLive(isSampleRoom ? undefined : roomId);
+  usePresenceHeartbeat(isSampleRoom ? undefined : roomId);
+
   return (
-    <ResponsiveShell showPhaseTrack={true} pageName="Overview" rightRail={rightRail}>
-      <GlobalOverlays />
-      <RoomErrorBoundary key={location.pathname}>
-        <Suspense fallback={<PageSuspenseFallback />}>
-          <Outlet context={{ setRightRail }} />
-        </Suspense>
-      </RoomErrorBoundary>
-    </ResponsiveShell>
+    <LiveContext.Provider value={liveState}>
+      <ResponsiveShell pageName="Overview" rightRail={rightRail}>
+        <GlobalOverlays />
+        <RoomErrorBoundary key={location.pathname}>
+          <Suspense fallback={<PageSuspenseFallback />}>
+            <div key={location.pathname} className="page-transition min-h-full">
+              <Outlet context={{ setRightRail }} />
+            </div>
+          </Suspense>
+        </RoomErrorBoundary>
+      </ResponsiveShell>
+    </LiveContext.Provider>
   );
 }
 
@@ -265,6 +306,10 @@ const router = createBrowserRouter([
     path: '/onboarding',
     element: <OnboardingView />,
   },
+  {
+    path: '/tour',
+    element: <Navigate to="/app/home" replace />,
+  },
 
   // ── Authenticated routes (with shell) ─────────────────────────
   {
@@ -292,8 +337,8 @@ const router = createBrowserRouter([
           { path: 'profile', element: <ProfileSection /> },
           { path: 'appearance', element: <AppearanceSection /> },
           { path: 'notifications', element: <NotificationsSection /> },
-          { path: 'integrations', element: <IntegrationsSection /> },
-          { path: 'ai-keys', element: <Navigate to="/app/settings/profile" replace /> },
+          { path: 'ai-status', element: <AiKeysSection /> },
+          { path: 'ai-keys', element: <AiKeysSection /> },
           { path: 'privacy', element: <PrivacySection /> },
           { path: 'billing', element: <BillingSection /> },
         ],
@@ -342,10 +387,15 @@ const router = createBrowserRouter([
       { path: 'demo', element: <Navigate to={`pitch-kit?open=demo`} replace /> },
       { path: 'submit', element: <Navigate to="submission" replace /> },
       { path: 'readiness', element: <ReadinessPage /> },
+      { path: 'summary', element: <RoomSummaryPage /> },
       { path: 'retro', element: <RetroPage /> },
       { path: 'speed-mode', element: <SpeedModePage /> },
       { path: 'notifications', element: <NotificationsPage /> },
     ],
+  },
+  {
+    path: '/app/rooms/:roomId/*',
+    element: <RoomsWildcardRedirect />,
   },
   // S30 Mentor view
   {

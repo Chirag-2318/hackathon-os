@@ -47,6 +47,12 @@ public class Submission {
         this.createdAt = createdAt != null ? createdAt : Instant.now();
     }
 
+    public UUID getId() { return roomId; }
+
+    public boolean isComplete() {
+        return "SUBMITTED".equalsIgnoreCase(status) || submittedAt != null;
+    }
+
     public UUID getRoomId() { return roomId; }
     public void setRoomId(UUID roomId) { this.roomId = roomId; }
 

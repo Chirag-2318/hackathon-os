@@ -91,6 +91,9 @@ public class TaskDtoMapper {
             }
         }
 
+        List<TaskDependencyItemDto> prerequisites = dependsOn != null ? dependsOn : Collections.emptyList();
+        boolean isBlocked = prerequisites.stream().anyMatch(d -> !d.confirmed());
+
         return new TaskDto(
                 task.getId(),
                 task.getTaskKey(),
@@ -114,14 +117,20 @@ public class TaskDtoMapper {
                 subtasksDone,
                 subtaskDtos.size(),
                 acceptanceDtos,
-                dependsOn != null ? dependsOn : Collections.emptyList(),
+                prerequisites,
                 blocks != null ? blocks : Collections.emptyList(),
                 commentCount,
                 task.getCreatedAt(),
                 task.getUpdatedAt(),
                 task.getCompletedAt(),
                 task.getVersion(),
-                hasBranch
+                hasBranch,
+                prerequisites,
+                isBlocked,
+                task.getReviewState() != null ? task.getReviewState() : ("done".equalsIgnoreCase(task.getStatus()) ? "CONFIRMED" : "NONE"),
+                task.getReviewNote(),
+                task.getConfirmedAt(),
+                task.getConfirmedBy()
         );
     }
 
@@ -179,7 +188,13 @@ public class TaskDtoMapper {
                 basic.completedAt(),
                 basic.version(),
                 development != null ? development : Collections.emptyList(),
-                hasBranch
+                hasBranch,
+                basic.prerequisites(),
+                basic.isBlocked(),
+                basic.reviewState(),
+                basic.reviewNote(),
+                basic.confirmedAt(),
+                basic.confirmedBy()
         );
     }
 }

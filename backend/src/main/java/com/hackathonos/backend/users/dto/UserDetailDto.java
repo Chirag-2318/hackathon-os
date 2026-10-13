@@ -26,5 +26,10 @@ public record UserDetailDto(
         String goal,
         List<String> techStack,
         boolean onboardingCompleted,
-        Instant onboardedAt
+        Instant onboardedAt,
+        String tourStatus,
+        String tourPath,
+        int tourVersion,
+        Instant tourCompletedAt,
+        List<String> hotspotsSeen
 ) {}

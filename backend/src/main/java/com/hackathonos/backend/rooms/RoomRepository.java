@@ -28,4 +28,12 @@ public interface RoomRepository extends JpaRepository<Room, UUID> {
 
     // Finds rooms owned by the given user
     List<Room> findByOwnerId(UUID ownerId);
+
+    @Query("""
+        SELECT COUNT(r) FROM Room r
+        JOIN RoomMember rm ON rm.roomId = r.id
+        WHERE rm.userId = :userId
+          AND r.submittedAt IS NOT NULL
+    """)
+    long countSubmittedRoomsByUserId(@Param("userId") UUID userId);
 }

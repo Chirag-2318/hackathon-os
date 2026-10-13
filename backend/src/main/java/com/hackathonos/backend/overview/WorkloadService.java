@@ -133,7 +133,7 @@ public class WorkloadService {
                 if (targetPhaseId != null && !targetPhaseId.equals(t.getPhaseId())) {
                     continue;
                 }
-                boolean isDone = "DONE".equalsIgnoreCase(t.getStatus());
+                boolean isDone = t.isConfirmedDone();
                 if (isDone) done++;
                 if (t.getDueAt() != null && !t.getDueAt().isAfter(now)) {
                     expected++;

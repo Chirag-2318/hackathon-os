@@ -10,12 +10,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { PanelRightClose, PanelRightOpen, FileText } from 'lucide-react';
 import { toast } from 'sonner';
+import { saveCachedDocs, getCachedDocs, EmptyState, ErrorState, ConflictBanner, apiFetch } from '@/design';
+import { exportRoomZip } from '@/shared/utils/room-export';
 
 export function DocsPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const [files, setFiles] = useState<DocFile[]>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<{ message: string; requestId?: string } | null>(null);
   const [showRightPane, setShowRightPane] = useState(true);
 
   useEffect(() => {
@@ -30,19 +33,34 @@ export function DocsPage() {
               const detail = await docsService.getDoc(roomId, first.name);
               const fullDocs = docs.map((d, i) => i === 0 && detail ? { ...d, content: detail.content, versions: detail.versions } : d);
               setFiles(fullDocs);
+              saveCachedDocs(roomId, fullDocs);
             } catch {
               setFiles(docs);
+              saveCachedDocs(roomId, docs);
             }
             setSelectedFileId(first.id);
           } else {
             setFiles([]);
+            setSelectedFileId(null);
+            saveCachedDocs(roomId, []);
           }
+          setError(null);
           setLoading(false);
         }
       })
-      .catch((err) => {
+      .catch(async (err: any) => {
         console.error('Failed to load docs:', err);
-        if (mounted) setLoading(false);
+        if (mounted) {
+          const cached = await getCachedDocs(roomId);
+          if (cached?.data && cached.data.length > 0) {
+            setFiles(cached.data);
+            setSelectedFileId(cached.data[0].id);
+          } else {
+            setFiles([]);
+            setSelectedFileId(null);
+          }
+          setLoading(false);
+        }
       });
 
     return () => {
@@ -64,7 +82,11 @@ export function DocsPage() {
 
   const selectedFile = files.find(f => f.id === selectedFileId);
 
-  const [conflictState, setConflictState] = useState<{ remoteContent: string; localContent: string } | null>(null);
+  const [conflictState, setConflictState] = useState<{
+    remoteContent: string;
+    localContent: string;
+    lastEditedBy?: string;
+  } | null>(null);
 
   // Save new version
   const handleSaveContent = async (newContent: string) => {
@@ -90,6 +112,7 @@ export function DocsPage() {
         setConflictState({
           remoteContent: fresh.content,
           localContent: newContent,
+          lastEditedBy: err?.lastEditedBy || fresh?.lastEditedBy || (fresh as any)?.updatedBy || 'teammate',
         });
         toast.error('This document was updated by another team member.');
       } else {
@@ -139,6 +162,50 @@ export function DocsPage() {
     }
   };
 
+  const [pushErrorNotice, setPushErrorNotice] = useState<string | null>(null);
+  const [prResultUrl, setPrResultUrl] = useState<string | null>(null);
+  const [isPushingDocs, setIsPushingDocs] = useState(false);
+
+  const handlePushDocsToGithub = async () => {
+    if (!roomId) return;
+    setIsPushingDocs(true);
+    setPushErrorNotice(null);
+    setPrResultUrl(null);
+    try {
+      const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/export/push-docs`, { method: 'POST' });
+      const prUrl = res?.pullRequestUrl || res?.prUrl || res?.url;
+      if (prUrl) {
+        setPrResultUrl(prUrl);
+        toast.success('Pushed docs to GitHub! Pull request opened.');
+      } else {
+        toast.success('Pushed docs to repository.');
+      }
+    } catch (err: any) {
+      if (err?.status === 409 || err?.code === 'CONFLICT' || err?.code === 'GITHUB_PERMISSIONS_MISSING') {
+        setPushErrorNotice(err?.message || 'Permissions issue or conflict creating Pull Request on repository.');
+      } else {
+        toast.error(err?.message || 'Failed to push docs to GitHub');
+      }
+    } finally {
+      setIsPushingDocs(false);
+    }
+  };
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-64px)] p-6">
+        <ErrorState
+          message={error.message}
+          requestId={error.requestId}
+          onRetry={() => {
+            setLoading(true);
+            setError(null);
+          }}
+        />
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex h-[calc(100vh-64px)] w-full p-4 gap-4">
@@ -152,19 +219,17 @@ export function DocsPage() {
   // Empty state
   if (files.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-[calc(100vh-64px)] p-6 text-center">
-        <div className="size-16 rounded-full bg-muted flex items-center justify-center mb-4">
-          <FileText className="size-8 text-muted-foreground" />
-        </div>
-        <h2 className="text-xl font-bold text-foreground mb-1">Your vault is empty</h2>
-        <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-          You haven't generated any plan documents yet. Complete the Plan phase to auto-generate your sprint documents.
-        </p>
-        <Link to={`/app/room/${roomId}/plan`}>
-          <Button className="rounded-full bg-neutral-900 text-white dark:bg-white dark:text-black">
-            Go to Plan
-          </Button>
-        </Link>
+      <div className="flex items-center justify-center h-[calc(100vh-64px)] p-6">
+        <EmptyState
+          headline="Your vault is empty"
+          subtext="You haven't generated any plan documents yet. Complete the Plan phase to auto-generate your sprint documents."
+          primaryAction={{
+            label: 'Go to Plan',
+            onClick: () => {
+              if (roomId) window.location.href = `/app/room/${roomId}/plan`;
+            },
+          }}
+        />
       </div>
     );
   }
@@ -179,45 +244,40 @@ export function DocsPage() {
           selectedFileId={selectedFileId}
           onSelectFile={setSelectedFileId}
           onDownloadAllZip={handleDownloadAllZip}
+          onExportRoomZip={() => roomId && exportRoomZip(roomId, 'room')}
+          onPushDocsToGithub={handlePushDocsToGithub}
+          isPushingDocs={isPushingDocs}
+          isLeader={true}
+          pushErrorNotice={pushErrorNotice}
+          prResultUrl={prResultUrl}
         />
 
         {/* CENTER document pane (flex-1) */}
         {selectedFile ? (
           <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
             {conflictState && (
-              <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2.5 text-xs flex items-center justify-between shrink-0">
-                <span className="text-amber-900 dark:text-amber-200 font-medium">
-                  Conflict: Another team member saved changes to this document while you were editing.
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    onClick={() => {
-                      handleSaveContent(conflictState.localContent);
-                    }}
-                  >
-                    Keep my edits
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white"
-                    onClick={() => {
-                      setFiles(prev => prev.map(f => f.id === selectedFile.id ? { ...f, content: conflictState.remoteContent } : f));
-                      setConflictState(null);
-                      toast.info('Loaded latest document version.');
-                    }}
-                  >
-                    Load latest version
-                  </Button>
-                </div>
-              </div>
+              <ConflictBanner
+                lastEditedBy={conflictState.lastEditedBy || 'Another teammate'}
+                remoteContent={conflictState.remoteContent}
+                localContent={conflictState.localContent}
+                onKeepMine={() => {
+                  handleSaveContent(conflictState.localContent);
+                }}
+                onUseRemote={() => {
+                  setFiles(prev => prev.map(f => f.id === selectedFile.id ? { ...f, content: conflictState.remoteContent } : f));
+                  setConflictState(null);
+                  toast.info('Loaded latest document version.');
+                }}
+                onManualMerge={(merged) => {
+                  handleSaveContent(merged);
+                }}
+              />
             )}
             <div className="flex-1 min-h-0">
               <DocsCenterPane
                 file={selectedFile}
                 onSaveContent={handleSaveContent}
+                roomId={roomId}
               />
             </div>
           </div>

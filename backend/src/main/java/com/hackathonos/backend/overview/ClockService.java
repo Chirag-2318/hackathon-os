@@ -2,10 +2,11 @@ package com.hackathonos.backend.overview;
 
 import com.hackathonos.backend.plan.PlanPhase;
 import com.hackathonos.backend.rooms.Room;
+import com.hackathonos.backend.rooms.RoomTimeService;
+import com.hackathonos.backend.rooms.dto.RoomClockDto;
 import com.hackathonos.backend.tasks.dto.TaskPhaseSummaryDto;
 import org.springframework.stereotype.Service;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -41,45 +42,33 @@ public class ClockService {
             List<TimelineSegmentDto> timeline
     ) {}
 
-    private final Clock clock;
+    private final RoomTimeService roomTimeService;
 
-    public ClockService(Clock clock) {
-        this.clock = clock;
+    public ClockService(RoomTimeService roomTimeService) {
+        this.roomTimeService = roomTimeService;
     }
 
     /**
-     * Computes timeline, countdown status, phase segment, and remaining time from event start and end.
+     * Computes timeline, countdown status, phase segment, and remaining time delegating to RoomTimeService.
      */
     public ClockCalculation calculate(Room room, List<PlanPhase> phases) {
-        Instant now = clock.instant();
-        Instant start = room.getEventStart() != null ? room.getEventStart() : now;
-        Instant end = room.getEventEnd() != null ? room.getEventEnd() : start.plus(Duration.ofHours(48));
+        RoomClockDto clock = roomTimeService.computeClock(room);
+        Instant now = clock.serverNow();
+        Instant start = clock.startsAt();
+        Instant end = clock.endsAt();
+        int totalHours = clock.durationHours();
+        double elapsedPct = clock.elapsedPercent();
 
         long totalSeconds = Math.max(1, Duration.between(start, end).toSeconds());
-        long totalHours = Math.max(1, Duration.between(start, end).toHours());
+        long hoursLeft = clock.msToDeadline() / 3600_000L;
+        long minutesLeft = (clock.msToDeadline() % 3600_000L) / 60_000L;
+        long hourOfEvent = Math.min((long) totalHours, (long) clock.hourIndex() + 1);
 
-        double elapsedPct;
-        if (now.isBefore(start)) {
-            elapsedPct = 0.0;
-        } else if (now.isAfter(end)) {
-            elapsedPct = 100.0;
-        } else {
-            long elapsedSeconds = Duration.between(start, now).toSeconds();
-            elapsedPct = Math.min(100.0, Math.max(0.0, (elapsedSeconds * 100.0) / totalSeconds));
-        }
-
-        long hoursElapsed = Math.max(0, Duration.between(start, now.isAfter(end) ? end : now).toHours());
-        long hourOfEvent = Math.min(totalHours, hoursElapsed + 1);
-
-        long secondsLeft = Math.max(0, Duration.between(now, end).toSeconds());
-        long hoursLeft = secondsLeft / 3600;
-        long minutesLeft = (secondsLeft % 3600) / 60;
         double remainingPct = 100.0 - elapsedPct;
-
         String status;
-        if (now.isBefore(start)) {
+        if ("UPCOMING".equals(clock.clockStatus())) {
             status = "NOT_STARTED";
-        } else if (now.isAfter(end)) {
+        } else if ("ENDED".equals(clock.clockStatus()) || "SUBMITTED".equals(clock.clockStatus())) {
             status = "ENDED";
         } else if (remainingPct > 25.0) {
             status = "ON_TRACK";

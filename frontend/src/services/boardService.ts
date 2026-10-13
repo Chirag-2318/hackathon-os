@@ -53,6 +53,20 @@ export function mapBackendTaskToFrontend(t: any, defaultRoomId?: string): Task {
     createdAt: t.createdAt || new Date().toISOString(),
     updatedAt: t.updatedAt || new Date().toISOString(),
     version: Number(t.version ?? 0),
+    prerequisites: (t.prerequisites || []).map((p: any) => ({
+      id: String(p.id),
+      key: p.key || '',
+      title: p.title || '',
+      status: p.status || '',
+      confirmed: Boolean(p.confirmed),
+    })),
+    isBlocked: Boolean(t.isBlocked),
+    blockedByCount: Number(t.blockedByCount ?? (t.isBlocked ? (t.prerequisites?.filter((p: any) => !p.confirmed).length || 1) : 0)),
+    unblocksCount: Number(t.unblocksCount ?? 0),
+    confirmedAt: t.confirmedAt || null,
+    confirmedBy: t.confirmedBy || null,
+    reviewState: t.reviewState || (t.status === 'done' || t.status === 'DONE' ? 'CONFIRMED' : 'NONE'),
+    reviewNote: t.reviewNote || null,
   } as Task & { version?: number };
 }
 
@@ -241,12 +255,27 @@ export const boardService = {
     return mapBackendTaskToFrontend(res, roomId);
   },
 
-  async updateDependencies(roomId: string, taskId: string, dependsOnIds: string[]): Promise<Task> {
+  async updateDependencies(roomId: string, taskId: string, dependsOnTaskIds: string[]): Promise<Task> {
     const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/tasks/${taskId}/dependencies`, {
       method: 'PUT',
-      body: JSON.stringify({ dependsOnIds }),
+      body: JSON.stringify({ dependsOnTaskIds, dependsOnIds: dependsOnTaskIds }),
     });
-    return mapBackendTaskToFrontend(res);
+    return mapBackendTaskToFrontend(res, roomId);
+  },
+
+  async confirmTask(roomId: string, taskId: string): Promise<Task> {
+    const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/tasks/${taskId}/confirm`, {
+      method: 'POST',
+    });
+    return mapBackendTaskToFrontend(res, roomId);
+  },
+
+  async requestChanges(roomId: string, taskId: string, note: string): Promise<Task> {
+    const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/tasks/${taskId}/request-changes`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    });
+    return mapBackendTaskToFrontend(res, roomId);
   },
 
   createTasksFromPlan(

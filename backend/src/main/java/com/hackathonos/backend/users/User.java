@@ -74,6 +74,22 @@ public class User {
     @Column(name = "onboarded_at")
     private Instant onboardedAt;
 
+    @Column(name = "tour_status", length = 20, nullable = false)
+    private String tourStatus = "NOT_STARTED";
+
+    @Column(name = "tour_path", length = 20)
+    private String tourPath;
+
+    @Column(name = "tour_version", nullable = false)
+    private int tourVersion = 0;
+
+    @Column(name = "tour_completed_at")
+    private Instant tourCompletedAt;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "hotspots_seen", columnDefinition = "jsonb")
+    private String hotspotsSeen = "[]";
+
     protected User() {}
 
     public User(String provider, String providerUserId, String name, String email, String avatarUrl, String login) {
@@ -143,4 +159,19 @@ public class User {
 
     public Instant getOnboardedAt() { return onboardedAt; }
     public void setOnboardedAt(Instant onboardedAt) { this.onboardedAt = onboardedAt; }
+
+    public String getTourStatus() { return tourStatus; }
+    public void setTourStatus(String tourStatus) { this.tourStatus = tourStatus; }
+
+    public String getTourPath() { return tourPath; }
+    public void setTourPath(String tourPath) { this.tourPath = tourPath; }
+
+    public int getTourVersion() { return tourVersion; }
+    public void setTourVersion(int tourVersion) { this.tourVersion = tourVersion; }
+
+    public Instant getTourCompletedAt() { return tourCompletedAt; }
+    public void setTourCompletedAt(Instant tourCompletedAt) { this.tourCompletedAt = tourCompletedAt; }
+
+    public String getHotspotsSeen() { return hotspotsSeen; }
+    public void setHotspotsSeen(String hotspotsSeen) { this.hotspotsSeen = hotspotsSeen; }
 }

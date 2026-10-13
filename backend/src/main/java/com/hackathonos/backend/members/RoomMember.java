@@ -34,6 +34,9 @@ public class RoomMember {
     @Column(name = "last_seen_at")
     private Instant lastSeenAt;
 
+    @Column(name = "last_visited_at")
+    private Instant lastVisitedAt;
+
     protected RoomMember() {}
 
     public RoomMember(UUID roomId, UUID userId, String role) {
@@ -64,4 +67,7 @@ public class RoomMember {
 
     public Instant getLastSeenAt() { return lastSeenAt; }
     public void setLastSeenAt(Instant lastSeenAt) { this.lastSeenAt = lastSeenAt; }
+
+    public Instant getLastVisitedAt() { return lastVisitedAt; }
+    public void setLastVisitedAt(Instant lastVisitedAt) { this.lastVisitedAt = lastVisitedAt; }
 }

@@ -17,7 +17,6 @@ interface ResponsiveShellProps {
 
 export function ResponsiveShell({
   children,
-  showPhaseTrack = false,
   pageName = 'Home',
   rightRail,
 }: ResponsiveShellProps) {
@@ -30,7 +29,7 @@ export function ResponsiveShell({
   }
 
   return (
-    <AppShell showPhaseTrack={showPhaseTrack} pageName={pageName} rightRail={rightRail}>
+    <AppShell pageName={pageName} rightRail={rightRail}>
       {children}
     </AppShell>
   );

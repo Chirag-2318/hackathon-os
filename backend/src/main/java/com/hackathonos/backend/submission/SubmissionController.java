@@ -16,10 +16,13 @@ import java.util.UUID;
 public class SubmissionController {
 
     private final SubmissionService submissionService;
+    private final com.hackathonos.backend.common.idempotency.IdempotencyService idempotencyService;
 
-    public SubmissionController(SubmissionService submissionService) {
+    public SubmissionController(SubmissionService submissionService, com.hackathonos.backend.common.idempotency.IdempotencyService idempotencyService) {
         this.submissionService = submissionService;
+        this.idempotencyService = idempotencyService;
     }
+
 
     @GetMapping
     public SubmissionDtos.SubmissionResponse getSubmission(
@@ -102,13 +105,25 @@ public class SubmissionController {
         return submissionService.verify(roomId, user);
     }
 
-    @PostMapping("/mark-submitted")
+    @PostMapping({"/mark-submitted", "/submit"})
     public SubmissionDtos.SubmissionResponse markSubmitted(
             @PathVariable UUID roomId,
-            @AuthenticationPrincipal User user
+            @AuthenticationPrincipal User user,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
-        return submissionService.markSubmitted(roomId, user);
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            var cached = idempotencyService.get(user.getId(), idempotencyKey);
+            if (cached.isPresent() && cached.get() instanceof SubmissionDtos.SubmissionResponse res) {
+                return res;
+            }
+        }
+        SubmissionDtos.SubmissionResponse result = submissionService.markSubmitted(roomId, user);
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            idempotencyService.put(user.getId(), idempotencyKey, result);
+        }
+        return result;
     }
+
 
     @PostMapping("/reopen")
     public SubmissionDtos.SubmissionResponse reopen(

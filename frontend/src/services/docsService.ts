@@ -91,4 +91,15 @@ export const docsService = {
     const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
     return `${baseUrl}/api/v1/rooms/${roomId}/docs/${fileName}/download`;
   },
+
+  async askDocAi(
+    roomId: string,
+    fileName: string,
+    data: { prompt: string; selectedText?: string; fullContent?: string; action?: string }
+  ): Promise<{ answer: string; sources: string[]; model: string; latencyMs: number }> {
+    return apiFetch<any>(`/api/v1/rooms/${roomId}/docs/${encodeURIComponent(fileName)}/ai`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
 };

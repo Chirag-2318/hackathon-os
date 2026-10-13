@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { CheckCircle2, ExternalLink, AlertCircle, RefreshCw, Sparkles, Eye, Copy } from 'lucide-react';
+import { celebrateAchievement } from '@/design';
 
 /* ── Helpers ── */
 function parseISODuration(iso?: string | null): number {
@@ -246,6 +247,7 @@ export function SubmissionPage() {
     try {
       await apiFetch(`/api/v1/rooms/${roomId}/submission/submit`, { method: 'POST' });
       setSubmitted(true);
+      celebrateAchievement('Hackathon submission completed! Take a bow team.');
     } catch {} finally { setVerifying(false); }
   };
 

@@ -74,11 +74,31 @@ public class Task {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    @Column(name = "confirmed_at")
+    private Instant confirmedAt;
+
+    @Column(name = "confirmed_by")
+    private UUID confirmedBy;
+
+    @Column(name = "review_state", nullable = false, length = 30)
+    private String reviewState = "NONE";
+
+    @Column(name = "review_note", columnDefinition = "TEXT")
+    private String reviewNote;
+
     @Version
     @Column(nullable = false)
     private long version = 0L;
 
+    @Column(name = "last_edited_by")
+    private UUID lastEditedBy;
+
+    public boolean isConfirmedDone() {
+        return "DONE".equalsIgnoreCase(status) && "CONFIRMED".equalsIgnoreCase(reviewState);
+    }
+
     protected Task() {}
+
 
     public Task(UUID roomId, String taskKey, int number, String summary, String description,
                 String status, UUID assigneeId, UUID reporterId, String priority,
@@ -169,4 +189,20 @@ public class Task {
 
     public long getVersion() { return version; }
     public void setVersion(long version) { this.version = version; }
+
+    public UUID getLastEditedBy() { return lastEditedBy; }
+    public void setLastEditedBy(UUID lastEditedBy) { this.lastEditedBy = lastEditedBy; }
+
+    public Instant getConfirmedAt() { return confirmedAt; }
+    public void setConfirmedAt(Instant confirmedAt) { this.confirmedAt = confirmedAt; }
+
+    public UUID getConfirmedBy() { return confirmedBy; }
+    public void setConfirmedBy(UUID confirmedBy) { this.confirmedBy = confirmedBy; }
+
+    public String getReviewState() { return reviewState; }
+    public void setReviewState(String reviewState) { this.reviewState = reviewState != null ? reviewState : "NONE"; }
+
+    public String getReviewNote() { return reviewNote; }
+    public void setReviewNote(String reviewNote) { this.reviewNote = reviewNote; }
 }
+

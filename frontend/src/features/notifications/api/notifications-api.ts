@@ -7,20 +7,50 @@ import type { NotificationsResponse, Notification } from './types';
 
 // ── User-wide endpoints (used by notification bell and global components) ───────
 
-export async function fetchUserNotifications(): Promise<Notification[]> {
-  const list = await apiFetch<any[]>('/api/v1/notifications');
-  if (!Array.isArray(list)) return [];
-  return list.map((item) => ({
+export async function fetchUserNotifications(unreadOnly = false): Promise<Notification[]> {
+  const query = unreadOnly ? '?unreadOnly=true' : '';
+  const res = await apiFetch<any>(`/api/v1/notifications${query}`);
+  const list = Array.isArray(res) ? res : (res?.items || []);
+  return list.map((item: any) => ({
     id: item.id,
     type: item.type ?? 'system',
     title: item.title,
     body: item.body ?? item.message ?? '',
-    timestamp: item.createdAt,
+    timestamp: item.createdAt || new Date().toISOString(),
     read: Boolean(item.read),
     link: item.link ?? item.linkPath,
+    deepLink: item.deepLink ?? item.linkPath ?? item.link,
     roomId: item.roomId,
     roomName: item.roomName,
+    count: item.count ?? 1,
+    actorUsername: item.actorUsername ?? (item.metadata?.actorUsername),
+    actorName: item.actorName ?? (item.metadata?.actorName),
   }));
+}
+
+export async function fetchUserNotificationsPage(unreadOnly = false, cursor?: string, limit = 20): Promise<{ items: Notification[]; nextCursor?: string }> {
+  const params = new URLSearchParams();
+  if (unreadOnly) params.set('unreadOnly', 'true');
+  if (cursor) params.set('cursor', cursor);
+  if (limit) params.set('limit', String(limit));
+  const res = await apiFetch<any>(`/api/v1/notifications?${params.toString()}`);
+  const rawItems = Array.isArray(res) ? res : (res?.items || []);
+  const items = rawItems.map((item: any) => ({
+    id: item.id,
+    type: item.type ?? 'system',
+    title: item.title,
+    body: item.body ?? item.message ?? '',
+    timestamp: item.createdAt || new Date().toISOString(),
+    read: Boolean(item.read),
+    link: item.link ?? item.linkPath,
+    deepLink: item.deepLink ?? item.linkPath ?? item.link,
+    roomId: item.roomId,
+    roomName: item.roomName,
+    count: item.count ?? 1,
+    actorUsername: item.actorUsername ?? (item.metadata?.actorUsername),
+    actorName: item.actorName ?? (item.metadata?.actorName),
+  }));
+  return { items, nextCursor: res?.nextCursor };
 }
 
 export async function fetchUnreadCount(): Promise<number> {
@@ -32,11 +62,15 @@ export async function markAllUserNotificationsRead(): Promise<void> {
   return apiFetch<void>('/api/v1/notifications/mark-all-read', { method: 'POST' });
 }
 
-export function useUserNotifications() {
+export async function markNotificationRead(id: string): Promise<void> {
+  return apiFetch<void>(`/api/v1/notifications/${id}/read`, { method: 'PATCH' });
+}
+
+export function useUserNotifications(unreadOnly = false) {
   return useQuery({
-    queryKey: ['notifications', 'user-wide'],
-    queryFn: fetchUserNotifications,
-    refetchInterval: 60000,
+    queryKey: ['notifications', 'user-wide', { unreadOnly }],
+    queryFn: () => fetchUserNotifications(unreadOnly),
+    refetchInterval: 30000,
   });
 }
 
@@ -44,7 +78,7 @@ export function useUnreadCount() {
   return useQuery({
     queryKey: ['notifications', 'unread-count'],
     queryFn: fetchUnreadCount,
-    refetchInterval: 30000,
+    refetchInterval: 20000,
   });
 }
 
@@ -53,8 +87,17 @@ export function useMarkAllUserNotificationsRead() {
   return useMutation({
     mutationFn: markAllUserNotificationsRead,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['notifications', 'user-wide'] });
-      qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+      qc.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
+export function useMarkNotificationRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => markNotificationRead(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications'] });
     },
   });
 }

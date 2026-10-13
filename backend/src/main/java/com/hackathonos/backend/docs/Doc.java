@@ -32,13 +32,21 @@ public class Doc {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt = Instant.now();
 
+    @Column(name = "last_edited_by")
+    private UUID lastEditedBy;
+
+    @Column(name = "source", length = 50)
+    private String source = "PLAN";
+
     protected Doc() {}
+
 
     public Doc(UUID roomId, String fileName, String title, int currentVersion) {
         this.roomId = roomId;
         this.fileName = fileName;
         this.title = title;
         this.currentVersion = currentVersion;
+        this.source = "PLAN";
         this.createdAt = Instant.now();
         this.updatedAt = Instant.now();
     }
@@ -63,4 +71,11 @@ public class Doc {
 
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+
+    public UUID getLastEditedBy() { return lastEditedBy; }
+    public void setLastEditedBy(UUID lastEditedBy) { this.lastEditedBy = lastEditedBy; }
+
+    public String getSource() { return source; }
+    public void setSource(String source) { this.source = source; }
 }
+

@@ -28,9 +28,49 @@ public record RoomListItemDto(
         Instant submittedAt,
         List<UserSummaryDto> memberPreview,
         String nextStepLabel,
-        int attentionCount
+        int attentionCount,
+        RoomClockDto clock,
+        boolean aiAllowed,
+        RoomProgressSummaryDto progressSummary,
+        NextStepDto nextStep
 ) {
     public record JourneyProgress(int done, int total) {}
+
+    public RoomListItemDto(
+            UUID id,
+            String name,
+            String description,
+            String templateId,
+            String templateName,
+            String stage,
+            Instant eventStart,
+            Instant eventEnd,
+            long memberCount,
+            String myRole,
+            boolean isLeader,
+            JourneyProgress journey,
+            Instant createdAt,
+            int durationHours,
+            String phase,
+            int phaseIndex,
+            int phaseCount,
+            Instant startsAt,
+            Instant endsAt,
+            Instant submittedAt,
+            List<UserSummaryDto> memberPreview,
+            String nextStepLabel,
+            int attentionCount,
+            RoomClockDto clock,
+            boolean aiAllowed,
+            RoomProgressSummaryDto progressSummary
+    ) {
+        this(
+                id, name, description, templateId, templateName, stage, eventStart, eventEnd,
+                memberCount, myRole, isLeader, journey, createdAt, durationHours, phase,
+                phaseIndex, phaseCount, startsAt, endsAt, submittedAt, memberPreview,
+                nextStepLabel, attentionCount, clock, aiAllowed, progressSummary, null
+        );
+    }
 
     public RoomListItemDto(
             UUID id,
@@ -70,7 +110,11 @@ public record RoomListItemDto(
                 null,
                 List.of(),
                 null,
-                0
+                0,
+                new RoomClockDto("UPCOMING", Instant.now(), eventStart != null ? eventStart : Instant.now(), eventStart != null ? eventStart : Instant.now(), eventEnd != null ? eventEnd : Instant.now(), 0.0, 0, 36, 0, 0, 0),
+                true,
+                new RoomProgressSummaryDto(0, 0, false, 0, 5, 0, 0),
+                null
         );
     }
 }

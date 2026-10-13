@@ -36,7 +36,8 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
   const location = useLocation();
   const queryClient = useQueryClient();
   const clock = useClock();
-  useRoomEvents(roomId);
+  const isSampleRoom = roomId === 'sample-room';
+  useRoomEvents(isSampleRoom ? undefined : roomId);
 
   const { data: homeData } = useHome();
   const { data: overviewData } = useRoomOverview(roomId);
@@ -61,12 +62,12 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
   const { data: navBadges } = useQuery({
     queryKey: ['nav-badges', roomId],
     queryFn: () => roomService.getNavBadges(roomId),
-    refetchInterval: 60000,
+    refetchInterval: isSampleRoom ? false : 60000,
   });
 
   // Heartbeat
   React.useEffect(() => {
-    if (!roomId) return;
+    if (!roomId || isSampleRoom) return;
     const sendBeat = () => {
       if (document.visibilityState === 'visible') {
         roomService.sendHeartbeat(roomId).catch(() => {});
@@ -75,15 +76,15 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
     sendBeat();
     const interval = setInterval(sendBeat, 60000);
     return () => clearInterval(interval);
-  }, [roomId]);
+  }, [roomId, isSampleRoom]);
 
   const isLeader = roomData ? (roomData as any).currentUserRole === 'leader' : true;
-  const isBuildUnlocked = roomData
+  const isBuildUnlocked = isSampleRoom || (roomData
     ? roomData.stage === 'build' ||
       Boolean(roomData.stageDone?.plan) ||
       Boolean((roomData as any).planDone) ||
       Boolean((roomData as any).buildStartedAt)
-    : true;
+    : true);
 
   // Prep progress
   const prepList = Array.isArray(prepData)
@@ -118,7 +119,7 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
     title: r.name || r.title || 'Hackathon Workspace',
   }));
 
-  const roomTitle = roomData?.name || rooms.find((r: any) => r.id === roomId)?.title || 'Hackathon Workspace';
+  const roomTitle = (roomId === 'sample-room' ? 'Team Orbit' : undefined) ?? roomData?.name ?? rooms.find((r: any) => r.id === roomId)?.title ?? 'Hackathon Workspace';
 
   // Current subpath
   const currentSubPath = location.pathname.replace(`/app/room/${roomId}`, '').replace(/^\//, '') || 'overview';
@@ -141,6 +142,7 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
     const content = (
       <Link
         to={path}
+        data-tour={`nav-${id}`}
         aria-current={isActive ? 'page' : undefined}
         className={cn(
           'group relative flex items-center h-8 rounded-[8px] px-2 gap-2 w-full outline-none transition-colors duration-150 cursor-pointer text-[13px] font-medium select-none',

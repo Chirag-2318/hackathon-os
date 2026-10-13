@@ -1,3 +1,4 @@
+import { apiClient } from '@/lib/apiClient';
 import type { ToolsResponse, ToolCategory, ToolCost, ToolLicense, Tool } from './types';
 
 interface ToolFilters {
@@ -340,10 +341,9 @@ export async function fetchTools(filters?: ToolFilters): Promise<ToolsResponse> 
   if (filters?.license)  params.set('license', filters.license);
 
   try {
-    const res = await fetch(`/api/v1/tools?${params.toString()}`);
-    if (res.ok) {
-      const data = await res.json();
-      const rawTools = Array.isArray(data.tools) ? data.tools : (Array.isArray(data.items) ? data.items : []);
+    const data = await apiClient<any>(`/api/v1/tools?${params.toString()}`);
+    if (data && typeof data === 'object') {
+      const rawTools = Array.isArray(data.tools) ? data.tools : (Array.isArray(data.items) ? data.items : (Array.isArray(data) ? data : []));
       if (rawTools.length > 0) {
         const normalized: Tool[] = rawTools.map((t: any) => ({
           id: String(t.id || t.name),
@@ -375,4 +375,42 @@ export async function fetchTools(filters?: ToolFilters): Promise<ToolsResponse> 
     tools = tools.filter(t => t.license.toLowerCase() === filters.license!.toLowerCase());
   }
   return { tools };
+}
+
+export interface RecommendedTool {
+  tool: Tool;
+  reason?: string | null;
+}
+
+export async function fetchRecommendedTools(): Promise<RecommendedTool[]> {
+  try {
+    const data = await apiClient<any>('/api/v1/tools?recommended=true');
+    if (data && typeof data === 'object') {
+      const items = Array.isArray(data.items) ? data.items : [];
+      if (items.length > 0) {
+        return items.map((it: any) => ({
+          tool: {
+            id: String(it.tool?.id || it.tool?.name || Math.random()),
+            name: it.tool?.name || 'Tool',
+            oneLineUse: it.tool?.oneLineUse || it.tool?.description || it.tool?.notes || 'Essential hackathon tool.',
+            category: normalizeCategory(it.tool?.category),
+            cost: normalizeCost(it.tool?.cost),
+            license: normalizeLicense(it.tool?.license),
+            lastChecked: it.tool?.lastChecked ? String(it.tool.lastChecked) : '2026-10-11',
+            verified: it.tool?.verified ?? true,
+            url: it.tool?.url || 'https://google.com',
+          },
+          reason: it.reason || null,
+        }));
+      }
+    }
+  } catch (err) {
+    console.warn('Recommended tools fetch failed, using curated picks:', err);
+  }
+
+  // Fallback to top 4 curated picks
+  return CURATED_TOOLS.slice(0, 4).map((t) => ({
+    tool: t,
+    reason: null,
+  }));
 }

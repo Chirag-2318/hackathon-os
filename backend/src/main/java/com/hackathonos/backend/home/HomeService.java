@@ -23,6 +23,7 @@ import com.hackathonos.backend.tasks.TaskRepository;
 import com.hackathonos.backend.tasks.dto.TaskDto;
 import com.hackathonos.backend.team.dto.TeamDtos;
 import com.hackathonos.backend.team.TeamService;
+import com.hackathonos.backend.rooms.dto.NextStepDto;
 import com.hackathonos.backend.users.User;
 import com.hackathonos.backend.users.UserRepository;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 @Service
@@ -48,6 +52,11 @@ public class HomeService {
     private final IdeaRepository ideaRepository;
     private final UserRepository userRepository;
     private final Clock clock;
+    private final com.hackathonos.backend.rooms.RoomTimeService roomTimeService;
+    private final com.hackathonos.backend.rooms.NextStepService nextStepService;
+    private final com.hackathonos.backend.notifications.NotificationRepository notificationRepository;
+    private final com.hackathonos.backend.members.RoomMemberRepository roomMemberRepository;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     public HomeService(
             RoomRepository roomRepository,
@@ -62,7 +71,12 @@ public class HomeService {
             BriefRepository briefRepository,
             IdeaRepository ideaRepository,
             UserRepository userRepository,
-            Clock clock
+            Clock clock,
+            com.hackathonos.backend.rooms.RoomTimeService roomTimeService,
+            com.hackathonos.backend.rooms.NextStepService nextStepService,
+            com.hackathonos.backend.notifications.NotificationRepository notificationRepository,
+            com.hackathonos.backend.members.RoomMemberRepository roomMemberRepository,
+            org.springframework.jdbc.core.JdbcTemplate jdbcTemplate
     ) {
         this.roomRepository = roomRepository;
         this.stageService = stageService;
@@ -77,12 +91,17 @@ public class HomeService {
         this.ideaRepository = ideaRepository;
         this.userRepository = userRepository;
         this.clock = clock;
+        this.roomTimeService = roomTimeService;
+        this.nextStepService = nextStepService;
+        this.notificationRepository = notificationRepository;
+        this.roomMemberRepository = roomMemberRepository;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     /**
      * Resolves home screen data across user's active rooms with rich metrics for the selected room.
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public HomeResponseDto getHome(User user, UUID requestedRoomId) {
         if (user == null) {
             throw new com.hackathonos.backend.common.error.UnauthenticatedException("UNAUTHENTICATED", "Authentication required");
@@ -94,9 +113,15 @@ public class HomeService {
                 ? user.getName().trim().split("\\s+")[0]
                 : "Builder";
         HomeUserDto userDto = new HomeUserDto(firstName, "Asia/Kolkata");
+        com.hackathonos.backend.users.dto.UserSummaryDto userSummary = new com.hackathonos.backend.users.dto.UserSummaryDto(
+                user.getId(), user.getName(), user.getAvatarUrl(), user.getLogin()
+        );
+        long unreadNotificationCount = notificationRepository.countByUserIdAndReadAtIsNull(user.getId());
 
         if (rooms.isEmpty()) {
-            return new HomeResponseDto(userDto, now, Collections.emptyList(), null);
+            PassportDto passport = buildPassport(user, now);
+            HomeCountsDto counts = new HomeCountsDto(0, 0);
+            return new HomeResponseDto(userDto, now, Collections.emptyList(), null, userSummary, unreadNotificationCount, List.of(), List.of(), "No active rooms", passport, null, counts);
         }
 
         Room selectedRoom = null;
@@ -114,7 +139,11 @@ public class HomeService {
             selectedRoom = rooms.get(0);
         }
 
+        trackLastVisited(user, selectedRoom, now);
+
         List<HomeRoomCardDto> roomCards = new ArrayList<>();
+        List<SelectedDeadlineRowDto> deadlinesAcrossRooms = new ArrayList<>();
+
         for (Room r : rooms) {
             boolean isSelected = r.getId().equals(selectedRoom.getId());
             boolean isBuild = "build".equalsIgnoreCase(r.getStage());
@@ -146,12 +175,20 @@ public class HomeService {
                 for (CheckpointItemDto cp : cps.items()) {
                     if (!"passed".equalsIgnoreCase(cp.status()) && cp.dueAt() != null) {
                         nextDeadline = new NextDeadlineDto(cp.title(), cp.dueAt());
-                        break;
+                        deadlinesAcrossRooms.add(new SelectedDeadlineRowDto(
+                                r.getName() + ": " + cp.title(),
+                                cp.helper(),
+                                cp.tag(),
+                                cp.dueAt(),
+                                false
+                        ));
                     }
                 }
             }
 
             String templateName = r.getTemplateId() != null ? r.getTemplateId() : "Custom Event";
+            NextStepDto cardNextStep = nextStepService.computeNextStep(r);
+
             roomCards.add(new HomeRoomCardDto(
                     r.getId(),
                     r.getName(),
@@ -164,12 +201,59 @@ public class HomeService {
                     journeyDone,
                     journey != null && journey.steps() != null ? journey.steps().size() : 4,
                     myOpenTasks,
-                    isSelected
+                    isSelected,
+                    roomTimeService.computeClock(r, now),
+                    cardNextStep
             ));
         }
 
+        deadlinesAcrossRooms.sort(Comparator.comparing(SelectedDeadlineRowDto::dueAt));
+        if (deadlinesAcrossRooms.size() > 5) {
+            deadlinesAcrossRooms = deadlinesAcrossRooms.subList(0, 5);
+        }
+
+        List<Task> allUserTasks = taskRepository.findByAssigneeId(user.getId());
+        List<TaskDto> myOpenTasks = allUserTasks.stream()
+                .filter(t -> !"done".equalsIgnoreCase(t.getStatus()))
+                .sorted((a, b) -> {
+                    boolean aInProg = "inprogress".equalsIgnoreCase(a.getStatus());
+                    boolean bInProg = "inprogress".equalsIgnoreCase(b.getStatus());
+                    if (aInProg != bInProg) return aInProg ? -1 : 1;
+                    if (a.getDueAt() != null && b.getDueAt() != null) return a.getDueAt().compareTo(b.getDueAt());
+                    if (a.getDueAt() != null) return -1;
+                    if (b.getDueAt() != null) return 1;
+                    return a.getPosition() - b.getPosition();
+                })
+                .limit(10)
+                .map(taskDtoMapper::toSimpleDto)
+                .toList();
+
+        long totalOpen = allUserTasks.stream().filter(t -> !"done".equalsIgnoreCase(t.getStatus())).count();
+        String teamPulse = rooms.size() + " active rooms · " + totalOpen + " open tasks assigned to you";
+
         SelectedRoomDto selectedDto = buildSelectedRoom(selectedRoom, user);
-        return new HomeResponseDto(userDto, now, roomCards, selectedDto);
+        ResumeRoomDto resume = buildResume(user, rooms);
+        PassportDto passport = buildPassport(user, now);
+        int liveRooms = (int) rooms.stream().filter(r -> {
+            com.hackathonos.backend.rooms.dto.RoomClockDto c = roomTimeService.computeClock(r, now);
+            return "RUNNING".equalsIgnoreCase(c.clockStatus()) || "FREEZE".equalsIgnoreCase(c.clockStatus());
+        }).count();
+        HomeCountsDto counts = new HomeCountsDto(rooms.size(), liveRooms);
+
+        return new HomeResponseDto(
+                userDto,
+                now,
+                roomCards,
+                selectedDto,
+                userSummary,
+                unreadNotificationCount,
+                myOpenTasks,
+                deadlinesAcrossRooms,
+                teamPulse,
+                passport,
+                resume,
+                counts
+        );
     }
 
     private SelectedRoomDto buildSelectedRoom(Room room, User user) {
@@ -283,7 +367,8 @@ public class HomeService {
                 myTasksDto,
                 workload,
                 teamDto,
-                planningData
+                planningData,
+                roomTimeService.computeClock(room, now)
         );
     }
 
@@ -312,5 +397,169 @@ public class HomeService {
         }
 
         return "build";
+    }
+
+    private void trackLastVisited(User user, Room selectedRoom, Instant now) {
+        if (selectedRoom == null || user == null) return;
+        try {
+            roomMemberRepository.findByRoomIdAndUserId(selectedRoom.getId(), user.getId()).ifPresent(m -> {
+                if (m.getLastVisitedAt() == null || m.getLastVisitedAt().isBefore(now.minus(5, ChronoUnit.MINUTES))) {
+                    m.setLastVisitedAt(now);
+                    roomMemberRepository.save(m);
+                }
+            });
+        } catch (Exception ignored) {}
+    }
+
+    private ResumeRoomDto buildResume(User user, List<Room> rooms) {
+        if (rooms.isEmpty()) return null;
+        List<com.hackathonos.backend.members.RoomMember> members = roomMemberRepository.findByUserId(user.getId());
+        if (members.isEmpty()) {
+            Room fallback = rooms.get(0);
+            return new ResumeRoomDto(fallback.getId(), fallback.getName(), null, fallback.getTemplateId() != null ? fallback.getTemplateId() : "hackathon", nextStepService.computeNextStep(fallback), null);
+        }
+        List<com.hackathonos.backend.members.RoomMember> sorted = new ArrayList<>(members);
+        sorted.sort((a, b) -> {
+            Instant ta = a.getLastVisitedAt();
+            Instant tb = b.getLastVisitedAt();
+            if (ta != null && tb != null) return tb.compareTo(ta);
+            if (ta != null) return -1;
+            if (tb != null) return 1;
+            Instant ja = a.getJoinedAt() != null ? a.getJoinedAt() : Instant.EPOCH;
+            Instant jb = b.getJoinedAt() != null ? b.getJoinedAt() : Instant.EPOCH;
+            return jb.compareTo(ja);
+        });
+        com.hackathonos.backend.members.RoomMember topMember = sorted.get(0);
+        Room topRoom = rooms.stream().filter(r -> r.getId().equals(topMember.getRoomId())).findFirst()
+                .orElseGet(() -> roomRepository.findById(topMember.getRoomId()).orElse(rooms.get(0)));
+        NextStepDto nextStep = nextStepService.computeNextStep(topRoom);
+        return new ResumeRoomDto(
+                topRoom.getId(),
+                topRoom.getName(),
+                null,
+                topRoom.getTemplateId() != null ? topRoom.getTemplateId() : "hackathon",
+                nextStep,
+                topMember.getLastVisitedAt()
+        );
+    }
+
+    private PassportDto buildPassport(User user, Instant now) {
+        long hackathonsCompleted = roomRepository.countSubmittedRoomsByUserId(user.getId());
+        long tasksConfirmed = taskRepository.countByAssigneeIdAndConfirmedAtIsNotNull(user.getId());
+        long ideasApproved = ideaRepository.countByAuthorIdAndStatus(user.getId(), "APPROVED");
+
+        int floorIndex = 0;
+        String exp = user.getExperienceLevel();
+        if ("HIGH".equalsIgnoreCase(exp)) floorIndex = 3;
+        else if ("MID".equalsIgnoreCase(exp)) floorIndex = 2;
+        else if ("LOW".equalsIgnoreCase(exp)) floorIndex = 1;
+
+        int earnedIndex = 0;
+        if (hackathonsCompleted >= 10) earnedIndex = 3;
+        else if (hackathonsCompleted >= 4) earnedIndex = 2;
+        else if (hackathonsCompleted >= 1) earnedIndex = 1;
+
+        int levelIndex = Math.max(floorIndex, earnedIndex);
+        String levelName = switch (levelIndex) {
+            case 3 -> "Legend";
+            case 2 -> "Veteran";
+            case 1 -> "Regular";
+            default -> "Rookie";
+        };
+
+        Integer nextLevelIn = null;
+        if (levelIndex == 0) {
+            nextLevelIn = Math.max(1, (int) (1 - hackathonsCompleted));
+        } else if (levelIndex == 1) {
+            nextLevelIn = Math.max(1, (int) (4 - hackathonsCompleted));
+        } else if (levelIndex == 2) {
+            nextLevelIn = Math.max(1, (int) (10 - hackathonsCompleted));
+        }
+
+        LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
+        LocalDate sinceDate = today.minusDays(83);
+        Instant sinceInstant = sinceDate.atStartOfDay().toInstant(ZoneOffset.UTC);
+
+        Map<String, Integer> dayCounts = new HashMap<>();
+
+        // Grouped query 1: confirmed tasks
+        try {
+            jdbcTemplate.query(
+                    """
+                    SELECT TO_CHAR(confirmed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day_str, COUNT(*) AS cnt
+                    FROM tasks
+                    WHERE assignee_id = ? AND confirmed_at >= ?
+                    GROUP BY TO_CHAR(confirmed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+                    """,
+                    rs -> {
+                        String day = rs.getString("day_str");
+                        int cnt = rs.getInt("cnt");
+                        dayCounts.put(day, dayCounts.getOrDefault(day, 0) + cnt);
+                    },
+                    user.getId(), java.sql.Timestamp.from(sinceInstant)
+            );
+        } catch (Exception ignored) {}
+
+        // Grouped query 2: approved ideas
+        try {
+            jdbcTemplate.query(
+                    """
+                    SELECT TO_CHAR(COALESCE(decided_at, created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day_str, COUNT(*) AS cnt
+                    FROM ideas
+                    WHERE author_id = ? AND status = 'APPROVED' AND COALESCE(decided_at, created_at) >= ?
+                    GROUP BY TO_CHAR(COALESCE(decided_at, created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+                    """,
+                    rs -> {
+                        String day = rs.getString("day_str");
+                        int cnt = rs.getInt("cnt");
+                        dayCounts.put(day, dayCounts.getOrDefault(day, 0) + cnt);
+                    },
+                    user.getId(), java.sql.Timestamp.from(sinceInstant)
+            );
+        } catch (Exception ignored) {}
+
+        // Grouped query 3: docs edited
+        try {
+            jdbcTemplate.query(
+                    """
+                    SELECT TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day_str, COUNT(*) AS cnt
+                    FROM doc_versions
+                    WHERE created_by = ? AND created_at >= ?
+                    GROUP BY TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+                    """,
+                    rs -> {
+                        String day = rs.getString("day_str");
+                        int cnt = rs.getInt("cnt");
+                        dayCounts.put(day, dayCounts.getOrDefault(day, 0) + cnt);
+                    },
+                    user.getId(), java.sql.Timestamp.from(sinceInstant)
+            );
+        } catch (Exception ignored) {}
+
+        List<DailyActivityDto> activity = new ArrayList<>(84);
+        for (int i = 83; i >= 0; i--) {
+            String dateStr = today.minusDays(i).toString();
+            activity.add(new DailyActivityDto(dateStr, dayCounts.getOrDefault(dateStr, 0)));
+        }
+
+        int streakDays = 0;
+        LocalDate checkDay = today;
+        if (dayCounts.getOrDefault(checkDay.toString(), 0) == 0) {
+            checkDay = checkDay.minusDays(1);
+        }
+        while (dayCounts.getOrDefault(checkDay.toString(), 0) > 0) {
+            streakDays++;
+            checkDay = checkDay.minusDays(1);
+        }
+
+        return new PassportDto(
+                levelName,
+                nextLevelIn,
+                hackathonsCompleted,
+                tasksConfirmed,
+                ideasApproved,
+                streakDays,
+                activity
+        );
     }
 }

@@ -43,7 +43,11 @@ public class Notification {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
+    @Column(nullable = false)
+    private int count = 1;
+
     protected Notification() {}
+
 
     public Notification(UUID userId, UUID roomId, String type, String title, String body, String linkPath, String data) {
         this.userId = userId;
@@ -85,4 +89,8 @@ public class Notification {
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+
+    public int getCount() { return count; }
+    public void setCount(int count) { this.count = count; }
 }
+

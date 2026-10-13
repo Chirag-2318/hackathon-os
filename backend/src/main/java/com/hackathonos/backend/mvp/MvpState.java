@@ -39,7 +39,15 @@ public class MvpState {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt = Instant.now();
 
+    @Version
+    @Column(nullable = false)
+    private long version = 0L;
+
+    @Column(name = "last_edited_by")
+    private UUID lastEditedBy;
+
     protected MvpState() {}
+
 
     public MvpState(UUID roomId, String identity, String wow) {
         this.roomId = roomId;
@@ -77,4 +85,11 @@ public class MvpState {
 
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+
+    public long getVersion() { return version; }
+    public void setVersion(long version) { this.version = version; }
+
+    public UUID getLastEditedBy() { return lastEditedBy; }
+    public void setLastEditedBy(UUID lastEditedBy) { this.lastEditedBy = lastEditedBy; }
 }
+

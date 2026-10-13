@@ -13,8 +13,10 @@ RUN ./mvnw clean package -DskipTests -B
 FROM eclipse-temurin:25-jre-alpine
 WORKDIR /app
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
+    mkdir -p /app/uploads && chown -R appuser:appgroup /app
 USER appuser
+
 
 COPY --from=builder /workspace/target/*.jar app.jar
 

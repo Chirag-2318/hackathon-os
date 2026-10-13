@@ -55,6 +55,7 @@ public class SubmissionService {
     private final AiService aiService;
     private final SafeHttpClient safeHttpClient;
     private final ObjectMapper objectMapper;
+    private final com.hackathonos.backend.events.RoomEventService roomEventService;
 
     public SubmissionService(
             SubmissionRepository submissionRepository,
@@ -72,7 +73,8 @@ public class SubmissionService {
             NotificationService notificationService,
             AiService aiService,
             SafeHttpClient safeHttpClient,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            com.hackathonos.backend.events.RoomEventService roomEventService
     ) {
         this.submissionRepository = submissionRepository;
         this.checklistRepository = checklistRepository;
@@ -90,6 +92,7 @@ public class SubmissionService {
         this.aiService = aiService;
         this.safeHttpClient = safeHttpClient;
         this.objectMapper = objectMapper;
+        this.roomEventService = roomEventService;
     }
 
     /**
@@ -426,6 +429,7 @@ public class SubmissionService {
         sub.setStatus("VERIFIED");
         sub.setVerifiedAt(Instant.now());
         submissionRepository.save(sub);
+        roomEventService.recordEvent(roomId, "submission.changed", "submission", sub.getId().toString(), user.getId());
 
         Room room = roomRepository.findById(roomId).orElse(null);
         if (room != null) {
@@ -458,6 +462,7 @@ public class SubmissionService {
         sub.setSubmittedAt(Instant.now());
         sub.setSubmittedBy(user.getId());
         submissionRepository.save(sub);
+        roomEventService.recordEvent(roomId, "submission.changed", "submission", sub.getId().toString(), user.getId());
 
         return getSubmission(roomId, user);
     }

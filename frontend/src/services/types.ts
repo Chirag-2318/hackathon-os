@@ -273,6 +273,7 @@ export interface PlanApprovedIdea {
 
 export interface PlanContextSummary {
   briefStatement?: string;
+  briefConfirmed?: boolean;
   approvedIdeas: PlanApprovedIdea[];
   memberSkills: string[];
   eventHours?: number;
@@ -287,6 +288,7 @@ export interface PlanData {
   permissions: PlanPermissions;
   started?: boolean;
   notes?: string;
+  planNotes?: string;
   contextSummary?: PlanContextSummary;
 }
 
@@ -346,6 +348,16 @@ export interface TaskHistory {
   at: string;
 }
 
+export interface TaskPrerequisite {
+  id: string;
+  key: string;
+  title: string;
+  status: string;
+  confirmed: boolean;
+}
+
+export type TaskReviewState = 'NONE' | 'AWAITING' | 'CONFIRMED' | 'CHANGES_REQUESTED';
+
 export interface Task {
   id: string;
   key: string;
@@ -372,6 +384,14 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
   title?: string;
+  prerequisites?: TaskPrerequisite[];
+  isBlocked?: boolean;
+  blockedByCount?: number;
+  unblocksCount?: number;
+  confirmedAt?: string | null;
+  confirmedBy?: string | null;
+  reviewState?: TaskReviewState;
+  reviewNote?: string | null;
 }
 
 export type BoardTask = Task;

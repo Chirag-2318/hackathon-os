@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Crown, ArrowRight, MoreVertical, Copy, UserPlus, Clock, Layers } from 'lucide-react';
+import { Crown, ArrowRight, MoreVertical, Copy, UserPlus, Clock, Layers, Settings, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getRoomCover } from '@/shared/utils/room-cover';
@@ -11,7 +11,10 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import { LeaveRoomDialog } from './leave-room-dialog';
+import { LeaderRoomSettingsDialog } from './leader-room-settings-dialog';
 import type { RoomListItem } from '@/services/types';
 
 export interface RoomCardProps {
@@ -85,6 +88,9 @@ export function RoomCard({ room, onInvite, variant = 'default', className }: Roo
   const memberCount = room.memberCount ?? (room.memberPreview?.length || 1);
   const previews = room.memberPreview || [];
 
+  const [leaveOpen, setLeaveOpen] = React.useState(false);
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+
   const handleOpenRoom = (e?: React.SyntheticEvent) => {
     e?.stopPropagation();
     navigate(`/app/room/${room.id}/overview`);
@@ -108,104 +114,124 @@ export function RoomCard({ room, onInvite, variant = 'default', className }: Roo
     }
   };
 
+  const handleOpenSettings = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSettingsOpen(true);
+  };
+
+  const handleOpenLeave = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLeaveOpen(true);
+  };
+
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={handleOpenRoom}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          handleOpenRoom();
-        }
-      }}
-      className={cn(
-        'group relative flex flex-col rounded-[var(--r-card,16px)] bg-card border border-border overflow-hidden select-none',
-        'cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        'transition-all duration-[180ms] ease-out hover:-translate-y-[3px] hover:shadow-lg hover:border-border-strong',
-        className
-      )}
-    >
-      {/* ── COVER STRIP (88px) ────────────────────────────────────────── */}
+    <>
       <div
-        className="relative h-[88px] w-full overflow-hidden p-3 flex items-start justify-between border-b border-border/40"
-        style={{
-          background: cover.meshGradient,
-          backgroundSize: '200% 200%',
+        role="button"
+        tabIndex={0}
+        onClick={handleOpenRoom}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleOpenRoom();
+          }
         }}
+        className={cn(
+          'group relative flex flex-col rounded-[var(--r-card,16px)] bg-card border border-border overflow-hidden select-none',
+          'cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          'transition-all duration-[180ms] ease-out hover:-translate-y-[3px] hover:shadow-lg hover:border-border-strong',
+          className
+        )}
       >
-        {/* Animated shift layer */}
+        {/* ── COVER STRIP (88px) ────────────────────────────────────────── */}
         <div
-          className="absolute inset-0 pointer-events-none transition-transform duration-700 ease-out group-hover:scale-105"
+          className="relative h-[88px] w-full overflow-hidden p-3 flex items-start justify-between border-b border-border/40"
           style={{
-            background: cover.gradient,
-            opacity: 0.35,
+            background: cover.meshGradient,
+            backgroundSize: '200% 200%',
           }}
-        />
-
-        {/* Noise grain overlay */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-[0.07] mix-blend-overlay"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-          }}
-        />
-
-        {/* Faint large monogram in --font-display */}
-        <span
-          className="absolute -right-1 -bottom-3 text-[64px] font-[var(--font-display)] font-bold text-black/[0.12] dark:text-white/[0.12] leading-none pointer-events-none select-none tracking-tight"
-          aria-hidden="true"
         >
-          {monogram}
-        </span>
-
-        {/* Phase chip on top-left */}
-        <div className="relative z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/85 dark:bg-neutral-900/85 backdrop-blur-xs text-xs font-semibold text-ink shadow-2xs border border-white/40">
-          <span
-            className={cn(
-              'size-2 rounded-full shrink-0',
-              currentPhaseIndex === 0 && 'bg-blue-500',
-              currentPhaseIndex === 1 && 'bg-amber-500',
-              currentPhaseIndex === 2 && 'bg-purple-500',
-              currentPhaseIndex === 3 && 'bg-emerald-500'
-            )}
+          {/* Animated shift layer */}
+          <div
+            className="absolute inset-0 pointer-events-none transition-transform duration-700 ease-out group-hover:scale-105"
+            style={{
+              background: cover.gradient,
+              opacity: 0.35,
+            }}
           />
-          <span className="leading-none text-[11px] tracking-wide">{currentPhaseName}</span>
-        </div>
 
-        {/* Top-right: Attention Badge + Kebab Menu */}
-        <div className="relative z-10 flex items-center gap-1.5 ml-auto">
-          {attentionCount > 0 && (
+          {/* Noise grain overlay */}
+          <div
+            className="absolute inset-0 pointer-events-none opacity-[0.07] mix-blend-overlay"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+            }}
+          />
+
+          {/* Faint large monogram in --font-display */}
+          <span
+            className="absolute -right-1 -bottom-3 text-[64px] font-[var(--font-display)] font-bold text-black/[0.12] dark:text-white/[0.12] leading-none pointer-events-none select-none tracking-tight"
+            aria-hidden="true"
+          >
+            {monogram}
+          </span>
+
+          {/* Phase chip on top-left */}
+          <div className="relative z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/85 dark:bg-neutral-900/85 backdrop-blur-xs text-xs font-semibold text-ink shadow-2xs border border-white/40">
             <span
-              className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[#E11D48] text-white text-[11px] font-mono font-bold shadow-xs leading-none"
-              title={`${attentionCount} pending attention item${attentionCount === 1 ? '' : 's'}`}
-            >
-              {attentionCount}
-            </span>
-          )}
+              className={cn(
+                'size-2 rounded-full shrink-0',
+                currentPhaseIndex === 0 && 'bg-blue-500',
+                currentPhaseIndex === 1 && 'bg-amber-500',
+                currentPhaseIndex === 2 && 'bg-purple-500',
+                currentPhaseIndex === 3 && 'bg-emerald-500'
+              )}
+            />
+            <span className="leading-none text-[11px] tracking-wide">{currentPhaseName}</span>
+          </div>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              onClick={(e) => e.stopPropagation()}
-              className="size-7 rounded-full flex items-center justify-center bg-white/75 dark:bg-neutral-900/75 hover:bg-white dark:hover:bg-neutral-900 text-ink-2 hover:text-ink shadow-2xs border border-white/40 cursor-pointer focus-visible:outline-none"
-              aria-label="Room options"
-            >
-              <MoreVertical className="size-3.5" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44 z-50 bg-popover">
-              <DropdownMenuItem onClick={handleCopyCode} className="gap-2 text-xs cursor-pointer">
-                <Copy className="size-3.5" /> Copy room code
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleInvite} className="gap-2 text-xs cursor-pointer">
-                <UserPlus className="size-3.5" /> Invite team
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleOpenRoom} className="gap-2 text-xs cursor-pointer">
-                <ArrowRight className="size-3.5" /> Open room
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Top-right: Attention Badge + Kebab Menu */}
+          <div className="relative z-10 flex items-center gap-1.5 ml-auto">
+            {attentionCount > 0 && (
+              <span
+                className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[#E11D48] text-white text-[11px] font-mono font-bold shadow-xs leading-none"
+                title={`${attentionCount} pending attention item${attentionCount === 1 ? '' : 's'}`}
+              >
+                {attentionCount}
+              </span>
+            )}
+
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                onClick={(e) => e.stopPropagation()}
+                className="size-7 rounded-full flex items-center justify-center bg-white/75 dark:bg-neutral-900/75 hover:bg-white dark:hover:bg-neutral-900 text-ink-2 hover:text-ink shadow-2xs border border-white/40 cursor-pointer focus-visible:outline-none"
+                aria-label="Room options"
+              >
+                <MoreVertical className="size-3.5" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44 z-50 bg-popover">
+                <DropdownMenuItem onClick={handleCopyCode} className="gap-2 text-xs cursor-pointer">
+                  <Copy className="size-3.5" /> Copy room code
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleInvite} className="gap-2 text-xs cursor-pointer">
+                  <UserPlus className="size-3.5" /> Invite team
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleOpenRoom} className="gap-2 text-xs cursor-pointer">
+                  <ArrowRight className="size-3.5" /> Open room
+                </DropdownMenuItem>
+                {isLeader && (
+                  <DropdownMenuItem onClick={handleOpenSettings} className="gap-2 text-xs cursor-pointer">
+                    <Settings className="size-3.5" /> Room settings
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleOpenLeave} className="gap-2 text-xs cursor-pointer text-rose-600 dark:text-rose-400">
+                  <LogOut className="size-3.5" /> Leave room
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
-      </div>
 
       {/* ── CARD BODY (padding 18px) ─────────────────────────────────── */}
       <div className="p-4 sm:p-[18px] flex flex-col gap-3 flex-1">
@@ -328,5 +354,36 @@ export function RoomCard({ room, onInvite, variant = 'default', className }: Roo
         </div>
       </div>
     </div>
+
+    <LeaveRoomDialog
+        open={leaveOpen}
+        onOpenChange={setLeaveOpen}
+        room={{
+          id: room.id,
+          name: room.name,
+          isLeader,
+          myRole: room.myRole,
+          memberCount,
+        }}
+        onSuccess={() => {
+          window.location.reload();
+        }}
+      />
+
+      {isLeader && (
+        <LeaderRoomSettingsDialog
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          roomId={room.id}
+          onUpdated={() => {
+            window.location.reload();
+          }}
+          onArchived={() => {
+            window.location.reload();
+          }}
+        />
+      )}
+    </>
   );
 }
+
