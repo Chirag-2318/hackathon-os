@@ -34,4 +34,8 @@ public record CreateRoomRequest(
             templateId = "sih-36h";
         }
     }
+
+    public CreateRoomRequest(String name, String description, String projectDescription, String templateId, String eventStart, String timezone) {
+        this(name, description, projectDescription, templateId, eventStart, timezone, null, null, null, null);
+    }
 }

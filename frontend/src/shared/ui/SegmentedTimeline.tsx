@@ -96,7 +96,7 @@ export function SegmentedTimeline({
               'h-8 min-w-[6px] rounded-[8px] flex items-center justify-center transition-colors duration-150 cursor-pointer overflow-hidden',
               'focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2',
               isActive
-                ? 'bg-ink text-white border-transparent'
+                ? 'bg-selected text-on-selected border-transparent'
                 : 'bg-active border border-border text-ink hover:border-border-strong'
             )}
           >

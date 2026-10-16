@@ -11,7 +11,15 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Copy, Check, RefreshCw, Link as LinkIcon, Loader2, Users } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Copy, Check, RefreshCw, Link as LinkIcon, Loader2, Users, Mail, Send } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface InviteCodeDialogProps {
@@ -20,6 +28,14 @@ interface InviteCodeDialogProps {
   onOpenChange?: (open: boolean) => void;
   trigger?: React.ReactNode;
 }
+
+const INVITE_ROLES = [
+  { label: 'Builder', value: 'BUILDER' },
+  { label: 'Designer', value: 'DESIGNER' },
+  { label: 'Presenter', value: 'PRESENTER' },
+  { label: 'Domain Expert', value: 'DOMAIN_EXPERT' },
+  { label: 'QA / Testing', value: 'QA' },
+];
 
 export function InviteCodeDialog({ roomId, open, onOpenChange, trigger }: InviteCodeDialogProps) {
   const queryClient = useQueryClient();
@@ -34,13 +50,19 @@ export function InviteCodeDialog({ roomId, open, onOpenChange, trigger }: Invite
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
 
+  // Email invitation state
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState('BUILDER');
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailSuccess, setEmailSuccess] = useState<string | null>(null);
+
   const { data: room, isLoading: isRoomLoading } = useQuery({
     queryKey: ['room', roomId],
     queryFn: () => roomService.getRoom(roomId),
     enabled: Boolean(roomId) && isOpen,
   });
 
-  const joinCode = (room?.joinCode || '----').toUpperCase().slice(0, 4).padEnd(4, '-');
+  const joinCode = (room?.joinCode || '').toUpperCase();
   const isLeader = Boolean(room?.isLeader);
 
   const { mutate: generateInviteLink, isPending: isGeneratingLink } = useMutation({
@@ -50,6 +72,37 @@ export function InviteCodeDialog({ roomId, open, onOpenChange, trigger }: Invite
       setInviteUrl(link);
     },
   });
+
+  const emailInviteMutation = useMutation({
+    mutationFn: () => roomApi.inviteByEmail(roomId, email.trim(), role),
+    onSuccess: () => {
+      setEmailSuccess(`Invitation sent to ${email.trim()}`);
+      setEmail('');
+      setEmailError(null);
+      toast.success('Invitation email sent');
+    },
+    onError: (err: any) => {
+      const message = err?.message || 'Failed to send invitation';
+      setEmailError(message);
+      toast.error(message);
+    },
+  });
+
+  const handleSendEmailInvite = (e: React.FormEvent) => {
+    e.preventDefault();
+    setEmailSuccess(null);
+    setEmailError(null);
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setEmailError('Please enter an email address');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setEmailError('Please enter a valid email address');
+      return;
+    }
+    emailInviteMutation.mutate();
+  };
 
   const regenMutation = useMutation({
     mutationFn: () => roomService.regenerateJoinCode(roomId),
@@ -92,9 +145,9 @@ export function InviteCodeDialog({ roomId, open, onOpenChange, trigger }: Invite
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-      <DialogContent className="sm:max-w-[420px] rounded-[24px] bg-card p-6 font-sans">
-        <DialogHeader className="flex flex-col items-center text-center pb-2">
-          <div className="size-11 rounded-2xl bg-blue-500/10 text-blue-600 flex items-center justify-center mb-2">
+      <DialogContent className="sm:max-w-[460px] rounded-[24px] bg-card p-6 font-sans">
+        <DialogHeader className="flex flex-col items-center text-center pb-1">
+          <div className="size-11 rounded-2xl bg-blue-500/10 text-blue-600 flex items-center justify-center mb-1.5">
             <Users className="size-5" />
           </div>
           <DialogTitle className="text-xl font-bold tracking-tight text-foreground">
@@ -102,17 +155,28 @@ export function InviteCodeDialog({ roomId, open, onOpenChange, trigger }: Invite
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col items-center gap-5 py-2">
-          {/* 4 Monospace Boxes */}
-          <div className="flex items-center justify-center gap-2.5">
-            {joinCode.split('').map((char: string, idx: number) => (
-              <div
-                key={idx}
-                className="size-14 rounded-2xl border-2 border-border/80 bg-muted/30 flex items-center justify-center font-mono text-2xl font-bold uppercase text-foreground shadow-xs select-all"
-              >
-                {isRoomLoading ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : char}
-              </div>
-            ))}
+        <div className="flex flex-col items-center gap-4 py-1">
+          {/* Monospace Boxes */}
+          <div className="flex items-center justify-center gap-1.5 flex-wrap max-w-full">
+            {isRoomLoading ? (
+              Array.from({ length: 8 }).map((_, idx) => (
+                <div
+                  key={idx}
+                  className="w-8 h-10 sm:w-9 sm:h-11 rounded-xl border-2 border-border/80 bg-muted/30 flex items-center justify-center"
+                >
+                  <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                </div>
+              ))
+            ) : (
+              (joinCode || '--------').split('').map((char: string, idx: number) => (
+                <div
+                  key={idx}
+                  className="w-8 h-10 sm:w-9 sm:h-11 rounded-xl border-2 border-border/80 bg-muted/30 flex items-center justify-center font-mono text-xl sm:text-2xl font-bold uppercase text-foreground shadow-xs select-all"
+                >
+                  {char}
+                </div>
+              ))
+            )}
           </div>
 
           {/* Action Row: Copy Code & New Code */}
@@ -120,7 +184,7 @@ export function InviteCodeDialog({ roomId, open, onOpenChange, trigger }: Invite
             <Button
               onClick={handleCopyCode}
               disabled={isRoomLoading || !room?.joinCode}
-              className="h-9 px-5 rounded-xl text-xs font-semibold gap-1.5 min-w-[110px]"
+              className="h-8 px-4 rounded-xl text-xs font-semibold gap-1.5 min-w-[100px]"
             >
               {codeCopied ? (
                 <>
@@ -140,7 +204,7 @@ export function InviteCodeDialog({ roomId, open, onOpenChange, trigger }: Invite
                 variant="outline"
                 size="sm"
                 onClick={() => setShowRegenConfirm(true)}
-                className="h-9 px-3 rounded-xl text-xs font-medium gap-1 text-muted-foreground hover:text-foreground"
+                className="h-8 px-3 rounded-xl text-xs font-medium gap-1 text-muted-foreground hover:text-foreground"
               >
                 <RefreshCw className="size-3" />
                 New code
@@ -150,22 +214,17 @@ export function InviteCodeDialog({ roomId, open, onOpenChange, trigger }: Invite
 
           {/* Leader Confirmation for New Code */}
           {showRegenConfirm && (
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400 flex flex-col gap-2 w-full text-center">
+            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400 flex flex-col gap-1.5 w-full text-center">
               <span className="font-medium">The old code will stop working</span>
               <div className="flex items-center justify-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setShowRegenConfirm(false)}
-                  className="h-7 px-3 text-xs"
-                >
+                <Button size="sm" variant="outline" onClick={() => setShowRegenConfirm(false)} className="h-7 px-3 text-xs">
                   Cancel
                 </Button>
                 <Button
                   size="sm"
                   onClick={() => regenMutation.mutate()}
                   disabled={regenMutation.isPending}
-                  className="h-7 px-3 text-xs bg-amber-600 hover:bg-amber-700 text-white"
+                  className="h-7 px-3 text-xs bg-accent text-on-accent hover:opacity-90 cursor-pointer"
                 >
                   {regenMutation.isPending ? <Loader2 className="size-3 animate-spin mr-1" /> : null}
                   Confirm
@@ -174,13 +233,61 @@ export function InviteCodeDialog({ roomId, open, onOpenChange, trigger }: Invite
             </div>
           )}
 
-          {/* Instruction sentence */}
-          <p className="text-xs text-muted-foreground text-center max-w-xs leading-relaxed">
-            Ask them to open My rooms, click Join with code and enter this code.
-          </p>
+          {/* Email Invitation Form */}
+          <div className="w-full pt-3 border-t border-border/60 flex flex-col gap-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+              <Mail className="size-3.5 text-blue-600" />
+              <span>Invite via email</span>
+            </div>
 
-          {/* Link UI toggle */}
-          <div className="w-full pt-2 border-t border-border/60 flex flex-col items-center gap-2">
+            <form onSubmit={handleSendEmailInvite} className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Input
+                  type="email"
+                  placeholder="colleague@example.com"
+                  value={email}
+                  onChange={e => { setEmail(e.target.value); setEmailError(null); setEmailSuccess(null); }}
+                  className="h-9 text-xs rounded-xl flex-1 font-sans"
+                  disabled={emailInviteMutation.isPending}
+                />
+                <Select value={role} onValueChange={setRole} disabled={emailInviteMutation.isPending}>
+                  <SelectTrigger className="h-9 w-28 text-xs rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INVITE_ROLES.map(r => (
+                      <SelectItem key={r.value} value={r.value} className="text-xs">
+                        {r.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={emailInviteMutation.isPending || !email.trim()}
+                  className="h-9 px-3 rounded-xl text-xs font-semibold gap-1 shrink-0"
+                >
+                  {emailInviteMutation.isPending ? (
+                    <Loader2 className="size-3 animate-spin" />
+                  ) : (
+                    <Send className="size-3" />
+                  )}
+                  Send
+                </Button>
+              </div>
+
+              {emailError && (
+                <p className="text-[11px] text-danger-text text-left font-medium">{emailError}</p>
+              )}
+              {emailSuccess && (
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 text-left font-medium">✓ {emailSuccess}</p>
+              )}
+            </form>
+          </div>
+
+          {/* Shareable Link UI */}
+          <div className="w-full pt-2 border-t border-border/60 flex flex-col items-center gap-1.5">
             <button
               type="button"
               onClick={toggleLinkUi}

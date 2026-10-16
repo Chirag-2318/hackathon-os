@@ -22,7 +22,6 @@ import {
   SettingsIcon,
   OverviewIcon,
   TeamIcon,
-  SpeedModeIcon,
   PrepIcon,
   BriefIcon,
   IdeateIcon,
@@ -52,6 +51,7 @@ import { toast } from 'sonner';
 import { apiFetch } from '@/api/client';
 import { resetTourHotspots } from '@/tour/api';
 import { FileText, BookOpen, Layers } from 'lucide-react';
+import { playSound } from '@/shared/sound/sound-effects';
 
 export function CommandPaletteOverlay() {
   const queryClient = useQueryClient();
@@ -101,6 +101,7 @@ export function CommandPaletteOverlay() {
   });
 
   const handleSelect = (action: () => void) => {
+    playSound('command');
     close();
     action();
   };
@@ -113,7 +114,9 @@ export function CommandPaletteOverlay() {
           setQuery('');
           setSearchResults(null);
           close();
-        } else open();
+        } else {
+          open();
+        }
       }}
       title="Command palette"
       description="Search tasks, docs, rules, or jump to any page"
@@ -178,15 +181,7 @@ export function CommandPaletteOverlay() {
 
             {roomId && (
               <>
-                <CommandItem
-                  onSelect={() => handleSelect(() => navigate(`/speed-mode/${roomId}`))}
-                  className="h-10 px-3 rounded-[var(--r-control)] flex items-center gap-3 cursor-pointer text-sm font-medium"
-                >
-                  <div className="size-6 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center">
-                    <SpeedModeIcon size={16} />
-                  </div>
-                  <span>Open speed mode</span>
-                </CommandItem>
+
 
                 <CommandItem
                   onSelect={() => handleSelect(() => inviteModal.open({ roomId }))}

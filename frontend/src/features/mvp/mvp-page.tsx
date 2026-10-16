@@ -12,6 +12,7 @@ import { MvpJudgePrep } from './components/mvp-judge-prep';
 import { MvpCutList } from './components/mvp-cut-list';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { computeMvpHealth } from '@/shared/lib/mvp-health';
 
 export function MvpPage() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -79,26 +80,25 @@ export function MvpPage() {
   }
 
   // Count checks
-  const healthChecksPassed = Object.values(state.health).filter(Boolean).length;
-  const allChecksPassed = healthChecksPassed === 4;
+  const { done: healthChecksPassed, total: totalChecks, allPassed: allChecksPassed } = computeMvpHealth(state.health);
 
   return (
     <div className="flex flex-col gap-4 p-5 max-w-7xl mx-auto">
       {/* 1. Header: title + chip "3 of 4 checks" */}
       <div className="flex items-center justify-between h-12 shrink-0">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          <h1 className="text-3xl sm:text-4xl font-display font-normal tracking-tight text-foreground leading-none">
             MVP Studio
           </h1>
           <span
             className={cn(
-              'h-6 px-2.5 rounded-full text-xs font-semibold border inline-flex items-center transition-colors',
+              'px-2.5 py-0.5 rounded-full text-[11px] font-mono uppercase tracking-wider font-semibold border shrink-0 inline-flex items-center transition-colors',
               allChecksPassed
-                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20'
-                : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20'
+                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
             )}
           >
-            {healthChecksPassed} of 4 checks
+            {healthChecksPassed} of {totalChecks} checks
           </span>
         </div>
 

@@ -269,7 +269,7 @@ export function DeckPage() {
         <div className="p-6 max-w-4xl mx-auto space-y-6">
           <div className="stage-rise stage-card stage-card-dark p-8 text-center" style={{ '--delay': '0ms' } as React.CSSProperties}>
             <div className="flex justify-center mb-3"><StarBurst size={32} /></div>
-            <h1 className="text-2xl font-bold mb-1" style={{ color: '#F4F1EA' }}>Where does your deck live?</h1>
+            <h1 className="text-2xl font-display font-normal mb-1" style={{ color: '#F4F1EA' }}>Where does your deck live?</h1>
             <p className="text-sm" style={{ color: '#9C9AA3' }}>Pick a source and we'll pull it into your stage.</p>
           </div>
           {!selectedProvider && (
@@ -303,7 +303,7 @@ export function DeckPage() {
       <div className="p-6 max-w-7xl mx-auto space-y-4">
         {/* Top bar */}
         <div className="stage-rise flex items-center flex-wrap gap-3" style={{ '--delay': '0ms' } as React.CSSProperties}>
-          <span className="text-xs font-semibold rounded-full px-2 py-0.5 border" style={{ background: '#f5f5f5', color: '#525252' }}>
+          <span className="text-xs font-mono font-semibold rounded-full px-2 py-0.5 border" style={{ background: '#f5f5f5', color: '#525252' }}>
             {providerLabel}
           </span>
           {editingTitle ? (
@@ -364,22 +364,22 @@ export function DeckPage() {
           {/* Sidebar (4/12) */}
           <div className="stage-rise col-span-12 lg:col-span-4 space-y-4" style={{ '--delay': '80ms' } as React.CSSProperties}>
             {/* Redesigned Premium Deck Health Card (Matching Reference Layout) */}
-            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm space-y-4 font-[var(--font-inter)]">
+            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm space-y-4 font-sans">
               {/* Top Control Bar */}
               <div className="flex items-center justify-between bg-muted/40 rounded-xl px-3.5 py-2.5 border border-border/40">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="w-6 h-6 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
                     <Activity className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-foreground">Deck Health</span>
+                  <span className="text-xs font-sans font-bold uppercase tracking-wider text-foreground">Deck Health</span>
                 </div>
                 <div>
                   {lintIssues.length === 0 ? (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                    <span className="text-xs font-mono uppercase tracking-wider font-semibold px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" /> Ready
                     </span>
                   ) : (
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                    <span className="text-xs font-mono uppercase tracking-wider font-semibold px-2.5 py-0.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
                       {lintIssues.length} suggestions
                     </span>
                   )}

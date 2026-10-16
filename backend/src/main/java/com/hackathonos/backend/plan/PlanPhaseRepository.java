@@ -11,5 +11,6 @@ import java.util.UUID;
 public interface PlanPhaseRepository extends JpaRepository<PlanPhase, UUID> {
     List<PlanPhase> findByRoomIdOrderByPositionAsc(UUID roomId);
     Optional<PlanPhase> findByRoomIdAndPlanKey(UUID roomId, String planKey);
+    Optional<PlanPhase> findByRoomIdAndStatus(UUID roomId, String status);
     void deleteByRoomId(UUID roomId);
 }

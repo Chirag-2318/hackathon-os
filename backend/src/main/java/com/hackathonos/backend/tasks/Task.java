@@ -2,6 +2,7 @@ package com.hackathonos.backend.tasks;
 
 import jakarta.persistence.*;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.UUID;
 
 @Entity
@@ -23,7 +24,7 @@ public class Task {
     @Column(nullable = false)
     private int number;
 
-    @Column(nullable = false, length = 255)
+    @Column(nullable = false, columnDefinition = "text")
     private String summary;
 
     @Column(columnDefinition = "TEXT")
@@ -93,8 +94,28 @@ public class Task {
     @Column(name = "last_edited_by")
     private UUID lastEditedBy;
 
+    @Column(name = "phase_key", length = 20)
+    private String phaseKey;
+
+    @Column(name = "local_id", length = 20)
+    private String localId;
+
+    @Column(name = "deferred_from", length = 20)
+    private String deferredFrom;
+
+    @Column(name = "drop_reason", columnDefinition = "TEXT")
+    private String dropReason;
+
     public boolean isConfirmedDone() {
         return "DONE".equalsIgnoreCase(status) && "CONFIRMED".equalsIgnoreCase(reviewState);
+    }
+
+    public boolean isDropped() {
+        return "DROPPED".equalsIgnoreCase(status);
+    }
+
+    public boolean isSatisfiedForDependency() {
+        return isConfirmedDone() || isDropped();
     }
 
     protected Task() {}
@@ -108,18 +129,88 @@ public class Task {
         this.number = number;
         this.summary = summary;
         this.description = description;
-        this.status = status != null ? status : "TODO";
+        this.status = normalizeStatus(status);
         this.assigneeId = assigneeId;
         this.reporterId = reporterId;
-        this.priority = priority != null ? priority : "MEDIUM";
+        this.priority = normalizePriority(priority);
         this.phaseId = phaseId;
         this.roleLabel = roleLabel;
         this.estimateMin = estimateMin > 0 ? estimateMin : 60;
         this.dueAt = dueAt;
         this.position = position;
-        this.source = source != null ? source : "PLAN";
+        this.source = normalizeSource(source);
         this.createdAt = Instant.now();
         this.updatedAt = Instant.now();
+    }
+
+    public Task(UUID roomId, String taskKey, String summary, String description,
+                String status, int position, UUID assigneeId, UUID reporterId,
+                String phaseKey, String type, String role) {
+        this.roomId = roomId;
+        this.taskKey = taskKey;
+        this.summary = summary;
+        this.description = description;
+        this.status = normalizeStatus(status);
+        this.position = position;
+        this.assigneeId = assigneeId;
+        this.reporterId = reporterId;
+        this.phaseKey = phaseKey;
+        this.source = normalizeSource(type);
+        this.roleLabel = role;
+        int parsedNum = 1;
+        try {
+            if (taskKey != null && taskKey.contains("-")) {
+                parsedNum = Integer.parseInt(taskKey.substring(taskKey.lastIndexOf("-") + 1));
+            } else {
+                parsedNum = position + 1;
+            }
+        } catch (Exception ignored) {
+            parsedNum = position + 1;
+        }
+        this.number = parsedNum;
+        this.createdAt = Instant.now();
+        this.updatedAt = Instant.now();
+    }
+
+    public static String normalizeStatus(String status) {
+        if (status == null || status.isBlank()) return "TODO";
+        String s = status.trim().toUpperCase(Locale.ROOT);
+        return switch (s) {
+            case "TODO", "IN_PROGRESS", "DONE", "DROPPED" -> s;
+            case "IN PROGRESS", "DOING" -> "IN_PROGRESS";
+            case "FINISHED", "COMPLETE", "COMPLETED" -> "DONE";
+            default -> "TODO";
+        };
+    }
+
+    public static String normalizePriority(String priority) {
+        if (priority == null || priority.isBlank()) return "MEDIUM";
+        String s = priority.trim().toUpperCase(Locale.ROOT);
+        if (s.contains("P0") || s.contains("HIGHEST") || s.contains("CRITICAL") || s.contains("URGENT") || s.contains("BLOCKER")) {
+            return "HIGHEST";
+        }
+        if (s.contains("P1") || s.contains("HIGH")) {
+            return "HIGH";
+        }
+        if (s.contains("P3") || s.contains("LOWEST")) {
+            return "LOWEST";
+        }
+        if (s.contains("LOW")) {
+            return "LOW";
+        }
+        if (s.contains("P2") || s.contains("MEDIUM") || s.contains("NORMAL")) {
+            return "MEDIUM";
+        }
+        return "MEDIUM";
+    }
+
+    public static String normalizeSource(String source) {
+        if (source == null || source.isBlank()) return "PLAN";
+        String s = source.trim().toUpperCase(Locale.ROOT);
+        if ("PHASE_IMPORT".equals(s) || "MANUAL".equals(s) || "PLAN".equals(s)) {
+            return s;
+        }
+        return "PLAN";
     }
 
     public UUID getId() { return id; }
@@ -141,7 +232,7 @@ public class Task {
     public void setDescription(String description) { this.description = description; }
 
     public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
+    public void setStatus(String status) { this.status = normalizeStatus(status); }
 
     public boolean isFlagged() { return flagged; }
     public void setFlagged(boolean flagged) { this.flagged = flagged; }
@@ -156,7 +247,7 @@ public class Task {
     public void setReporterId(UUID reporterId) { this.reporterId = reporterId; }
 
     public String getPriority() { return priority; }
-    public void setPriority(String priority) { this.priority = priority; }
+    public void setPriority(String priority) { this.priority = normalizePriority(priority); }
 
     public UUID getPhaseId() { return phaseId; }
     public void setPhaseId(UUID phaseId) { this.phaseId = phaseId; }
@@ -176,7 +267,7 @@ public class Task {
     public void setPosition(int position) { this.position = position; }
 
     public String getSource() { return source; }
-    public void setSource(String source) { this.source = source; }
+    public void setSource(String source) { this.source = normalizeSource(source); }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
@@ -204,5 +295,53 @@ public class Task {
 
     public String getReviewNote() { return reviewNote; }
     public void setReviewNote(String reviewNote) { this.reviewNote = reviewNote; }
+
+    public String getPhaseKey() { return phaseKey; }
+    public void setPhaseKey(String phaseKey) { this.phaseKey = phaseKey; }
+
+    public String getLocalId() { return localId; }
+    public void setLocalId(String localId) { this.localId = localId; }
+
+    public String getDeferredFrom() { return deferredFrom; }
+    public void setDeferredFrom(String deferredFrom) { this.deferredFrom = deferredFrom; }
+
+    public String getDropReason() { return dropReason; }
+    public void setDropReason(String dropReason) { this.dropReason = dropReason; }
+
+    public boolean isConfirmed() {
+        return confirmedAt != null;
+    }
+
+    public Double getSpentHours() {
+        return 0.0;
+    }
+
+    public void setSpentHours(Double spentHours) {
+        // no-op
+    }
+
+    public String getTitle() {
+        return summary;
+    }
+
+    public void setTitle(String title) {
+        this.summary = title;
+    }
+
+    public Double getEstimateHours() {
+        return estimateMin > 0 ? (estimateMin / 60.0) : 0.0;
+    }
+
+    public void setEstimateHours(double hours) {
+        this.estimateMin = (int) Math.round(hours * 60.0);
+    }
+
+    public String getRequirement() {
+        return roleLabel;
+    }
+
+    public void setRequirement(String requirement) {
+        this.roleLabel = requirement;
+    }
 }
 

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { API_BASE_URL } from '@/lib/apiClient';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const BASE_URL = API_BASE_URL;
 
 export interface RoomEventPayload {
   type: string;
@@ -56,6 +57,9 @@ export function useRoomEvents(roomId: string | undefined, currentUserId?: string
         case 'docs':
           queryClient.invalidateQueries({ queryKey: ['docs', roomId] });
           break;
+        case 'phases':
+          queryClient.invalidateQueries({ queryKey: ['phases', roomId] });
+          break;
         case 'comments':
           queryClient.invalidateQueries({ queryKey: ['board', roomId] });
           queryClient.invalidateQueries({ queryKey: ['comments', roomId] });
@@ -97,6 +101,9 @@ export function useRoomEvents(roomId: string | undefined, currentUserId?: string
           scheduleInvalidation('stage');
         } else if (evType.includes('IDEA')) {
           scheduleInvalidation('ideas');
+        } else if (evType.includes('PHASE')) {
+          scheduleInvalidation('phases');
+          scheduleInvalidation('board');
         } else if (evType.includes('TASK')) {
           scheduleInvalidation('board');
         } else if (evType.includes('CHECKPOINT')) {

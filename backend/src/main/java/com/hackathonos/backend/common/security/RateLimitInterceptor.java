@@ -15,16 +15,37 @@ public class RateLimitInterceptor implements HandlerInterceptor {
 
     private final RateLimiter rateLimiter;
     private final CurrentUser currentUser;
+    private final ClientIpResolver clientIpResolver;
 
-    public RateLimitInterceptor(RateLimiter rateLimiter, CurrentUser currentUser) {
+    public RateLimitInterceptor(RateLimiter rateLimiter, CurrentUser currentUser, ClientIpResolver clientIpResolver) {
         this.rateLimiter = rateLimiter;
         this.currentUser = currentUser;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         if (!(handler instanceof HandlerMethod handlerMethod)) {
             return true;
+        }
+
+        User user = currentUser != null ? currentUser.getOptional().orElse(null) : null;
+
+        // Global per-IP limit for unauthenticated requests (60 per minute)
+        if (user == null) {
+            String clientIp = extractClientIp(request);
+            RateLimiter.RateLimitResult globalResult = rateLimiter.tryAcquire(
+                    "global:unauth:ip:" + clientIp,
+                    60,
+                    60,
+                    Duration.ofMinutes(1)
+            );
+            if (!globalResult.allowed()) {
+                response.setHeader("Retry-After", String.valueOf(globalResult.retryAfterSeconds()));
+                throw new TooManyRequestsException("TOO_MANY_REQUESTS",
+                        "Rate limit exceeded. Please try again after " + globalResult.retryAfterSeconds() + " seconds.",
+                        globalResult.retryAfterSeconds());
+            }
         }
 
         RateLimited rateLimited = handlerMethod.getMethodAnnotation(RateLimited.class);
@@ -35,7 +56,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        String callerId = resolveCallerId(request);
+        String callerId = resolveCallerId(request, user);
         String bucketKey = rateLimited.key() + ":" + callerId;
 
         RateLimiter.RateLimitResult result = rateLimiter.tryAcquire(
@@ -55,17 +76,14 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         return true;
     }
 
-    private String resolveCallerId(HttpServletRequest request) {
-        User user = currentUser != null ? currentUser.get() : null;
+    private String resolveCallerId(HttpServletRequest request, User user) {
         if (user != null && user.getId() != null) {
             return "user:" + user.getId();
         }
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isBlank()) {
-            ip = request.getRemoteAddr();
-        } else {
-            ip = ip.split(",")[0].trim();
-        }
-        return "ip:" + (ip != null ? ip : "unknown");
+        return "ip:" + extractClientIp(request);
+    }
+
+    private String extractClientIp(HttpServletRequest request) {
+        return clientIpResolver.resolveClientIp(request);
     }
 }

@@ -69,12 +69,12 @@ export function CrTemplateCard({
       {isSelected && (
         <div
           className={cn(
-            'absolute top-2 right-2 size-4 rounded-full bg-ink flex items-center justify-center',
+            'absolute top-2 right-2 size-4 rounded-full bg-selected text-on-selected flex items-center justify-center',
             'transition-opacity duration-100'
           )}
           aria-hidden="true"
         >
-          <Check className="size-2.5 text-white stroke-[2.5]" />
+          <Check className="size-2.5 text-current stroke-[2.5]" />
         </div>
       )}
     </div>

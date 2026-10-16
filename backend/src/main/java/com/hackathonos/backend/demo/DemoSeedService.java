@@ -44,6 +44,14 @@ public class DemoSeedService {
      */
     @Transactional
     public void seedFromPlan(Room room) {
+        seedFromPlan(room, null);
+    }
+
+    /**
+     * Seeds demo sections, shots, and insurance items from the plan's demo answer.
+     */
+    @Transactional
+    public void seedFromPlan(Room room, java.util.function.Consumer<com.hackathonos.backend.plan.dto.ValidationIssueDto> warnConsumer) {
         UUID roomId = room.getId();
 
         // Default insurance items
@@ -59,6 +67,9 @@ public class DemoSeedService {
         }
 
         Optional<PlanStep> demoStep = planStepRepository.findByRoomIdAndStepKey(roomId, "demo");
+        if (demoStep.isEmpty() || !demoStep.get().isValidated()) {
+            demoStep = planStepRepository.findByRoomIdAndStepKey(roomId, "demo-qna");
+        }
         if (demoStep.isEmpty() || !demoStep.get().isValidated() || demoStep.get().getAnswer() == null) {
             return;
         }
@@ -67,7 +78,7 @@ public class DemoSeedService {
 
         // 1. Parse Demo Script
         if (sectionRepository.findByRoomIdOrderByPositionAsc(roomId).isEmpty()) {
-            List<DemoSection> sections = parseSections(roomId, answer);
+            List<DemoSection> sections = parseSections(roomId, answer, warnConsumer);
             if (!sections.isEmpty()) {
                 sectionRepository.saveAll(sections);
             }
@@ -75,14 +86,14 @@ public class DemoSeedService {
 
         // 2. Parse Shot list
         if (shotRepository.findByRoomIdOrderByPositionAsc(roomId).isEmpty()) {
-            List<DemoShot> shots = parseShots(roomId, answer);
+            List<DemoShot> shots = parseShots(roomId, answer, warnConsumer);
             if (!shots.isEmpty()) {
                 shotRepository.saveAll(shots);
             }
         }
     }
 
-    private List<DemoSection> parseSections(UUID roomId, String text) {
+    private List<DemoSection> parseSections(UUID roomId, String text, java.util.function.Consumer<com.hackathonos.backend.plan.dto.ValidationIssueDto> warnConsumer) {
         List<DemoSection> list = new ArrayList<>();
         int scriptIdx = text.indexOf("Demo script");
         if (scriptIdx < 0) return list;
@@ -102,8 +113,10 @@ public class DemoSeedService {
             Matcher m = pattern.matcher(trimmed);
             if (m.find()) {
                 String title = m.group(1).replaceAll("[*]+", "").trim();
+                title = com.hackathonos.backend.plan.DefensiveParserUtils.defensivelyTrim(title, 200, "DEMO_SCRIPT.md", warnConsumer);
                 int seconds = Integer.parseInt(m.group(2));
                 String content = m.group(3).replaceAll("[*]+", "").trim();
+                content = com.hackathonos.backend.plan.DefensiveParserUtils.defensivelyTrim(content, 2000, "DEMO_SCRIPT.md", warnConsumer);
                 list.add(new DemoSection(roomId, pos++, title, seconds, content));
             }
         }
@@ -111,7 +124,7 @@ public class DemoSeedService {
         return list;
     }
 
-    private List<DemoShot> parseShots(UUID roomId, String text) {
+    private List<DemoShot> parseShots(UUID roomId, String text, java.util.function.Consumer<com.hackathonos.backend.plan.dto.ValidationIssueDto> warnConsumer) {
         List<DemoShot> list = new ArrayList<>();
         int shotIdx = text.indexOf("Shot list");
         if (shotIdx < 0) return list;
@@ -131,8 +144,10 @@ public class DemoSeedService {
             Matcher m = pattern.matcher(trimmed);
             if (m.find()) {
                 String title = m.group(1).replaceAll("[*]+", "").trim();
+                title = com.hackathonos.backend.plan.DefensiveParserUtils.defensivelyTrim(title, 200, "DEMO_SCRIPT.md", warnConsumer);
                 int seconds = Integer.parseInt(m.group(2));
                 String notes = m.group(3).replaceAll("[*]+", "").trim();
+                notes = com.hackathonos.backend.plan.DefensiveParserUtils.defensivelyTrim(notes, 2000, "DEMO_SCRIPT.md", warnConsumer);
                 list.add(new DemoShot(roomId, pos++, title, seconds, notes, false));
             }
         }

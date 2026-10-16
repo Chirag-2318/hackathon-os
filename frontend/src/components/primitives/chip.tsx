@@ -14,8 +14,8 @@ const chipVariants = cva(
     variants: {
       variant: {
         soft: "bg-lav-200 text-ink",
-        solid: "bg-ink text-white",
-        "solid-blue": "bg-info-solid text-white",
+        solid: "bg-inverse text-on-inverse",
+        "solid-blue": "bg-info-solid text-on-inverse",
       },
     },
     defaultVariants: {

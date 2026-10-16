@@ -20,10 +20,10 @@ public class PitchSlide {
     @Column(name = "kind", nullable = false, length = 30)
     private String kind; // 'PROBLEM', 'SOLUTION', 'DEMO', 'IMPACT', 'NEXT', 'TEAM', 'TECH', 'CUSTOM'
 
-    @Column(name = "title", nullable = false, length = 120)
+    @Column(name = "title", nullable = false, columnDefinition = "text")
     private String title;
 
-    @Column(name = "question", nullable = false, length = 255)
+    @Column(name = "question", nullable = false, columnDefinition = "text")
     private String question;
 
     @Column(name = "content", nullable = false, columnDefinition = "TEXT")

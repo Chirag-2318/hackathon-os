@@ -11,7 +11,6 @@ import {
   BackArrowIcon,
   OverviewIcon,
   TeamIcon,
-  SpeedModeIcon,
   PrepIcon,
   BriefIcon,
   IdeateIcon,
@@ -119,12 +118,7 @@ const ICONS: IconEntry[] = [
     spec: 'Avatars slide apart 1.5px and third pops in',
     render: (size) => <TeamIcon size={size} />,
   },
-  {
-    name: 'Speed mode',
-    category: 'Pinned',
-    spec: 'Bolt scales 1.12, skews 6deg, glow ring fades in',
-    render: (size) => <SpeedModeIcon size={size} />,
-  },
+
   {
     name: 'Prep',
     category: 'PLAN',

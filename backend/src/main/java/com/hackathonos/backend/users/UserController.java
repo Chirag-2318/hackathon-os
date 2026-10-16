@@ -17,10 +17,19 @@ public class UserController {
 
     private final UserService userService;
     private final CurrentUser currentUser;
+    private final com.hackathonos.backend.ai.UserAiKeyService userAiKeyService;
+    private final com.hackathonos.backend.ai.AiService aiService;
 
-    public UserController(UserService userService, CurrentUser currentUser) {
+    public UserController(
+            UserService userService,
+            CurrentUser currentUser,
+            com.hackathonos.backend.ai.UserAiKeyService userAiKeyService,
+            com.hackathonos.backend.ai.AiService aiService
+    ) {
         this.userService = userService;
         this.currentUser = currentUser;
+        this.userAiKeyService = userAiKeyService;
+        this.aiService = aiService;
     }
 
     @GetMapping("/api/v1/me")
@@ -34,6 +43,45 @@ public class UserController {
         User user = currentUser.get();
         return userService.getMe(user);
     }
+
+    @GetMapping({"/api/v1/users/me/ai-key", "/users/me/ai-key"})
+    public com.hackathonos.backend.ai.dto.UserAiKeyResponseDto getAiKey() {
+        User user = currentUser.get();
+        return userAiKeyService.getKeyResponse(user.getId());
+    }
+
+    @com.hackathonos.backend.common.security.RateLimited(key = "ai_key_put", limit = 10, periodSeconds = 3600)
+    @PutMapping({"/api/v1/users/me/ai-key", "/users/me/ai-key"})
+    public com.hackathonos.backend.ai.dto.UserAiKeyResponseDto setAiKey(@RequestBody com.hackathonos.backend.ai.dto.SetUserAiKeyRequest request) {
+        User user = currentUser.get();
+        return userAiKeyService.saveKey(user.getId(), request);
+    }
+
+    @DeleteMapping({"/api/v1/users/me/ai-key", "/users/me/ai-key"})
+    public ResponseEntity<Void> deleteAiKey() {
+        User user = currentUser.get();
+        userAiKeyService.deleteKey(user.getId());
+        return ResponseEntity.noContent().build();
+    }
+
+    public record AiKeyTestResponse(boolean ok, Long latencyMs, String error) {}
+
+    @com.hackathonos.backend.common.security.RateLimited(key = "ai_key_test", limit = 1, periodSeconds = 60)
+    @PostMapping({"/api/v1/users/me/ai-key/test", "/users/me/ai-key/test"})
+    public AiKeyTestResponse testAiKey() {
+        User user = currentUser.get();
+        try {
+            long latencyMs = aiService.ping(user.getId());
+            return new AiKeyTestResponse(true, latencyMs, null);
+        } catch (Exception ex) {
+            String msg = ex.getMessage();
+            if (msg == null || msg.isBlank()) {
+                msg = "Key test failed.";
+            }
+            return new AiKeyTestResponse(false, null, msg);
+        }
+    }
+
 
     @com.hackathonos.backend.common.security.RateLimited(key = "username_avail", limit = 30, periodSeconds = 60)
     @GetMapping("/api/v1/users/username-available")
@@ -53,6 +101,12 @@ public class UserController {
     public UserDetailDto completeOnboarding(@RequestBody OnboardingRequest request) {
         User user = currentUser.get();
         return userService.completeOnboarding(user, request);
+    }
+
+    @PatchMapping("/api/v1/users/me/profile")
+    public UserSummaryDto updateProfile(@RequestBody UpdateProfileRequest request) {
+        User user = currentUser.get();
+        return userService.updateProfile(user, request);
     }
 
     @PostMapping("/api/v1/users/me/tour")
@@ -85,6 +139,24 @@ public class UserController {
         return userService.updateSettings(user, request);
     }
 
+    @GetMapping("/api/v1/users/me/preferences")
+    public UserPreferenceDto getPreferences() {
+        User user = currentUser.get();
+        return userService.getPreferences(user);
+    }
+
+    @PatchMapping("/api/v1/users/me/preferences")
+    public UserPreferenceDto updatePreferences(@RequestBody UpdateUserPreferenceRequest request) {
+        User user = currentUser.get();
+        return userService.updatePreferences(user, request);
+    }
+
+    @PatchMapping({"/users/me/notification-prefs", "/api/v1/users/me/notification-prefs"})
+    public NotificationPrefsResponse updateNotificationPrefs(@RequestBody NotificationPrefsRequest request) {
+        User user = currentUser.get();
+        return userService.updateNotificationPrefs(user, request);
+    }
+
     @PostMapping("/api/v1/users/me/api-keys")
     public ApiKeyDto addApiKey(@Valid @RequestBody AddApiKeyRequest request) {
         User user = currentUser.get();
@@ -97,25 +169,46 @@ public class UserController {
         userService.deleteApiKey(user, id);
     }
 
-    @PostMapping("/api/v1/users/me/export")
-    public DataExportResponse exportData() {
+    @GetMapping({"/users/me/data-summary", "/api/v1/users/me/data-summary"})
+    public DataSummaryResponse getDataSummary() {
         User user = currentUser.get();
-        return userService.exportUserData(user);
+        return userService.getDataSummary(user);
     }
 
-    @GetMapping("/api/v1/users/me/export/{exportId}")
-    public ResponseEntity<Resource> downloadExport(@PathVariable UUID exportId) {
+    @com.hackathonos.backend.common.security.RateLimited(key = "user_export", limit = 3, periodSeconds = 86400)
+    @GetMapping({"/users/me/export", "/api/v1/users/me/export"})
+    public ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> exportData() {
         User user = currentUser.get();
-        Resource resource = userService.getExportAttachment(user, exportId);
+        String username = user.getUsername() != null ? user.getUsername() : "user";
+        String dateStr = java.time.LocalDate.now().toString();
+        String filename = "hackathon-os-export-" + username + "-" + dateStr + ".zip";
+
+        org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody responseBody = outputStream -> {
+            try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(outputStream)) {
+                userService.streamExportZip(user, zos);
+                zos.flush();
+            }
+        };
+
         return ResponseEntity.ok()
-                .contentType(MediaType.APPLICATION_JSON)
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"hackathon-os-export.json\"")
-                .body(resource);
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(responseBody);
     }
 
-    @DeleteMapping("/api/v1/users/me")
-    public void deleteAccount(@RequestBody DeleteAccountRequest request, HttpServletRequest httpRequest) {
+    @GetMapping({"/users/me/delete-preview", "/api/v1/users/me/delete-preview"})
+    public DeletePreviewResponse getDeletePreview() {
         User user = currentUser.get();
-        userService.deleteAccount(user, request, httpRequest);
+        return userService.getDeletePreview(user);
+    }
+
+    @com.hackathonos.backend.common.security.RateLimited(key = "user_delete", limit = 3, periodSeconds = 3600)
+    @DeleteMapping({"/users/me", "/api/v1/users/me"})
+    public ResponseEntity<Void> deleteAccount(@RequestBody DeleteAccountRequest request,
+                                              HttpServletRequest httpRequest,
+                                              jakarta.servlet.http.HttpServletResponse httpResponse) {
+        User user = currentUser.get();
+        userService.deleteAccount(user, request, httpRequest, httpResponse);
+        return ResponseEntity.noContent().build();
     }
 }

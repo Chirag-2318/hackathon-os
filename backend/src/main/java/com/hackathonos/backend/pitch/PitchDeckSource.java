@@ -20,7 +20,7 @@ public class PitchDeckSource {
     @Column(name = "url", nullable = false, columnDefinition = "TEXT")
     private String url;
 
-    @Column(name = "title", length = 200)
+    @Column(name = "title", columnDefinition = "text")
     private String title = "";
 
     /** Local file path for uploaded PDF/PPTX (null for link-only sources). */

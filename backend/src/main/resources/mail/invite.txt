@@ -1,0 +1,19 @@
+HACKATHON OS - BOARDING PASS
+
+ROOM: {{ROOM_NAME}}
+FROM: @{{INVITER}}
+FORMAT: {{TEMPLATE_NAME}} ({{DURATION}})
+CAPACITY: {{SEATS_FILLED_TEXT}}
+ROOM CODE: {{STUB_CODE}}
+
+{{NOTE_TEXT}}
+
+Take the seat:
+{{INVITE_URL}}
+
+Valid until {{EXPIRY_DATE}}
+
+{{FALLBACK_CODE_TEXT}}
+
+--
+Hackathon OS - Collaborative command center for intense hackathons

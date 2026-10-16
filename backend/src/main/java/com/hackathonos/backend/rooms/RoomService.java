@@ -111,8 +111,24 @@ public class RoomService {
         this.objectMapper = objectMapper;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.billing.BillingService billingService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.common.config.AppProperties appProperties;
+
     @Transactional
     public RoomDetailDto createRoom(User creator, CreateRoomRequest request) {
+        int maxRooms = appProperties != null ? appProperties.getMaxRoomsPerUser() : 10;
+        if (maxRooms > 0 && roomRepository.countByOwnerId(creator.getId()) >= maxRooms) {
+            throw new com.hackathonos.backend.common.error.LimitReachedException(
+                    com.hackathonos.backend.common.error.ErrorCode.LIMIT_REACHED,
+                    "You've reached the limit of " + maxRooms + " rooms."
+            );
+        }
+        if (billingService != null) {
+            billingService.checkCanCreateRoom(creator);
+        }
         EventTemplate template = templateService.getOrThrow(request.templateId());
         int duration = (request.durationHours() != null && request.durationHours() > 0)
                 ? request.durationHours() : template.getDurationHours();
@@ -226,13 +242,13 @@ public class RoomService {
             List<UserSummaryDto> memberPreview = rMembers.stream().limit(4)
                     .map(m -> userMap.get(m.getUserId()))
                     .filter(Objects::nonNull)
-                    .map(u -> new UserSummaryDto(u.getId(), u.getName(), u.getAvatarUrl(), u.getLogin()))
+                    .map(UserSummaryDto::from)
                     .toList();
 
             RoomClockDto clock = timeService.computeClock(room);
             boolean aiAllowed = isAiAllowed(room.getId());
             RoomProgressSummaryDto progress = computeProgressSummary(room.getId());
-            NextStepDto nextStep = nextStepService.computeNextStep(room);
+            NextStepDto nextStep = nextStepService.computeNextStep(room, user);
 
             items.add(new RoomListItemDto(
                     room.getId(), room.getName(), room.getDescription(), room.getTemplateId(),
@@ -258,7 +274,7 @@ public class RoomService {
         boolean aiAllowed = isAiAllowed(room.getId());
         RoomProgressSummaryDto progress = computeProgressSummary(room.getId());
         List<StageUnlockRuleDto> unlockRules = stageService.computeUnlockRules(room);
-        NextStepDto nextStep = nextStepService.computeNextStep(room);
+        NextStepDto nextStep = nextStepService.computeNextStep(room, user);
 
         return roomMapper.toDetail(room, templateName, memberCount, member.getRole(), isLeader,
                 clock, aiAllowed, progress, unlockRules, nextStep);
@@ -270,11 +286,20 @@ public class RoomService {
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
         EventTemplate template = templateService.getOrThrow(room.getTemplateId());
 
+        boolean scheduleChanged = (request.endsAt() != null && !request.endsAt().isBlank())
+                || (request.freezeAt() != null && !request.freezeAt().isBlank());
+
         applyRoomUpdates(room, request, template);
         room.setUpdatedAt(Instant.now());
         roomRepository.save(room);
 
         activityLogger.log(room, user, "room_updated", "Updated room details");
+
+        if (scheduleChanged) {
+            notificationService.notifyRoomMembers(room, user, NotificationType.DEADLINE_SOON,
+                    "Schedule updated", "Deadlines or freeze time updated by @" + user.getLogin());
+        }
+
         return getRoomDetail(user, roomId);
     }
 
@@ -336,7 +361,7 @@ public class RoomService {
     }
 
     public RoomProgressSummaryDto computeProgressSummary(UUID roomId) {
-        List<Task> tasks = taskRepository.findByRoomId(roomId);
+        List<Task> tasks = taskRepository.findByRoomId(roomId).stream().filter(t -> !t.isDropped()).toList();
         long tasksTotal = tasks.size();
         long tasksDone = tasks.stream().filter(Task::isConfirmedDone).count();
         boolean hasTasks = tasksTotal > 0;
@@ -348,7 +373,7 @@ public class RoomService {
         long checklistTotal = checkpoints.size();
         long checklistDone = checkpoints.stream().filter(c -> c.getPassedAt() != null).count();
 
-        return new RoomProgressSummaryDto(tasksDone, tasksTotal, hasTasks, stepsValidated, 5L, checklistDone, checklistTotal);
+        return new RoomProgressSummaryDto(tasksDone, tasksTotal, hasTasks, stepsValidated, 4L, checklistDone, checklistTotal);
     }
 
     public boolean isAiAllowed(UUID roomId) {

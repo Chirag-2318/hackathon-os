@@ -17,7 +17,7 @@ public class SubmissionChecklistItem {
     @Column(name = "item_key", nullable = false, length = 80)
     private String itemKey;
 
-    @Column(name = "label", nullable = false, length = 255)
+    @Column(name = "label", nullable = false, columnDefinition = "text")
     private String label;
 
     @Column(name = "required", nullable = false)

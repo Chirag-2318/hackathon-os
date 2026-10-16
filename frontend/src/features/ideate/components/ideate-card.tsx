@@ -8,8 +8,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import type { Idea } from '@/services/types';
 import { cn } from '@/lib/utils';
 
+import type { UserLike } from '@/components/ui/user-avatar';
+
 export interface IdeateCardProps {
   idea: Idea;
+  currentUser?: UserLike | null;
   isMine: boolean;
   canDecide: boolean;
   isLocked: boolean;
@@ -23,6 +26,7 @@ export interface IdeateCardProps {
 
 export function IdeateCard({
   idea,
+  currentUser,
   isMine,
   canDecide,
   isLocked,
@@ -125,7 +129,7 @@ export function IdeateCard({
       <div className="flex items-center justify-between gap-2 pl-1">
         <div className="flex items-center gap-2 min-w-0">
           <UserAvatar
-            user={(idea as any).author || { name: authorName, username }}
+            user={isMine && currentUser ? currentUser : ((idea as any).author || { name: authorName, username })}
             size={24}
             className="shrink-0"
           />

@@ -29,6 +29,9 @@ public class PlanStep {
     @Column(nullable = false)
     private boolean validated = false;
 
+    @Column(name = "validated_with_overrides", nullable = false)
+    private boolean validatedWithOverrides = false;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String errors;
@@ -70,6 +73,9 @@ public class PlanStep {
 
     public boolean isValidated() { return validated; }
     public void setValidated(boolean validated) { this.validated = validated; }
+
+    public boolean isValidatedWithOverrides() { return validatedWithOverrides; }
+    public void setValidatedWithOverrides(boolean validatedWithOverrides) { this.validatedWithOverrides = validatedWithOverrides; }
 
     public String getErrors() { return errors; }
     public void setErrors(String errors) { this.errors = errors; }

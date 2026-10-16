@@ -42,6 +42,9 @@ public class DiagramSeedService {
     @Transactional
     public void seedFromPlan(Room room) {
         Optional<PlanStep> techStep = planStepRepository.findByRoomIdAndStepKey(room.getId(), "tech");
+        if (techStep.isEmpty() || !techStep.get().isValidated()) {
+            techStep = planStepRepository.findByRoomIdAndStepKey(room.getId(), "stack-arch");
+        }
         if (techStep.isEmpty() || !techStep.get().isValidated() || techStep.get().getAnswer() == null) {
             return;
         }

@@ -156,7 +156,7 @@ public class OverviewService {
     public NavBadgesDto getNavBadges(UUID roomId, User user) {
         roomAccess.requireMember(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
-        long openTasks = taskRepository.findByRoomId(room.getId()).stream().filter(t -> !t.isConfirmedDone()).count();
+        long openTasks = taskRepository.findByRoomId(room.getId()).stream().filter(t -> !t.isConfirmedDone() && !t.isDropped()).count();
         List<AttentionItem> attentionItems = attentionEngine.evaluate(room);
         long attentionCount = attentionItems.size();
         long github = attentionItems.stream()
@@ -252,14 +252,25 @@ public class OverviewService {
 
         // Vitals: Tasks
         List<Task> allTasks = taskRepository.findByRoomId(room.getId());
+        Set<String> validPhaseKeys = phases.stream()
+                .filter(p -> "COMPLETED".equalsIgnoreCase(p.getStatus()) || "ACTIVE".equalsIgnoreCase(p.getStatus()))
+                .map(p -> p.getPhaseKey() != null ? p.getPhaseKey().toUpperCase() : "")
+                .collect(java.util.stream.Collectors.toSet());
+
         long todo = 0, inProgress = 0, done = 0, blocked = 0;
+        long totalNonDropped = 0;
         for (Task t : allTasks) {
-            if ("done".equalsIgnoreCase(t.getStatus())) done++;
-            else if ("inprogress".equalsIgnoreCase(t.getStatus())) inProgress++;
+            if (t.isDropped()) continue;
+            if (t.getPhaseKey() != null && !validPhaseKeys.isEmpty() && !validPhaseKeys.contains(t.getPhaseKey().toUpperCase())) {
+                continue;
+            }
+            totalNonDropped++;
+            if (t.isConfirmedDone()) done++;
+            else if ("inprogress".equalsIgnoreCase(t.getStatus()) || "in_progress".equalsIgnoreCase(t.getStatus())) inProgress++;
             else todo++;
-            if (t.isFlagged() && !"done".equalsIgnoreCase(t.getStatus())) blocked++;
+            if (t.isFlagged() && !t.isConfirmedDone()) blocked++;
         }
-        long open = allTasks.size() - done;
+        long open = totalNonDropped - done;
         VitalsTasksDto vitalsTasks = new VitalsTasksDto(open, todo, inProgress, blocked);
 
         // Vitals: vsPlan
@@ -330,7 +341,8 @@ public class OverviewService {
 
         List<Task> myOpenTasks = new ArrayList<>();
         for (Task t : allTasks) {
-            if (userId.equals(t.getAssigneeId()) && !"done".equalsIgnoreCase(t.getStatus())) {
+            if (t.isDropped()) continue;
+            if (userId.equals(t.getAssigneeId()) && !t.isConfirmedDone()) {
                 myOpenTasks.add(t);
             }
         }

@@ -1,0 +1,40 @@
+# Production Caddy Reverse Proxy Configuration
+
+{
+    email {$SUPPORT_EMAIL}
+    # Global options
+}
+
+# The public API host site (e.g. api.example.com)
+{$API_HOST} {
+    encode zstd gzip
+
+    request_body {
+        max_size 15MB
+    }
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        -Server
+    }
+
+    # Proxy to Spring Boot backend container
+    # flush_interval -1 is critical so Server-Sent Events (SSE) stream immediately without buffering
+    reverse_proxy backend:8080 {
+        flush_interval -1
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+# Catch-all: reject or return 404 for all other hosts/direct IP scans
+:80, :443 {
+    respond "Not Found" 404 {
+        close
+    }
+}

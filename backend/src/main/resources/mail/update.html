@@ -1,0 +1,22 @@
+<h1 style="margin:0 0 8px 0;font-family:Georgia, 'Times New Roman', serif;font-size:24px;line-height:30px;font-weight:700;color:#0B0B0C;letter-spacing:-0.2px;">
+  {{HEADLINE}}
+</h1>
+<p style="margin:0 0 24px 0;font-size:14px;line-height:20px;color:#6A665E;">
+  Recent team updates in <strong style="color:#0B0B0C;">{{ROOM_NAME}}</strong>
+</p>
+
+<!-- Ledger Table (up to 8 lines) -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;margin-bottom:28px;">
+  {{LEDGER_ROWS}}
+</table>
+
+<!-- Action Button -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 12px auto;">
+  <tr>
+    <td align="center" style="border-radius:8px;background-color:#0B0B0C;">
+      <a href="{{ROOM_URL}}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background-color:#0B0B0C;color:#F6F3EC;font-family:-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;font-size:14px;font-weight:600;line-height:20px;padding:12px 28px;text-decoration:none;border-radius:8px;text-align:center;">
+        Open {{ROOM_NAME}}
+      </a>
+    </td>
+  </tr>
+</table>

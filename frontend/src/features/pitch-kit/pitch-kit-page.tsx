@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ChevronDown, AlertCircle, RefreshCw, Mic, Play, Square, SkipForward, Sparkles, Check, Flame, WifiOff, Database, Camera, Video, Laptop, Radio } from 'lucide-react';
+import { AiGate, useAiAction } from '@/features/ai-gate';
 
 /* ── Helpers ── */
 function fmt(s: number) { return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; }
@@ -241,6 +242,8 @@ function PitchPanel({ roomId, rehearse, meta }: { roomId: string; rehearse: any;
     }).catch(() => setLoadingScript(false));
   }, [roomId]);
 
+  const { handleAiError } = useAiAction();
+
   const handleGenerate = async () => {
     if (!aiEnabled) return;
     setGenerating(true); setGenError(null);
@@ -251,6 +254,7 @@ function PitchPanel({ roomId, rehearse, meta }: { roomId: string; rehearse: any;
       });
       setScript(s); setWizardOpen(false);
     } catch (e: any) {
+      handleAiError(e);
       const code = e?.code ?? '';
       setGenError(
         code === 'AI_NOT_CONFIGURED' ? 'AI is not configured on the server.' :
@@ -316,12 +320,14 @@ function PitchPanel({ roomId, rehearse, meta }: { roomId: string; rehearse: any;
             </div>
           </div>
           {genError && <p className="text-xs rounded-lg px-3 py-2" style={{ background: '#fef2f2', color: '#dc2626' }}>{genError}</p>}
-          <button id="generate-pitch-btn" type="button" onClick={handleGenerate} disabled={generating || !aiEnabled}
-            className="stage-pill stage-pill-orange w-full justify-center disabled:opacity-50"
-            title={!aiEnabled ? 'AI is not configured on the server' : undefined}>
-            <Sparkles className="w-4 h-4" />
-            {generating ? 'Generating…' : 'Generate pitch'}
-          </button>
+          <AiGate>
+            <button id="generate-pitch-btn" type="button" onClick={handleGenerate} disabled={generating || !aiEnabled}
+              className="stage-pill stage-pill-orange w-full justify-center disabled:opacity-50"
+              title={!aiEnabled ? 'AI is not configured on the server' : undefined}>
+              <Sparkles className="w-4 h-4" />
+              {generating ? 'Generating…' : 'Generate pitch'}
+            </button>
+          </AiGate>
         </div>
         {wizardOpen && script && (
           <button type="button" onClick={() => setWizardOpen(false)} className="text-xs underline" style={{ color: '#737373' }}>
@@ -592,6 +598,8 @@ function QaPanel({ roomId, qa, meta }: { roomId: string; qa: any; meta: any }) {
   const aiEnabled = meta?.aiEnabled !== false;
 
   const cats = ['Product','Tech','Impact','Team','Risk'];
+  const { handleAiError } = useAiAction();
+
   const handleGenerate = async () => {
     if (!aiEnabled) return;
     setGenerating(true);
@@ -600,7 +608,9 @@ function QaPanel({ roomId, qa, meta }: { roomId: string; qa: any; meta: any }) {
         method: 'POST', body: JSON.stringify({ level, count: 12 }),
       });
       setQList(Array.isArray(res) ? res : []);
-    } catch {} finally { setGenerating(false); }
+    } catch (err: any) {
+      handleAiError(err);
+    } finally { setGenerating(false); }
   };
 
   const displayed = filter ? qList.filter((q: any) => (q.category ?? '').toLowerCase() === filter.toLowerCase()) : qList;
@@ -623,12 +633,14 @@ function QaPanel({ roomId, qa, meta }: { roomId: string; qa: any; meta: any }) {
             </button>
           ))}
         </div>
-        <button id="generate-qa-btn" type="button" onClick={handleGenerate} disabled={generating || !aiEnabled}
-          className="stage-pill stage-pill-orange w-full justify-center disabled:opacity-50"
-          title={!aiEnabled ? 'AI is not configured on the server' : undefined}>
-          <Sparkles className="w-4 h-4" />
-          {generating ? 'Generating Q&A…' : 'Generate Q&A'}
-        </button>
+        <AiGate>
+          <button id="generate-qa-btn" type="button" onClick={handleGenerate} disabled={generating || !aiEnabled}
+            className="stage-pill stage-pill-orange w-full justify-center disabled:opacity-50"
+            title={!aiEnabled ? 'AI is not configured on the server' : undefined}>
+            <Sparkles className="w-4 h-4" />
+            {generating ? 'Generating Q&A…' : 'Generate Q&A'}
+          </button>
+        </AiGate>
       </div>
     );
   }
@@ -784,15 +796,15 @@ export function PitchKitPage() {
         {/* Header */}
         <div className="stage-rise flex items-start justify-between flex-wrap gap-4" style={{ '--delay': '0ms' } as React.CSSProperties}>
           <div>
-            <h1 className="text-2xl font-bold">Pitch kit</h1>
-            <p className="text-sm" style={{ color: '#737373' }}>Demo, pitch and Q&amp;A in one place</p>
+            <h1 className="text-3xl sm:text-4xl font-display font-normal tracking-tight text-foreground leading-none">Pitch kit</h1>
+            <p className="text-xs text-muted-foreground mt-1">Demo, pitch and Q&amp;A in one place</p>
           </div>
           <div className="flex flex-col items-center gap-1">
             <div className="relative">
               <RingProgress pct={readinessPct} size={56} />
-              <span className="absolute inset-0 flex items-center justify-center text-xs font-bold">{readinessPct}%</span>
+              <span className="absolute inset-0 flex items-center justify-center text-xs font-mono font-bold">{readinessPct}%</span>
             </div>
-            <span className="text-[10px] font-semibold" style={{ color: '#9C9AA3' }}>Readiness</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Readiness</span>
           </div>
         </div>
 

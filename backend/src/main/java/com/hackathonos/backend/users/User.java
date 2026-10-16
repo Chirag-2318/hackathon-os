@@ -33,6 +33,9 @@ public class User {
     @Column(name = "avatar_url", length = 500)
     private String avatarUrl;
 
+    @Column(name = "provider_avatar_url", length = 500)
+    private String providerAvatarUrl;
+
     @Column
     private String login;
 
@@ -90,6 +93,9 @@ public class User {
     @Column(name = "hotspots_seen", columnDefinition = "jsonb")
     private String hotspotsSeen = "[]";
 
+    @Column(name = "confirmation_email_sent_at")
+    private Instant confirmationEmailSentAt;
+
     protected User() {}
 
     public User(String provider, String providerUserId, String name, String email, String avatarUrl, String login) {
@@ -115,11 +121,18 @@ public class User {
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
 
+    public String getDisplayName() {
+        return name != null && !name.isBlank() ? name : (username != null ? username : "Participant");
+    }
+
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
 
     public String getAvatarUrl() { return avatarUrl; }
     public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
+
+    public String getProviderAvatarUrl() { return providerAvatarUrl; }
+    public void setProviderAvatarUrl(String providerAvatarUrl) { this.providerAvatarUrl = providerAvatarUrl; }
 
     public String getLogin() { return login; }
     public void setLogin(String login) { this.login = login; }
@@ -174,4 +187,19 @@ public class User {
 
     public String getHotspotsSeen() { return hotspotsSeen; }
     public void setHotspotsSeen(String hotspotsSeen) { this.hotspotsSeen = hotspotsSeen; }
+
+    @Column(name = "email_reminders", nullable = false)
+    private boolean emailReminders = true;
+
+    @Column(name = "email_paused", nullable = false)
+    private boolean emailPaused = false;
+
+    public Instant getConfirmationEmailSentAt() { return confirmationEmailSentAt; }
+    public void setConfirmationEmailSentAt(Instant confirmationEmailSentAt) { this.confirmationEmailSentAt = confirmationEmailSentAt; }
+
+    public boolean isEmailReminders() { return emailReminders; }
+    public void setEmailReminders(boolean emailReminders) { this.emailReminders = emailReminders; }
+
+    public boolean isEmailPaused() { return emailPaused; }
+    public void setEmailPaused(boolean emailPaused) { this.emailPaused = emailPaused; }
 }

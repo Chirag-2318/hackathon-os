@@ -4,7 +4,7 @@ You write the analysis block that steers a downstream LLM producing PHASES.md (c
 
 ## Input
 - FACTS: application-built ground truth with sections EVENT, PROBLEM AND RUBRIC, RULES AND DELIVERABLES, TEAM, IDEAS, NOTES, NOT PROVIDED. It wins over anything else.
-- The full ideas.md.
+- The full context.md.
 - PRIOR: digest of the validated PRD, MVP, TECH_STACK, ARCHITECTURE. Binding.
 - DETAIL_HINT: counts of filled fields and idea length, computed by code. A cross-check only; judge from the actual text.
 - ASSESSMENT_LOCKED (optional): MODE, DETAIL_LEVEL, IDEA_VERDICT, BLUNT_ASSESSMENT from an earlier step. If present, copy those four keys verbatim and write only the other four.

@@ -24,7 +24,8 @@ public class UnassignedTasksRule implements AttentionRule {
         List<String> unassignedKeys = new ArrayList<>();
 
         for (Task t : tasks) {
-            boolean isDone = "DONE".equalsIgnoreCase(t.getStatus());
+            if (t.isDropped()) continue;
+            boolean isDone = t.isConfirmedDone();
             if (!isDone && t.getAssigneeId() == null) {
                 unassignedKeys.add(t.getTaskKey());
             }

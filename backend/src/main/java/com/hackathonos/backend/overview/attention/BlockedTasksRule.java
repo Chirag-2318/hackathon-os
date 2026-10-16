@@ -22,7 +22,9 @@ public class BlockedTasksRule implements AttentionRule {
 
     @Override
     public List<AttentionItem> check(Room room) {
-        List<Task> blocked = taskRepository.findByRoomIdAndFlaggedTrueAndStatusNot(room.getId(), "DONE");
+        List<Task> blocked = taskRepository.findByRoomIdAndFlaggedTrueAndStatusNot(room.getId(), "DONE").stream()
+                .filter(t -> !t.isDropped())
+                .toList();
         if (blocked.isEmpty()) return Collections.emptyList();
 
         Set<UUID> userIds = new HashSet<>();

@@ -98,7 +98,7 @@ export function PlanStepper({
                 ) : isLocked ? (
                   <Lock className="size-3 text-muted-foreground" />
                 ) : (
-                  <span className="text-xs font-bold tabular-nums leading-none">
+                  <span className="text-xs font-mono font-bold tabular-nums leading-none">
                     {index + 1}
                   </span>
                 )}

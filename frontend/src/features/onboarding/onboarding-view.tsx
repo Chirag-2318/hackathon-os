@@ -138,7 +138,13 @@ export function OnboardingView() {
 
       localStorage.removeItem(DRAFT_KEY);
       queryClient.setQueryData(['currentUser'], updatedUser);
-      navigate('/app/home', { replace: true });
+      const pendingInvite = typeof window !== 'undefined' ? sessionStorage.getItem('pending_invite_token') : null;
+      if (pendingInvite) {
+        sessionStorage.removeItem('pending_invite_token');
+        navigate(`/invite/${pendingInvite}`, { replace: true });
+      } else {
+        navigate('/app/home', { replace: true });
+      }
     } catch (err: any) {
       setSubmitError(err?.message || 'Could not complete onboarding. Please retry.');
     } finally {

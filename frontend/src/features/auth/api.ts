@@ -27,11 +27,29 @@ export interface CurrentUserDto {
   tourVersion?: number;
   tourCompletedAt?: string | null;
   hotspotsSeen?: string[];
+  preferences?: {
+    theme?: string;
+    textSize?: string;
+    motion?: string;
+    sidebarDefault?: string;
+    timeFormat?: string;
+    timezone?: string | null;
+    updatedAt?: string;
+  };
+  aiKey?: {
+    hasKey: boolean;
+    status?: 'UNVERIFIED' | 'VALID' | 'INVALID' | 'RATE_LIMITED' | string | null;
+    last4?: string | null;
+  };
+  isAdmin?: boolean;
 }
+
+
+import { API_BASE_URL } from '@/lib/apiClient';
 
 export const authApi = {
   me: () => apiFetch<CurrentUserDto>('/api/v1/me'),
   logout: () => apiFetch<void>('/api/v1/logout', { method: 'POST' }),
-  githubLoginUrl: 'http://localhost:8080/oauth2/authorization/github',
-  googleLoginUrl: 'http://localhost:8080/oauth2/authorization/google',
+  githubLoginUrl: `${API_BASE_URL}/oauth2/authorization/github`,
+  googleLoginUrl: `${API_BASE_URL}/oauth2/authorization/google`,
 };

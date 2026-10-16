@@ -90,7 +90,7 @@ export function TimeGrid({ events, initialDate }: TimeGridProps) {
         </div>
         
         {isConflict && (
-          <div className="absolute top-1 right-1 bg-coral-500 text-white text-[10px] font-bold px-1.5 rounded">
+          <div className="absolute top-1 right-1 bg-danger text-on-danger text-[10px] font-bold px-1.5 rounded">
             Conflict
           </div>
         )}

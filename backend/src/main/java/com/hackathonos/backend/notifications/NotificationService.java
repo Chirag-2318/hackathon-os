@@ -31,17 +31,26 @@ public class NotificationService {
     private final RoomMemberRepository memberRepository;
     private final UserRepository userRepository;
     private final RoomRepository roomRepository;
+    private final com.hackathonos.backend.email.MailService mailService;
+    private final com.hackathonos.backend.common.config.AppProperties appProperties;
+    private final com.hackathonos.backend.common.lock.DbAdvisoryLockService advisoryLockService;
 
     public NotificationService(NotificationRepository notificationRepository,
                                UserSettingsRepository settingsRepository,
                                RoomMemberRepository memberRepository,
                                UserRepository userRepository,
-                               RoomRepository roomRepository) {
+                               RoomRepository roomRepository,
+                               com.hackathonos.backend.email.MailService mailService,
+                               com.hackathonos.backend.common.config.AppProperties appProperties,
+                               com.hackathonos.backend.common.lock.DbAdvisoryLockService advisoryLockService) {
         this.notificationRepository = notificationRepository;
         this.settingsRepository = settingsRepository;
         this.memberRepository = memberRepository;
         this.userRepository = userRepository;
         this.roomRepository = roomRepository;
+        this.mailService = mailService;
+        this.appProperties = appProperties;
+        this.advisoryLockService = advisoryLockService;
     }
 
     /**
@@ -53,6 +62,11 @@ public class NotificationService {
         UUID roomId = room != null ? room.getId() : null;
         String linkPath = room != null ? "/app/room/" + room.getId() + "/overview" : "/app";
         notifyUser(user.getId(), roomId, type, title, body, linkPath);
+    }
+
+    @Transactional
+    public void create(UUID userId, UUID roomId, NotificationType type, String title, String body, String linkPath) {
+        notifyUser(userId, roomId, type, title, body, linkPath);
     }
 
     /**
@@ -91,6 +105,33 @@ public class NotificationService {
                 null
         );
         notificationRepository.save(notification);
+
+        String emailCategory = mapToEmailCategory(type);
+        if (emailCategory != null) {
+            userRepository.findById(userId).ifPresent(u -> {
+                String roomName = null;
+                if (roomId != null) {
+                    roomName = roomRepository.findById(roomId).map(Room::getName).orElse("Room");
+                }
+                String fullLink = targetLink.startsWith("http") ? targetLink : (appProperties.getFrontendUrl() + targetLink);
+                String sentence = title != null && !title.isBlank() ? title : (body != null ? body : "Update");
+                String entityId = type.name() + ":" + targetLink;
+                mailService.enqueueEventUpdate(userId, u.getEmail(), null, roomId, roomName, emailCategory, entityId, sentence, fullLink);
+            });
+        }
+    }
+
+    private String mapToEmailCategory(NotificationType type) {
+        if (type == null) return null;
+        return switch (type) {
+            case TASK_ASSIGNED -> com.hackathonos.backend.email.EmailPreferenceService.TASK_ASSIGNED;
+            case TASK_BLOCKED -> com.hackathonos.backend.email.EmailPreferenceService.BLOCKERS;
+            case CHANGES_REQUESTED, TASK_DONE, TASK_CONFIRMED -> com.hackathonos.backend.email.EmailPreferenceService.REVIEW;
+            case BRIEF_CONFIRMED, IDEATION_DONE, PLAN_COMPLETE, DEMO_FROZEN, SUBMISSION_VERIFIED, PHASE_READY, PHASE_STARTED, PROJECT_SUBMITTED -> com.hackathonos.backend.email.EmailPreferenceService.CHECKPOINTS;
+            case MEMBER_JOINED, MEMBER_LEFT, ROLE_CHANGED -> com.hackathonos.backend.email.EmailPreferenceService.TEAM_CHANGES;
+            case DEADLINE_SOON -> com.hackathonos.backend.email.EmailPreferenceService.ALERTS;
+            default -> null;
+        };
     }
 
     /**
@@ -248,8 +289,12 @@ public class NotificationService {
     }
 
     @Scheduled(cron = "0 0 3 * * ?") // 3 AM daily cleanup
-    @Transactional
     public void cleanupOldNotifications() {
+        advisoryLockService.tryLockAndRun(1009L, this::doCleanupOldNotifications);
+    }
+
+    @Transactional
+    public void doCleanupOldNotifications() {
         Instant cutoff = Instant.now().minus(90, ChronoUnit.DAYS);
         notificationRepository.deleteOlderThan(cutoff);
     }

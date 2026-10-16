@@ -6,6 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 import java.util.TimeZone;
 
+@org.springframework.scheduling.annotation.EnableScheduling
 @SpringBootApplication
 public class BackendApplication {
 

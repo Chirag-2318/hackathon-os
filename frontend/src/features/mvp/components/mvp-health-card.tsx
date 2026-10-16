@@ -1,6 +1,7 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 import type { MvpState } from '@/services/types';
+import { computeMvpHealth } from '@/shared/lib/mvp-health';
 
 export interface MvpHealthCardProps {
   health: MvpState['health'];
@@ -31,11 +32,10 @@ const HEALTH_ITEMS: { key: keyof MvpState['health']; label: string; helper: stri
 ];
 
 export function MvpHealthCard({ health, onToggleHealth }: MvpHealthCardProps) {
-  const passedCount = Object.values(health).filter(Boolean).length;
-  const total = 4;
+  const { done: passedCount, total } = computeMvpHealth(health);
   const radius = 22;
   const circumference = 2 * Math.PI * radius;
-  const progress = passedCount / total;
+  const progress = total > 0 ? passedCount / total : 0;
   const strokeDashoffset = circumference - progress * circumference;
 
   return (
@@ -91,12 +91,12 @@ export function MvpHealthCard({ health, onToggleHealth }: MvpHealthCardProps) {
                   onClick={() => onToggleHealth(item.key)}
                   className={cn(
                     'w-9 h-5 rounded-full transition-colors duration-200 relative shrink-0 p-0.5 focus:outline-none',
-                    isOn ? 'bg-blue-600' : 'bg-neutral-300 dark:bg-muted'
+                    isOn ? 'bg-inverse' : 'bg-muted'
                   )}
                 >
                   <span
                     className={cn(
-                      'size-4 rounded-full bg-white block shadow-xs transition-transform duration-200',
+                      'size-4 rounded-full bg-on-inverse block shadow-xs transition-transform duration-200',
                       isOn ? 'translate-x-4' : 'translate-x-0'
                     )}
                   />

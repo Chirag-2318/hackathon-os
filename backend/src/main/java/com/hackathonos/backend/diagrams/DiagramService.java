@@ -57,15 +57,41 @@ public class DiagramService {
     private final DiagramRepository diagramRepository;
     private final RoomMemberRepository memberRepository;
     private final RoomAccess roomAccess;
+    private final com.hackathonos.backend.ai.AiService aiService;
 
     public DiagramService(
             DiagramRepository diagramRepository,
             RoomMemberRepository memberRepository,
-            RoomAccess roomAccess
+            RoomAccess roomAccess,
+            com.hackathonos.backend.ai.AiService aiService
     ) {
         this.diagramRepository = diagramRepository;
         this.memberRepository = memberRepository;
         this.roomAccess = roomAccess;
+        this.aiService = aiService;
+    }
+
+    public DiagramDtos.FixDiagramResponse fixDiagram(UUID roomId, User user, DiagramDtos.FixDiagramRequest request) {
+        roomAccess.requireMember(roomId, user);
+        if (request == null || request.code() == null || request.code().isBlank()) {
+            throw new BadRequestException("INVALID_CODE", "Mermaid code is required");
+        }
+
+        String systemPrompt = "You are an expert Mermaid diagram syntax repair specialist. " +
+                "Fix the syntax error in the user's Mermaid diagram. " +
+                "Rules:\n" +
+                "- Output ONLY the repaired valid Mermaid diagram code.\n" +
+                "- Do NOT wrap in markdown fences or quotes.\n" +
+                "- Do NOT include any conversation or explanation.";
+
+        String userPrompt = "Mermaid parse error: " + (request.error() != null ? request.error() : "Unknown syntax error") +
+                "\n\nDiagram code to repair:\n" + request.code();
+
+        String fixed = aiService.text("diagram.fix", roomId, user != null ? user.getId() : null, systemPrompt, userPrompt);
+        if (fixed != null) {
+            fixed = fixed.replaceAll("^```(?:mermaid)?\\s*", "").replaceAll("```\\s*$", "").trim();
+        }
+        return new DiagramDtos.FixDiagramResponse(fixed != null ? fixed : request.code(), true);
     }
 
     /**

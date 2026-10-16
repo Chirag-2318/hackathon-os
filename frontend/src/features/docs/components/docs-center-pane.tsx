@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   Copy, Download, Edit3, Eye, Code, AlertTriangle, CheckCircle2,
@@ -19,15 +20,48 @@ export interface DocsCenterPaneProps {
 }
 
 export function DocsCenterPane({ file, onSaveContent, roomId }: DocsCenterPaneProps) {
+  const location = useLocation();
   const [mode, setMode] = useState<'ai-editor' | 'preview' | 'markdown' | 'edit'>('ai-editor');
   const [editText, setEditText] = useState(file.content);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'offline'>('idle');
   const debounceTimerRef = useRef<any>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setEditText(file.content);
     setSaveStatus('idle');
   }, [file.id, file.content]);
+
+  // Restore return state if coming back from Diagram Studio
+  useEffect(() => {
+    const returnState = (location.state as any) || (roomId ? (() => {
+      try {
+        const item = sessionStorage.getItem(`docs_diagram_return_${roomId}`);
+        return item ? JSON.parse(item) : null;
+      } catch (e) { return null; }
+    })() : null);
+
+    if (returnState?.source === 'docs' && (returnState.docId === file.id || returnState.docName === file.name)) {
+      if (returnState.viewMode) {
+        setMode(returnState.viewMode);
+      }
+      setTimeout(() => {
+        if (returnState.scrollTop && scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = returnState.scrollTop;
+        }
+        const targetEl =
+          (returnState.blockIndex !== undefined ? document.getElementById(`diagram-block-${returnState.blockIndex}`) : null) ||
+          (returnState.headingSlug ? document.getElementById(returnState.headingSlug) : null);
+        if (targetEl) {
+          targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          targetEl.classList.add('ring-2', 'ring-indigo-500/80', 'transition-all', 'duration-500');
+          setTimeout(() => {
+            targetEl.classList.remove('ring-2', 'ring-indigo-500/80');
+          }, 1200);
+        }
+      }, 200);
+    }
+  }, [file.id, file.name, location.state, roomId]);
 
   // Unsaved changes navigation warning
   useEffect(() => {
@@ -274,7 +308,7 @@ export function DocsCenterPane({ file, onSaveContent, roomId }: DocsCenterPanePr
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto p-6 flex flex-col justify-between">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6 flex flex-col justify-between">
         <div className="flex-1">
           {mode === 'ai-editor' && (
             <div className="max-w-[760px] mx-auto">
@@ -309,7 +343,12 @@ export function DocsCenterPane({ file, onSaveContent, roomId }: DocsCenterPanePr
 
           {mode === 'preview' && (
             <div className="max-w-[760px] mx-auto">
-              <MarkdownRenderer content={file.content} />
+              <MarkdownRenderer
+                content={file.content}
+                docId={file.id}
+                docName={file.name}
+                viewMode={mode}
+              />
             </div>
           )}
 

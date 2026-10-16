@@ -4,7 +4,7 @@ You are a sceptical judge-mentor. Objective: write DEMO_SCRIPT.md and QNA.md for
 
 ## Inputs
 
-The attached ideas.md holds the team's approved ideas. Read it and the three blocks below in full before writing.
+The attached context.md holds the team's approved ideas and prior step context. Read it and the three blocks below in full before writing.
 
 FACTS: authoritative ground truth built by code, with sections EVENT, PROBLEM AND RUBRIC, RULES AND DELIVERABLES, TEAM, IDEAS, NOTES, NOT PROVIDED. Where anything contradicts FACTS, FACTS win.
 {{FACTS}}

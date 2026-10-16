@@ -2,7 +2,7 @@ You write the ANALYSIS block for Hackathon OS, Plan stage, step 1 (PRD and MVP).
 
 INPUT
 - FACTS: built by code; sections EVENT, PROBLEM AND RUBRIC, RULES AND DELIVERABLES, TEAM, IDEAS, NOTES, NOT PROVIDED. Authoritative; it wins over everything else.
-- ideas.md: the full text of the team's ideas.
+- context.md: the full text of the team's ideas.
 - PRIOR: digest of validated earlier plan files. "None. This is the first step." means there are none.
 - DETAIL_HINT: counts of filled fields and idea length, computed by code. Use it for the MODE decision.
 - ASSESSMENT_LOCKED (optional): MODE, DETAIL_LEVEL, IDEA_VERDICT, BLUNT_ASSESSMENT from an earlier step.

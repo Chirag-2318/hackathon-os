@@ -165,22 +165,7 @@
   transform: scale(1);
 }
 
-/* 11. Speed mode: bolt scales 1.12, skews 6deg and glow ring fades in */
-.nav-icon-speedmode .bolt {
-  transition: transform var(--icon-dur) var(--icon-ease);
-}
-.nav-icon-speedmode .glow-ring {
-  opacity: 0;
-  transition: opacity var(--icon-dur) var(--icon-ease), transform var(--icon-dur) var(--icon-ease);
-  transform: scale(0.8);
-}
-:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-speedmode .bolt {
-  transform: scale(1.12) skewX(6deg);
-}
-:is(.group:hover, .group:focus-visible, .nav-row:hover, .nav-row:focus-visible) .nav-icon-speedmode .glow-ring {
-  opacity: 1;
-  transform: scale(1.05);
-}
+
 
 /* 12. Prep: clipboard check mark redraws via stroke-dashoffset */
 .nav-icon-prep .icon-check {

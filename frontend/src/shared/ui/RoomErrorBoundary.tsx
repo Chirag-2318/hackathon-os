@@ -67,7 +67,7 @@ export class RoomErrorBoundary extends Component<Props, State> {
                 variant="default"
                 size="sm"
                 onClick={this.handleRetry}
-                className="bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900"
+                className="bg-inverse text-on-inverse hover:opacity-90 cursor-pointer"
               >
                 <RefreshCw className="mr-1.5 size-3.5" />
                 Retry

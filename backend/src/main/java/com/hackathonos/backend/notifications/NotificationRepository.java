@@ -13,6 +13,8 @@ import java.util.UUID;
 
 public interface NotificationRepository extends JpaRepository<Notification, UUID> {
 
+    long countByUserId(UUID userId);
+
     long countByUserIdAndReadAtIsNull(UUID userId);
 
     List<Notification> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);

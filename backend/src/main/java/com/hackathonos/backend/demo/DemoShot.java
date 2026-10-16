@@ -17,7 +17,7 @@ public class DemoShot {
     @Column(name = "position", nullable = false)
     private int position;
 
-    @Column(name = "title", nullable = false, length = 120)
+    @Column(name = "title", nullable = false, columnDefinition = "text")
     private String title;
 
     @Column(name = "duration_sec", nullable = false)

@@ -247,7 +247,7 @@ export function CreateTaskModal({
               <Button
                 type="submit"
                 disabled={!summary.trim() || isSubmitting}
-                className="h-9 px-5 rounded-xl bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 text-xs font-semibold shadow-xs disabled:opacity-50"
+                className="h-9 px-5 rounded-xl bg-inverse text-on-inverse hover:opacity-90 text-xs font-semibold shadow-xs disabled:opacity-50 cursor-pointer"
               >
                 {isSubmitting ? 'Creating...' : 'Create'}
               </Button>

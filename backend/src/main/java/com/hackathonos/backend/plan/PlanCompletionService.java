@@ -151,6 +151,14 @@ public class PlanCompletionService {
             room.setBuildStartedAt(Instant.now());
             room.setStage("build");
         }
+        if (!phases.isEmpty()) {
+            PlanPhase p1 = phases.get(0);
+            if (!"ACTIVE".equals(p1.getStatus()) && !"COMPLETED".equals(p1.getStatus())) {
+                p1.setStatus("ACTIVE");
+                p1.setActivatedAt(Instant.now());
+                phaseRepository.save(p1);
+            }
+        }
         stageService.recompute(room);
         roomRepository.save(room);
 
@@ -180,7 +188,7 @@ public class PlanCompletionService {
 
     private boolean isPlanDoc(String fileName) {
         if (fileName == null) return false;
-        return List.of("PRD.md", "MVP.md", "TECH_STACK.md", "ARCHITECTURE.md", "PHASES.md", "DESIGN.md", "TASKS.md", "DEMO_SCRIPT.md", "QNA.md")
+        return List.of("PRD.md", "MVP.md", "TECH_STACK.md", "ARCHITECTURE.md", "PHASES.md", "DESIGN.md", "DEMO_SCRIPT.md", "QNA.md")
                 .contains(fileName);
     }
 
@@ -323,15 +331,17 @@ public class PlanCompletionService {
     }
 
     private Doc saveDoc(UUID roomId, String fileName, String title, String content) {
+        String safeTitle = DefensiveParserUtils.trimAtWordBoundary(title, 2000);
+        String safeContent = DefensiveParserUtils.trimAtWordBoundary(content, 400_000);
         Doc doc = docRepository.findByRoomIdAndFileName(roomId, fileName)
-                .orElseGet(() -> new Doc(roomId, fileName, title, 1));
+                .orElseGet(() -> new Doc(roomId, fileName, safeTitle, 1));
         doc.setCurrentVersion(1);
-        doc.setTitle(title);
+        doc.setTitle(safeTitle);
         doc.setUpdatedAt(Instant.now());
         doc = docRepository.save(doc);
 
         docVersionRepository.deleteByDocId(doc.getId());
-        DocVersion version = new DocVersion(doc.getId(), 1, content, "Initial generated version", null);
+        DocVersion version = new DocVersion(doc.getId(), 1, safeContent, "Initial generated version", null);
         docVersionRepository.save(version);
         return doc;
     }

@@ -29,6 +29,12 @@ export function BriefPage() {
     enabled: Boolean(activeRoomId),
   });
 
+  const { data: room } = useQuery({
+    queryKey: ['room', activeRoomId],
+    queryFn: () => roomService.getRoom(activeRoomId),
+    enabled: Boolean(activeRoomId),
+  });
+
   const [confirmedChecks, setConfirmedChecks] = useState<Record<string, boolean>>({});
   const confirmedChecksRef = useRef<Record<string, boolean>>({});
   confirmedChecksRef.current = confirmedChecks;
@@ -179,22 +185,22 @@ export function BriefPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-border/60">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Hackathon Brief</h1>
+            <h1 className="text-3xl sm:text-4xl font-display font-normal tracking-tight text-foreground leading-none">Hackathon Brief</h1>
             {brief?.confirmed ? (
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 text-[11px] font-bold">
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono uppercase tracking-wider font-semibold border shrink-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
                 CONFIRMED
               </span>
             ) : hasProblemStatement ? (
-              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-[11px] font-bold">
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono uppercase tracking-wider font-semibold border shrink-0 bg-amber-500/10 text-amber-600 border-amber-500/20">
                 NEEDS CONFIRMATION
               </span>
             ) : (
-              <span className="px-2.5 py-0.5 rounded-full bg-muted text-muted-foreground text-[11px] font-semibold">
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono uppercase tracking-wider font-semibold border shrink-0 bg-muted/80 text-muted-foreground border-border/60">
                 NOT ADDED
               </span>
             )}
-            {saveStatus === 'saving' && <span className="text-xs text-muted-foreground">Saving...</span>}
-            {saveStatus === 'saved' && <span className="text-xs text-emerald-600">Saved</span>}
+            {saveStatus === 'saving' && <span className="text-xs font-mono text-muted-foreground">Saving...</span>}
+            {saveStatus === 'saved' && <span className="text-xs font-mono text-emerald-600">Saved</span>}
           </div>
           <p className="text-xs text-muted-foreground mt-1">
             Every rule, rubric weight, and deadline in one verified source of truth.
@@ -218,6 +224,7 @@ export function BriefPage() {
         <BriefIntake
           roomId={activeRoomId}
           isLeader={isLeader}
+          aiAllowed={(room as any)?.aiAllowed ?? true}
           onSuccess={(b) => {
             queryClient.setQueryData(['brief', activeRoomId], b);
             queryClient.invalidateQueries({ queryKey: ['brief', activeRoomId] });

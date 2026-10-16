@@ -1,50 +1,62 @@
-# AI Providers & Backend Gateway Architecture
+# AI Providers & Bring-Your-Own-Key (BYOK) Architecture
 
-In Hackathon OS, all artificial intelligence capabilities—such as brief field extraction, idea synthesis, task generation, Q&A flashcards, and room naming—are routed exclusively through the centralized Spring Boot `AiService` gateway (`/api/v1/ai/*`).
+In Hackathon OS, all artificial intelligence capabilities—such as brief field extraction, idea synthesis, plan generation, task generation, Q&A flashcards, diagrams repair, and room naming—are routed exclusively through the centralized Spring Boot `AiService` gateway (`/api/v1/ai/*`).
 
-> **Security Invariant (Rule 13):** AI API keys and upstream provider credentials NEVER reach the browser. The frontend interacts strictly with backend endpoints and reads operational status via `GET /api/v1/ai/status`. No `VITE_*` environment variable holds an AI secret.
+The platform pays for **NO AI usage in production**. Every AI call uses the Groq API key of the acting user who triggered it.
 
----
-
-## Gateway Environment Variables
-
-The backend gateway is configured via the following environment variables:
-
-| Variable | Description |
-|---|---|
-| `AI_BASE_URL` | Base URL of the OpenAI-compatible HTTP inference gateway |
-| `AI_API_KEY` | Upstream provider secret key (stored server-side only) |
-| `AI_MODEL_DEFAULT` | Canonical balanced model for generation and analysis |
-| `AI_MODEL_FAST` | Low-latency model for rapid tasks (e.g. naming, validation) |
-| `AI_MODEL_SMART` | High-reasoning model for PRD drafting and architecture reviews |
-| `AI_JSON_MODE_SUPPORTED` | Boolean flag indicating whether the provider supports structured JSON mode (`response_format: { type: "json_object" }`) |
-| `STT_BASE_URL` | Base URL for speech-to-text / transcription inference |
-| `STT_API_KEY` | Upstream secret for audio transcription services |
-| `STT_MODEL` | Transcription model identifier (e.g., `whisper-large-v3`) |
+> **Security Invariants:**
+> 1. AI API keys are stored encrypted with AES-256-GCM using the server's encryption key with a random 12-byte IV per record.
+> 2. Decrypted keys are NEVER returned to the client, logged, or cached in memory.
+> 3. All log statements and client error messages pass through automatic redaction masking Groq keys (`gsk_...`) and Authorization headers.
+> 4. No `VITE_*` environment variable holds an AI secret.
 
 ---
 
-## Provider Comparison & Configuration
+## Bring-Your-Own-Key (BYOK) Model
 
-| Configuration Key | Groq (Current Production) | Self-Hosted OSS (Planned: vLLM / SGLang / Kimi) |
+1. **User Key Storage**:
+   - `PUT /api/v1/users/me/ai-key`: Saves the user's key after verifying against Groq's `/models` endpoint (10-second timeout).
+   - `GET /api/v1/users/me/ai-key`: Returns key status, last 4 digits, status, and provider host (`api.groq.com`).
+   - `DELETE /api/v1/users/me/ai-key`: Deletes the user's stored key.
+   - `POST /api/v1/users/me/ai-key/test`: Runs an 8-token ping test completion.
+
+2. **Per-User Concurrency & Rate Limits**:
+   - Each user is capped at **2 concurrent AI requests** simultaneously.
+   - Per-user rate limiting is enforced via leaky-bucket rate limiter.
+   - Speech-to-text (STT) for rehearsal feedback runs against Groq Whisper using the acting user's key.
+
+---
+
+## Error Codes & Client Contract
+
+| Error Code | HTTP Status | Description & User Feedback |
 |---|---|---|
-| `AI_BASE_URL` | `https://api.groq.com/openai/v1` | `http://vllm-server.internal:8000/v1` |
-| `AI_API_KEY` | `gsk_********************************` | `none` or internal cluster token |
-| `AI_MODEL_DEFAULT` | `llama-3.3-70b-versatile` | `kimi-k1.5` or `Qwen/Qwen2.5-72B-Instruct` |
-| `AI_MODEL_FAST` | `llama-3.1-8b-instant` | `Qwen/Qwen2.5-7B-Instruct` |
-| `AI_MODEL_SMART` | `llama-3.3-70b-versatile` | `deepseek-ai/DeepSeek-R1-Distill-Qwen-32B` |
-| `AI_JSON_MODE_SUPPORTED` | `true` | `true` (if guided decoding / outlines enabled in vLLM) |
-| `STT_BASE_URL` | `https://api.groq.com/openai/v1` | `http://whisper.internal:9000/v1` |
-| `STT_MODEL` | `whisper-large-v3` | `Systran/faster-whisper-large-v3` |
+| `AI_KEY_MISSING` | 403 Forbidden | Acting user has no Groq key configured. Prompts user to add their key. |
+| `AI_KEY_INVALID` | 400 Bad Request | Upstream Groq returned 401/403. Key status marked `INVALID`. Prompts user to check key in Settings. |
+| `AI_KEY_RATE_LIMITED` | 429 Too Many Requests | Upstream Groq returned 429. Returns `retryAfterSeconds` from `Retry-After` header. Never sleeps > 3s inside request. |
+| `AI_RESTRICTED_BY_EVENT` | 403 Forbidden | Room brief event policy prohibits AI usage. |
+| `AI_UNAVAILABLE` | 503 Service Unavailable | Upstream Groq 5xx, timeout, or network failure. Opens global circuit breaker only on upstream 5xx/timeouts. |
 
 ---
 
-## Provider Switching Checklist
+## Running Locally with a Platform Key (Dev Only)
 
-When switching upstream AI providers:
-1. **Set Base URL and Model Name**: Update `AI_BASE_URL`, `AI_MODEL_DEFAULT`, and `AI_MODEL_FAST` in the backend environment.
-2. **Verify JSON Mode Support**: Set `AI_JSON_MODE_SUPPORTED=false` if the target inference server does not support grammar-based JSON constraint generation; the backend will fall back to prompt-enforced JSON extraction.
-3. **Verify Context & Output Limits**: Check that the model supports at least 32,768 tokens of context window for full room brief and document ingestion.
-4. **Tune Concurrency**: Adjust backend connection pool and concurrency limits to match the throughput capabilities and GPU VRAM of your local inference engine.
-5. **Configure Speech-to-Text Separately**: Verify audio transcription parameters under `STT_*` independently of text completion models.
-6. **Verify Gateway Status**: Call `GET /api/v1/ai/status` and verify that the Settings > AI Status panel reports `Operational` with valid latency.
+To develop locally without entering a personal Groq key into the UI for each test account, you can enable the platform fallback:
+
+```bash
+# In backend/.env or your local environment:
+SPRING_PROFILES_ACTIVE=dev
+AI_PLATFORM_FALLBACK=true
+AI_PLATFORM_KEY=gsk_your_groq_dev_key_here
+```
+
+> **IMPORTANT:**
+> `AI_PLATFORM_FALLBACK` is strictly ignored unless `SPRING_PROFILES_ACTIVE` includes `dev`. In production or staging profiles, platform fallback is completely disabled.
+
+---
+
+## Features Resilient Without a Key
+
+Without an AI key, the platform remains fully functional:
+- **Plan Prompt Fusion**: The "Judge the idea" stage is skipped (`analysisState: SKIPPED_NO_KEY`), deterministic analysis is used, and the generated plan prompt is ready for manual copy-and-upload to external LLMs.
+- **Hackathon Feed, Tasks, Docs, Team, Demo, Submission**: All non-AI features continue working without interruption.

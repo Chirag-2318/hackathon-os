@@ -71,8 +71,8 @@ function CustomTooltip({ active, payload, label, total }: CustomTooltipProps) {
 
   return (
     <div
-      className="rounded-pop px-3 py-2 text-white shadow-e3"
-      style={{ backgroundColor: TOOLTIP_BG, minWidth: '8rem' }}
+      className="rounded-pop px-3 py-2 bg-inverse text-on-inverse shadow-e3 border border-border/50"
+      style={{ minWidth: '8rem' }}
       role="tooltip"
     >
       <p className="text-label font-semibold">{label}</p>

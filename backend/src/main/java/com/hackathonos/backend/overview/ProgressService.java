@@ -1,8 +1,11 @@
 package com.hackathonos.backend.overview;
 
+import com.hackathonos.backend.plan.PlanPhase;
+import com.hackathonos.backend.plan.PlanPhaseRepository;
 import com.hackathonos.backend.rooms.Room;
 import com.hackathonos.backend.tasks.Task;
 import com.hackathonos.backend.tasks.TaskRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -12,6 +15,9 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class ProgressService {
@@ -32,10 +38,17 @@ public class ProgressService {
     ) {}
 
     private final TaskRepository taskRepository;
+    private final PlanPhaseRepository phaseRepository;
     private final Clock clock;
 
     public ProgressService(TaskRepository taskRepository, Clock clock) {
+        this(taskRepository, null, clock);
+    }
+
+    @Autowired
+    public ProgressService(TaskRepository taskRepository, @Autowired(required = false) PlanPhaseRepository phaseRepository, Clock clock) {
         this.taskRepository = taskRepository;
+        this.phaseRepository = phaseRepository;
         this.clock = clock;
     }
 
@@ -43,7 +56,30 @@ public class ProgressService {
      * Computes hourly planned burnup curve against actual task completion burnup curve.
      */
     public ProgressResultDto calculate(Room room) {
-        List<Task> tasks = taskRepository.findByRoomId(room.getId());
+        List<Task> rawTasks = taskRepository.findByRoomId(room.getId());
+        Set<UUID> currentAndEarlierPhaseIds = Collections.emptySet();
+        Set<String> currentAndEarlierPhaseKeys = Collections.emptySet();
+        if (phaseRepository != null) {
+            List<PlanPhase> phases = phaseRepository.findByRoomIdOrderByPositionAsc(room.getId());
+            currentAndEarlierPhaseIds = phases.stream()
+                    .filter(p -> "COMPLETED".equalsIgnoreCase(p.getStatus()) || "ACTIVE".equalsIgnoreCase(p.getStatus()))
+                    .map(PlanPhase::getId)
+                    .collect(Collectors.toSet());
+            currentAndEarlierPhaseKeys = phases.stream()
+                    .filter(p -> "COMPLETED".equalsIgnoreCase(p.getStatus()) || "ACTIVE".equalsIgnoreCase(p.getStatus()))
+                    .map(p -> p.getPhaseKey() != null ? p.getPhaseKey().toUpperCase() : "")
+                    .collect(Collectors.toSet());
+        }
+
+        final Set<UUID> validPhaseIds = currentAndEarlierPhaseIds;
+        final Set<String> validPhaseKeys = currentAndEarlierPhaseKeys;
+        List<Task> tasks = rawTasks.stream()
+                .filter(t -> !t.isDropped())
+                .filter(t -> (t.getPhaseKey() == null && t.getPhaseId() == null) ||
+                        (t.getPhaseKey() != null && (validPhaseKeys.isEmpty() || validPhaseKeys.contains(t.getPhaseKey().toUpperCase()))) ||
+                        (t.getPhaseId() != null && (validPhaseIds.isEmpty() || validPhaseIds.contains(t.getPhaseId()))))
+                .toList();
+
         if (tasks.isEmpty()) {
             return new ProgressResultDto(
                     false,

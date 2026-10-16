@@ -11,6 +11,7 @@ import {
 import { Sparkles, Copy, Check, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { AiGeneratingSkeleton } from '@/design/components/ai-button';
+import { AiGate, useAiAction } from '@/features/ai-gate';
 
 interface StructuringBannerProps {
   roomId: string;
@@ -110,6 +111,8 @@ export function StructuringBanner({ roomId, onExtracted }: StructuringBannerProp
     }
   };
 
+  const { handleAiError } = useAiAction();
+
   const handleExtractSubmit = async () => {
     const trimmed = eventDetailsText.trim();
     if (!trimmed) {
@@ -134,6 +137,7 @@ export function StructuringBanner({ roomId, onExtracted }: StructuringBannerProp
       onExtracted(res.fields, res.brief);
     } catch (err: any) {
       if (isCancelledRef.current) return;
+      handleAiError(err);
       setExtractError(formatAiError(err));
     } finally {
       if (!isCancelledRef.current) {
@@ -149,18 +153,20 @@ export function StructuringBanner({ roomId, onExtracted }: StructuringBannerProp
   };
 
   const extractButton = (
-    <Button
-      size="sm"
-      onClick={() => {
-        setExtractDialogOpen(true);
-        setExtractError(null);
-      }}
-      disabled={!aiEnabled}
-      className="text-xs h-8 gap-1.5"
-    >
-      <Sparkles className="size-3.5" />
-      Extract with AI
-    </Button>
+    <AiGate>
+      <Button
+        size="sm"
+        onClick={() => {
+          setExtractDialogOpen(true);
+          setExtractError(null);
+        }}
+        disabled={!aiEnabled}
+        className="text-xs h-8 gap-1.5"
+      >
+        <Sparkles className="size-3.5" />
+        Extract with AI
+      </Button>
+    </AiGate>
   );
 
   return (

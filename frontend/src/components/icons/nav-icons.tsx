@@ -6,7 +6,7 @@ export interface IconProps {
   strokeWidth?: number;
 }
 
-const DEFAULT_STROKE = 1.75;
+const DEFAULT_STROKE = 1.5;
 
 export function HomeIcon({ size = 18, className, strokeWidth = DEFAULT_STROKE }: IconProps) {
   return (
@@ -262,25 +262,6 @@ export function TeamIcon({ size = 18, className, strokeWidth = DEFAULT_STROKE }:
   );
 }
 
-export function SpeedModeIcon({ size = 18, className, strokeWidth = DEFAULT_STROKE }: IconProps) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={strokeWidth}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={cn('nav-icon nav-icon-speedmode', className)}
-      aria-hidden="true"
-    >
-      <circle className="glow-ring" cx="12" cy="12" r="10" stroke="var(--brand-from, #2F9BEA)" strokeDasharray="3 3" />
-      <polygon className="bolt" points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" fill="none" />
-    </svg>
-  );
-}
 
 export function PrepIcon({ size = 18, className, strokeWidth = DEFAULT_STROKE }: IconProps) {
   return (

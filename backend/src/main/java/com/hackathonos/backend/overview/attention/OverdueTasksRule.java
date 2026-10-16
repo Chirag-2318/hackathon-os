@@ -31,7 +31,8 @@ public class OverdueTasksRule implements AttentionRule {
         List<Task> overdue = new ArrayList<>();
 
         for (Task t : tasks) {
-            boolean isDone = "DONE".equalsIgnoreCase(t.getStatus());
+            if (t.isDropped()) continue;
+            boolean isDone = t.isConfirmedDone();
             if (!isDone && t.getDueAt() != null && t.getDueAt().isBefore(now)) {
                 overdue.add(t);
             }

@@ -1,81 +1,76 @@
 /**
  * Motion Mode — user and system motion preferences
- * Source: animations.md §3.1–§3.2
- *
- * Four states: Full, Reduced, Off, Lite (automatic).
- * Reads OS prefers-reduced-motion as default.
- * Speed Mode default: Reduced.
- * Applies data-motion attribute to <html> for CSS token overrides.
+ * Three choices: System (follows OS prefers-reduced-motion), On (reduce motion), Off (allow motion).
+ * Wire into one shared reduced-motion helper (useIsMotionReduced).
  */
 import { create } from 'zustand';
 import { useEffect } from 'react';
 
-export type MotionMode = 'full' | 'reduced' | 'off';
+export type MotionChoice = 'system' | 'on' | 'off';
+export type MotionMode = MotionChoice;
 
 interface MotionModeState {
-  /** User's explicit preference (null = follow OS) */
-  userPreference: MotionMode | null;
+  /** User preference: 'system' | 'on' | 'off' */
+  preference: MotionChoice;
   /** OS-level prefers-reduced-motion */
   osReducedMotion: boolean;
-  /** Whether we're in Speed Mode (defaults to Reduced) */
-  isSpeedMode: boolean;
-  /** Resolved mode considering user pref > speed mode > OS > full */
-  resolved: MotionMode;
-  setUserPreference: (mode: MotionMode | null) => void;
-  setSpeedMode: (enabled: boolean) => void;
+  /** Combined reduced-motion boolean */
+  isReduced: boolean;
+  setPreference: (choice: MotionChoice) => void;
   setOsReducedMotion: (reduced: boolean) => void;
 }
 
-function resolveMode(
-  userPref: MotionMode | null,
-  isSpeedMode: boolean,
+function computeIsReduced(
+  pref: MotionChoice,
   osReduced: boolean
-): MotionMode {
-  // User explicit choice always wins
-  if (userPref !== null) return userPref;
-  // Speed Mode default: reduced
-  if (isSpeedMode) return 'reduced';
-  // OS prefers-reduced-motion
-  if (osReduced) return 'reduced';
-  // Default
-  return 'full';
+): boolean {
+  if (pref === 'on') return true;
+  if (pref === 'off') return false;
+  // 'system' mode: follow OS
+  return osReduced;
 }
 
+function getStoredMotionPreference(): MotionChoice {
+  if (typeof window === "undefined") return 'system';
+  try {
+    const val = localStorage.getItem('motion_preference') as MotionChoice | null;
+    if (val === 'system' || val === 'on' || val === 'off') return val;
+  } catch {}
+  return 'system';
+}
+
+const initialPref = getStoredMotionPreference();
+
 export const useMotionModeStore = create<MotionModeState>((set) => ({
-  userPreference: null,
+  preference: initialPref,
   osReducedMotion: false,
-  isSpeedMode: false,
-  resolved: 'full',
+  isReduced: computeIsReduced(initialPref, false),
 
-  setUserPreference: (mode) =>
+  setPreference: (pref) => {
+    try {
+      localStorage.setItem('motion_preference', pref);
+    } catch {}
     set((s) => ({
-      userPreference: mode,
-      resolved: resolveMode(mode, s.isSpeedMode, s.osReducedMotion),
-    })),
-
-  setSpeedMode: (enabled) =>
-    set((s) => ({
-      isSpeedMode: enabled,
-      resolved: resolveMode(s.userPreference, enabled, s.osReducedMotion),
-    })),
+      preference: pref,
+      isReduced: computeIsReduced(pref, s.osReducedMotion),
+    }));
+  },
 
   setOsReducedMotion: (reduced) =>
     set((s) => ({
       osReducedMotion: reduced,
-      resolved: resolveMode(s.userPreference, s.isSpeedMode, reduced),
+      isReduced: computeIsReduced(s.preference, reduced),
     })),
 }));
 
 /**
  * Hook that syncs OS reduced-motion preference and applies
- * the data-motion attribute to <html> for CSS token overrides.
- * Mount once at app root.
+ * data-motion attribute to <html>. Mount once at app root.
  */
 export function useMotionModeSync(): void {
-  const resolved = useMotionModeStore((s) => s.resolved);
+  const isReduced = useMotionModeStore((s) => s.isReduced);
   const setOsReducedMotion = useMotionModeStore((s) => s.setOsReducedMotion);
 
-  // Listen for OS prefers-reduced-motion changes
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
     setOsReducedMotion(mq.matches);
@@ -87,29 +82,36 @@ export function useMotionModeSync(): void {
     return () => mq.removeEventListener('change', handler);
   }, [setOsReducedMotion]);
 
-  // Apply data-motion attribute to <html> for CSS overrides
   useEffect(() => {
     const root = document.documentElement;
-    if (resolved === 'full') {
-      root.removeAttribute('data-motion');
+    if (isReduced) {
+      root.setAttribute('data-motion', 'on');
     } else {
-      root.setAttribute('data-motion', resolved);
+      root.removeAttribute('data-motion');
     }
-  }, [resolved]);
+  }, [isReduced]);
 }
 
 /**
- * Convenience hook — returns resolved motion mode.
- */
-export function useMotionMode(): MotionMode {
-  return useMotionModeStore((s) => s.resolved);
-}
-
-/**
- * Returns true if movement-based animations should be skipped.
- * Press feedback (scale) is still allowed under Reduced; only Off removes everything.
+ * Shared reduced-motion helper.
+ * Combines OS prefers-reduced-motion and user choice (System, On, Off).
  */
 export function useIsMotionReduced(): boolean {
-  const mode = useMotionMode();
-  return mode === 'reduced' || mode === 'off';
+  return useMotionModeStore((s) => s.isReduced);
 }
+
+/**
+ * Returns current motion preference setting ('system' | 'on' | 'off').
+ */
+export function useMotionPreference(): MotionChoice {
+  return useMotionModeStore((s) => s.preference);
+}
+
+/**
+ * Backward compatibility alias for legacy call sites.
+ */
+export function useMotionMode(): 'full' | 'reduced' | 'off' {
+  const isReduced = useMotionModeStore((s) => s.isReduced);
+  return isReduced ? 'reduced' : 'full';
+}
+

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
-  Flag, MoreHorizontal, Check, UserCheck, ShieldAlert, ArrowRight, CornerDownRight, GitBranch, Lock, Unlock
+  Flag, MoreHorizontal, Check, UserCheck, ShieldAlert, ArrowRight, CornerDownRight, GitBranch, Lock, Unlock, Trash2
 } from 'lucide-react';
 import type { Task, RoomMember, BoardPhase, TaskStatus } from '@/services/types';
 import {
@@ -19,10 +19,13 @@ export interface JiraCardProps {
   members: RoomMember[];
   phases: BoardPhase[];
   isDragging?: boolean;
+  isLeader?: boolean;
   onOpen: (task: Task) => void;
   onStatusChange: (taskId: string, newStatus: TaskStatus) => void;
   onAssignToMe: (taskId: string) => void;
   onToggleBlock: (taskId: string) => void;
+  onDeferTask?: (taskId: string) => void;
+  onDropTask?: (taskId: string) => void;
   // Drag-and-drop pointer handlers
   onPointerDownDrag?: (e: React.PointerEvent, task: Task) => void;
   onDragStartTask?: (taskId: string) => void;
@@ -35,10 +38,13 @@ export function JiraCard({
   members,
   phases,
   isDragging = false,
+  isLeader = false,
   onOpen,
   onStatusChange,
   onAssignToMe,
   onToggleBlock,
+  onDeferTask,
+  onDropTask,
   onPointerDownDrag,
   onDragStartTask,
   onDragEndTask,
@@ -198,6 +204,24 @@ export function JiraCard({
                 <Flag className="size-3.5 mr-2 text-rose-500" />
                 {isBlocked ? 'Clear blocked flag' : 'Flag as blocked'}
               </DropdownMenuItem>
+              {isLeader && onDeferTask && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => onDeferTask(task.id)}>
+                    <ArrowRight className="size-3.5 mr-2" />
+                    Defer task
+                  </DropdownMenuItem>
+                </>
+              )}
+              {isLeader && onDropTask && (
+                <DropdownMenuItem
+                  onClick={() => onDropTask(task.id)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="size-3.5 mr-2" />
+                  Drop task
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -273,10 +297,7 @@ export function JiraCard({
               title={assignee.name}
             >
               <UserAvatar
-                user={{
-                  ...assignee,
-                  avatarUrl: (assignee as any).avatarUrl || (assignee as any).avatar,
-                }}
+                user={assignee}
                 size={24}
               />
             </div>

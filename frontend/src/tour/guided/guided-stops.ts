@@ -156,7 +156,7 @@ export const GUIDED_STOPS: GuidedStop[] = [
     label: 'Submit',
     sidebarTag: 'SUBMIT > Submission',
     title: 'Submit with time to spare.',
-    caption: "One checklist, built from the event's own rules.",
+    caption: "Mark the project submitted when you've sent it to the event platform.",
     Scene: SubmitScene,
   },
 ];

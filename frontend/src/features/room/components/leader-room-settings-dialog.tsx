@@ -377,8 +377,7 @@ export function LeaderRoomSettingsDialog({
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
                               <span
-                                className="size-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-                                style={{ backgroundColor: m.avatarColor || '#6366f1' }}
+                                className="size-7 rounded-full flex items-center justify-center text-xs font-bold bg-inverse text-on-inverse shrink-0"
                               >
                                 {m.initials}
                               </span>

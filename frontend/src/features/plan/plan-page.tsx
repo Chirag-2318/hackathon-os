@@ -1,24 +1,28 @@
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { planService, ideaService, roomService } from '@/services';
-import type { PlanData } from '@/services/types';
 import { fetchSettings } from '@/features/prep/api/settings-api';
 import { PlanStepper } from './components/plan-stepper';
 import { PromptBridgePanel } from './components/prompt-bridge-panel';
 import { PlanRightRail } from './components/plan-right-rail';
 import { PlanLockedView } from './components/plan-locked-view';
-import { Loader2, AlertCircle, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Loader2, AlertTriangle, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
-} from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { ApiError } from '@/lib/apiClient';
 import { getAiErrorMessage } from '@/design';
-
+import { useAuthStore } from '@/features/auth/useAuthStore';
+import { useAiAction } from '@/features/ai-gate';
+import { recordTourHotspot } from '@/tour/api';
+import { PlanGuideModal } from './components/plan-guide-modal';
 import { BeforeWePlan } from './components/before-we-plan';
+
+const PlanPrepareScreen = React.lazy(() =>
+  import('./components/plan-prepare-screen').then((m) => ({
+    default: m.PlanPrepareScreen,
+  }))
+);
 
 const BuildPhaseTransitionOverlay = React.lazy(() =>
   import('./components/build-phase-transition-overlay').then((m) => ({
@@ -26,7 +30,14 @@ const BuildPhaseTransitionOverlay = React.lazy(() =>
   }))
 );
 
-const STEP_KEYS = ['prd', 'tech', 'phases', 'tasks', 'demo'] as const;
+const STEP_CONFIG = [
+  { key: 'prd-mvp', legacyKey: 'prd', title: 'PRD and MVP' },
+  { key: 'stack-arch', legacyKey: 'tech', title: 'Tech stack and architecture' },
+  { key: 'phases-design', legacyKey: 'phases', title: 'Phases and design' },
+  { key: 'demo-qna', legacyKey: 'demo', title: 'Demo and Q&A' },
+] as const;
+
+const STEP_KEYS = STEP_CONFIG.map((s) => s.key);
 
 export function PlanPage() {
   const { roomId, id } = useParams<{ roomId?: string; id?: string }>();
@@ -35,9 +46,6 @@ export function PlanPage() {
   const queryClient = useQueryClient();
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [answers, setAnswers] = useState<string[]>(['', '', '', '', '']);
-  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
-  const [clearedStepsList, setClearedStepsList] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isEnteringBuild, setIsEnteringBuild] = useState(false);
   const [showTransitionOverlay, setShowTransitionOverlay] = useState(false);
@@ -45,9 +53,15 @@ export function PlanPage() {
     docs: 9,
     tasks: 38,
   });
-  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { data: plan, isLoading: loadingPlan } = useQuery({
+  const currentUser = useAuthStore((s) => s.user);
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [showGuideModal, setShowGuideModal] = useState(false);
+  const isManualGuideOpenRef = useRef(false);
+  const hasTriggeredGuideRef = useRef(false);
+  const prepareCheckedRef = useRef(false);
+
+  const { data: plan } = useQuery({
     queryKey: ['plan', activeRoomId],
     queryFn: () => planService.getPlan(activeRoomId),
     enabled: Boolean(activeRoomId),
@@ -68,49 +82,94 @@ export function PlanPage() {
 
   const hasApiKey = (settings?.aiAndKeys?.providers?.length || 0) > 0;
 
-  const handleRefreshPrompt = async () => {
+  const hasIdeas = Boolean(
+    (plan?.contextPack as any)?.ideas?.ready ??
+      (plan?.contextPack as any)?.idea?.ok ??
+      ((plan?.contextSummary?.approvedIdeas?.length || 0) > 0)
+  );
+  const hasBrief = Boolean(
+    (plan?.contextPack as any)?.rubric?.ready ??
+      (plan?.contextPack as any)?.rubric?.ok ??
+      Boolean(plan?.contextSummary?.briefStatement || (plan?.contextSummary as any)?.statementPreview)
+  );
+  const requiredInputsExist = hasIdeas && hasBrief;
+
+  // 1. Lazy step 1 prepare trigger on mount (idempotent; skip loading screen if READY)
+  useEffect(() => {
+    if (!plan || prepareCheckedRef.current || !activeRoomId) return;
+    if (!requiredInputsExist) {
+      prepareCheckedRef.current = true;
+      setIsPreparing(false);
+      return;
+    }
+
+    prepareCheckedRef.current = true;
+    let active = true;
+
+    async function initPrepare() {
+      try {
+        const res = await planService.prepareStep(activeRoomId, 1);
+        if (!active) return;
+        if (res.status === 'READY' || res.status === 'FALLBACK') {
+          setIsPreparing(false);
+        } else {
+          setIsPreparing(true);
+        }
+      } catch (_) {
+        if (!active) return;
+        setIsPreparing(false);
+      }
+    }
+
+    initPrepare();
+
+    return () => {
+      active = false;
+    };
+  }, [plan, activeRoomId, requiredInputsExist]);
+
+  const handlePrepareComplete = () => {
+    setIsPreparing(false);
+    queryClient.invalidateQueries({ queryKey: ['plan', activeRoomId] });
+  };
+
+  const handleOpenAnyway = () => {
+    setIsPreparing(false);
+  };
+
+  const handlePrepareRetry = async () => {
     try {
-      await planService.refreshStepPrompt(activeRoomId, currentStepIndex + 1);
-      queryClient.invalidateQueries({ queryKey: ['plan', activeRoomId] });
-    } catch (e: any) {
-      toast.error('Failed to refresh prompt');
+      await planService.prepareStep(activeRoomId, 1);
+    } catch (_) {
+      toast.error('Failed to restart prepare job');
     }
   };
 
-  const stepsList = Array.isArray(plan?.steps)
-    ? plan.steps
-    : (plan?.steps && typeof plan.steps === 'object')
-    ? Object.entries(plan.steps).map(([key, val]: [string, any], index) => ({
-        key,
-        index: index + 1,
-        title: {
-          prd: 'PRD and MVP',
-          tech: 'Tech stack and architecture',
-          phases: 'Phases and design',
-          tasks: 'Tasks',
-          demo: 'Demo and Q&A',
-        }[key.toLowerCase()] || key.toUpperCase(),
-        status: (val?.validated ? 'validated' : 'upcoming') as 'validated' | 'upcoming',
-        answer: val?.answer,
-        validated: !!val?.validated,
-        errors: val?.issues || [],
-        warnings: val?.warnings || [],
-        promptText: '',
-        expectedFormat: '',
-        charCount: (val?.answer || '').length,
-        contextFiles: [],
-      }))
-    : [];
+  const stepsList = STEP_CONFIG.map((cfg, index) => {
+    let rawVal: any = null;
+    if (Array.isArray(plan?.steps)) {
+      rawVal = plan.steps.find((s: any) => s.key === cfg.key || s.key === cfg.legacyKey || s.stepKey === cfg.key || s.stepKey === cfg.legacyKey);
+    } else if (plan?.steps && typeof plan.steps === 'object') {
+      rawVal = (plan.steps as any)[cfg.key] || (plan.steps as any)[cfg.legacyKey];
+    }
+    return {
+      key: cfg.key,
+      index: index + 1,
+      title: cfg.title,
+      status: (rawVal?.validated ? 'validated' : 'upcoming') as 'validated' | 'upcoming',
+      answer: rawVal?.answer,
+      validated: !!rawVal?.validated,
+      errors: rawVal?.issues || [],
+      warnings: rawVal?.warnings || [],
+      promptText: '',
+      expectedFormat: '',
+      charCount: (rawVal?.answer || '').length,
+      contextFiles: [],
+    };
+  });
 
   useEffect(() => {
     if (stepsList.length > 0) {
-      const loaded = STEP_KEYS.map((k) => {
-        const found = stepsList.find((s) => s.key === k);
-        return found?.answer || '';
-      });
-      setAnswers(loaded);
-
-      // Default to first unvalidated step
       const unvalIdx = stepsList.findIndex((s) => !s.validated);
       if (unvalIdx >= 0 && currentStepIndex === 0) {
         setCurrentStepIndex(unvalIdx);
@@ -118,47 +177,98 @@ export function PlanPage() {
     }
   }, [plan]);
 
-  const currentStepKey = STEP_KEYS[currentStepIndex] || 'prd';
+  const currentStepKey = STEP_KEYS[currentStepIndex] || 'prd-mvp';
   const currentStep = stepsList.find((s) => s.key === currentStepKey);
 
-  // Autosave Draft
-  const handleAnswerChange = (val: string) => {
-    const updated = [...answers];
-    updated[currentStepIndex] = val;
-    setAnswers(updated);
+  // Fetch Step Prompt for current active step
+  const { data: stepPromptData, isLoading: loadingStepPrompt } = useQuery({
+    queryKey: ['plan-prompt', activeRoomId, currentStepIndex + 1],
+    queryFn: () => planService.getStepPrompt(activeRoomId, currentStepIndex + 1),
+    enabled: Boolean(activeRoomId && !isPreparing),
+    staleTime: 60 * 1000,
+  });
 
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    autosaveTimerRef.current = setTimeout(async () => {
+  // Prefetch step n+1 once 800ms after current step prompt has rendered
+  useEffect(() => {
+    if (!stepPromptData || stepPromptData.ready === false || currentStepIndex >= STEP_CONFIG.length - 1) return;
+    const sessionKey = `prefetch_${activeRoomId}_${currentStepIndex + 1}`;
+    if (sessionStorage.getItem(sessionKey)) return;
+
+    const timer = setTimeout(async () => {
       try {
-        await planService.saveStepDraft(activeRoomId, currentStepKey, val, false);
-      } catch (err: any) {
-        if (err instanceof ApiError && err.code === 'CONFIRM_REQUIRED') {
-          const later = Array.isArray(err.details) ? err.details : ['subsequent steps'];
-          setClearedStepsList(later);
-          setConfirmClearOpen(true);
-        }
-      }
+        sessionStorage.setItem(sessionKey, '1');
+        await planService.prefetchNext(activeRoomId, currentStepIndex + 1);
+      } catch (_) {}
     }, 800);
-  };
 
-  const handleConfirmClear = async () => {
-    try {
-      await planService.saveStepDraft(activeRoomId, currentStepKey, answers[currentStepIndex], true);
-      setConfirmClearOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['plan', activeRoomId] });
-      toast.info('Subsequent steps cleared. Please re-validate in sequence.');
-    } catch (e: any) {
-      toast.error(e.message || 'Failed to update step');
+    return () => clearTimeout(timer);
+  }, [stepPromptData, activeRoomId, currentStepIndex]);
+
+  // First-time "How this works" Guide modal trigger (step 1 on first entry)
+  useEffect(() => {
+    if (currentStepIndex !== 0) return;
+    if (hasTriggeredGuideRef.current) return;
+
+    const storageKey = currentUser?.id
+      ? `plan_guide_done_v2_${currentUser.id}`
+      : `plan_guide_done_v2_guest_${activeRoomId}`;
+
+    const hasSeen = typeof window !== 'undefined' && (
+      localStorage.getItem(storageKey) === 'true' ||
+      Boolean(currentUser?.hotspotsSeen?.includes('plan_guide_v2'))
+    );
+
+    if (!hasSeen) {
+      hasTriggeredGuideRef.current = true;
+      const timer = setTimeout(() => {
+        isManualGuideOpenRef.current = false;
+        setShowGuideModal(true);
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [currentStepIndex, currentUser, activeRoomId]);
+
+  const handleCloseGuide = () => {
+    setShowGuideModal(false);
+    const storageKey = currentUser?.id
+      ? `plan_guide_done_v2_${currentUser.id}`
+      : `plan_guide_done_v2_guest_${activeRoomId}`;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(storageKey, 'true');
+      if (currentUser?.id) {
+        recordTourHotspot('plan_guide_v2');
+      }
     }
   };
 
-  // Validate handler
-  const handleValidateStep = async (content: string) => {
-    const res = await planService.validateStep(activeRoomId, currentStepKey, content);
-    if (res.valid) {
+  const handleOpenManualGuide = () => {
+    isManualGuideOpenRef.current = true;
+    setShowGuideModal(true);
+  };
+
+  const handleRefreshPrompt = async () => {
+    try {
+      await planService.refreshStepPrompt(activeRoomId, currentStepIndex + 1);
+      queryClient.invalidateQueries({ queryKey: ['plan-prompt', activeRoomId, currentStepIndex + 1] });
+    } catch (_) {
+      toast.error('Failed to rebuild plan prompt');
+    }
+  };
+
+  // Multipart Files Validation handler
+  const handleValidateStepFiles = async (files: File[], confirm = false, override = false) => {
+    const res = await planService.validateStepFiles(activeRoomId, currentStepIndex + 1, files, confirm, override);
+    if (res.ok && (!res.needsConfirmation || confirm)) {
       queryClient.invalidateQueries({ queryKey: ['plan', activeRoomId] });
       queryClient.invalidateQueries({ queryKey: ['room', activeRoomId] });
-      if (res.planComplete || currentStepIndex === 4) {
+      if (currentStepIndex < STEP_CONFIG.length - 1) {
+        queryClient.prefetchQuery({
+          queryKey: ['plan-prompt', activeRoomId, currentStepIndex + 2],
+          queryFn: () => planService.getStepPrompt(activeRoomId, currentStepIndex + 2),
+        });
+        planService.prefetchNext(activeRoomId, currentStepIndex + 1).catch(() => {});
+      }
+      if (res.planComplete || currentStepIndex === STEP_CONFIG.length - 1) {
         try {
           await planService.enterBuild(activeRoomId);
         } catch (_) {}
@@ -166,7 +276,35 @@ export function PlanPage() {
         queryClient.invalidateQueries({ queryKey: ['nav-badges', activeRoomId] });
         setTransitionCounts({
           docs: (res.completion as any)?.docs ?? (res.completion as any)?.docsCount ?? plan?.completion?.docsCount ?? 9,
-          tasks: (res.completion as any)?.tasks ?? (res.completion as any)?.tasksCount ?? plan?.completion?.tasksCount ?? 38,
+          tasks: (res.completion as any)?.tasks ?? (res.completion as any)?.tasksCount ?? plan?.completion?.tasksCount ?? 0,
+        });
+      }
+    }
+    return res;
+  };
+
+  // JSON Text Validation handler (used for AI draft)
+  const handleValidateStepText = async (text: string, confirm = false) => {
+    const res = await planService.validateStepText(activeRoomId, currentStepIndex + 1, text, confirm);
+    if (res.ok && (!res.needsConfirmation || confirm)) {
+      queryClient.invalidateQueries({ queryKey: ['plan', activeRoomId] });
+      queryClient.invalidateQueries({ queryKey: ['room', activeRoomId] });
+      if (currentStepIndex < STEP_CONFIG.length - 1) {
+        queryClient.prefetchQuery({
+          queryKey: ['plan-prompt', activeRoomId, currentStepIndex + 2],
+          queryFn: () => planService.getStepPrompt(activeRoomId, currentStepIndex + 2),
+        });
+        planService.prefetchNext(activeRoomId, currentStepIndex + 1).catch(() => {});
+      }
+      if (res.planComplete || currentStepIndex === STEP_CONFIG.length - 1) {
+        try {
+          await planService.enterBuild(activeRoomId);
+        } catch (_) {}
+        queryClient.invalidateQueries({ queryKey: ['room', activeRoomId] });
+        queryClient.invalidateQueries({ queryKey: ['nav-badges', activeRoomId] });
+        setTransitionCounts({
+          docs: (res.completion as any)?.docs ?? (res.completion as any)?.docsCount ?? plan?.completion?.docsCount ?? 9,
+          tasks: (res.completion as any)?.tasks ?? (res.completion as any)?.tasksCount ?? plan?.completion?.tasksCount ?? 0,
         });
       }
     }
@@ -174,7 +312,7 @@ export function PlanPage() {
   };
 
   const handleStepSuccess = () => {
-    if (currentStepIndex < 4) {
+    if (currentStepIndex < STEP_CONFIG.length - 1) {
       setCurrentStepIndex(currentStepIndex + 1);
     } else {
       queryClient.invalidateQueries({ queryKey: ['plan', activeRoomId] });
@@ -189,16 +327,16 @@ export function PlanPage() {
     }
   };
 
-  // AI Generate
-  const handleGenerate = async () => {
+  const { handleAiError } = useAiAction();
+
+  // AI Generate step
+  const handleGenerate = async (): Promise<string | void> => {
     setIsGenerating(true);
     try {
       const res = await planService.generateStep(activeRoomId, currentStepKey);
-      if (res.answer) {
-        handleAnswerChange(res.answer);
-        toast.success(`Generated answer for ${currentStep?.title || currentStepKey}`);
-      }
+      return res.answer;
     } catch (err: any) {
+      handleAiError(err);
       const mappedMsg = getAiErrorMessage(err?.code, err?.message || 'AI generation failed');
       toast.error(mappedMsg);
     } finally {
@@ -227,10 +365,28 @@ export function PlanPage() {
     }
   };
 
-  if (loadingPlan || !plan) {
+  if (isPreparing) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      <React.Suspense fallback={null}>
+        <PlanPrepareScreen
+          roomId={activeRoomId}
+          stepIndex={1}
+          onComplete={handlePrepareComplete}
+          onOpenAnyway={handleOpenAnyway}
+          onRetry={handlePrepareRetry}
+        />
+      </React.Suspense>
+    );
+  }
+
+  if (!plan) {
+    return (
+      <div className="w-full max-w-7xl mx-auto p-4 md:p-6 space-y-6 animate-pulse">
+        <div className="h-8 w-48 bg-muted/40 rounded" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:col-span-2 h-96 bg-muted/20 rounded-xl" />
+          <div className="h-96 bg-muted/20 rounded-xl" />
+        </div>
       </div>
     );
   }
@@ -265,7 +421,7 @@ export function PlanPage() {
             <BuildPhaseTransitionOverlay
               roomId={activeRoomId}
               docsCount={transitionCounts.docs}
-              tasksCount={transitionCounts.tasks}
+              phasesCount={plan?.completion?.phasesCount ?? 5}
               onNavigate={() => navigate(`/app/room/${activeRoomId}/board`)}
               onComplete={() => setShowTransitionOverlay(false)}
             />
@@ -276,10 +432,21 @@ export function PlanPage() {
   }
 
   const validatedSteps = stepsList.map((s) => s.validated);
-  const isAllComplete = validatedSteps.every(Boolean);
 
   return (
     <div className="w-full flex flex-col gap-6 p-8 max-w-[1400px] mx-auto font-sans pb-24">
+      {/* Header utility bar */}
+      <div className="flex items-center justify-end -mb-2">
+        <button
+          type="button"
+          onClick={handleOpenManualGuide}
+          className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 transition-colors cursor-pointer py-1"
+        >
+          <HelpCircle className="size-3.5" />
+          <span>How this works</span>
+        </button>
+      </div>
+
       <div className="flex flex-col lg:flex-row gap-8 items-start">
         {/* Left Stepper Rail */}
         <div className="w-56 shrink-0 pt-2">
@@ -294,18 +461,25 @@ export function PlanPage() {
         {/* Main Step Interaction Panel */}
         <div className="flex-1 min-w-0">
           <PromptBridgePanel
+            key={currentStepIndex}
             stepIndex={currentStepIndex}
             stepId={String(currentStepIndex + 1)}
             stepName={currentStep?.title || 'Plan Step'}
-            promptText={currentStep?.promptText || ''}
-            answer={answers[currentStepIndex] || ''}
-            mode={(currentStep as any)?.mode || 'BALANCED'}
-            ideaVerdict={(currentStep as any)?.ideaVerdict}
-            stale={Boolean((currentStep as any)?.stale)}
+            promptText={stepPromptData?.prompt || currentStep?.promptText || ''}
+            mode={stepPromptData?.mode || (currentStep as any)?.mode || 'BALANCED'}
+            ideaVerdict={stepPromptData?.ideaVerdict || (currentStep as any)?.ideaVerdict}
+            stale={Boolean(stepPromptData?.stale ?? (currentStep as any)?.stale)}
             aiAllowed={aiAllowed}
+            isLeader={plan.permissions?.isLeader ?? true}
+            analysisState={stepPromptData?.analysisState}
+            ready={stepPromptData ? (stepPromptData.ready ?? true) : !loadingStepPrompt}
+            outputFiles={stepPromptData?.outputFiles || []}
+            bundleName={stepPromptData?.bundleName}
+            validatedWithOverrides={(currentStep as any)?.validatedWithOverrides}
+            issuesCount={(currentStep as any)?.errors?.length || 0}
             onRefreshPrompt={handleRefreshPrompt}
-            onAnswerChange={handleAnswerChange}
-            onValidate={handleValidateStep}
+            onValidateFiles={handleValidateStepFiles}
+            onValidateText={handleValidateStepText}
             onSuccess={handleStepSuccess}
             onDownloadIdeas={() => ideaService.exportIdeasMarkdown(activeRoomId)}
             onDownloadContext={() => planService.downloadContext(activeRoomId, currentStepKey)}
@@ -340,17 +514,10 @@ export function PlanPage() {
                   <span className="font-mono font-bold">{plan.completion.docsCount}</span>
                 </div>
                 <div className="p-2 rounded-lg bg-muted/40">
-                  <span className="text-muted-foreground text-[10px] block">TASKS</span>
-                  <span className="font-mono font-bold">{plan.completion.tasksCount}</span>
+                  <span className="text-muted-foreground text-[10px] block">PHASES</span>
+                  <span className="font-mono font-bold">{plan.completion.phasesCount ?? 5}</span>
                 </div>
               </div>
-
-              {(plan.completion.unassignedTasksCount || 0) > 0 && (
-                <p className="text-[11px] text-amber-600 flex items-center gap-1 font-medium">
-                  <AlertTriangle className="size-3 shrink-0" />
-                  {plan.completion.unassignedTasksCount} task{plan.completion.unassignedTasksCount > 1 ? 's' : ''} need an owner
-                </p>
-              )}
 
               {plan?.permissions?.canEnterBuild && (
                 <Button
@@ -367,43 +534,24 @@ export function PlanPage() {
         </div>
       </div>
 
-      {/* Confirmation Dialog on Editing Validated Step */}
-      <Dialog open={confirmClearOpen} onOpenChange={setConfirmClearOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-sm font-bold flex items-center gap-2">
-              <AlertTriangle className="size-4 text-amber-600" /> Confirm Step Modification
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground pt-1">
-              Modifying this validated step will invalidate and clear subsequent steps:
-              <span className="font-semibold text-foreground block mt-1">
-                {clearedStepsList.join(', ')}
-              </span>
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0 mt-3">
-            <Button variant="ghost" size="sm" onClick={() => setConfirmClearOpen(false)} className="text-xs">
-              Cancel
-            </Button>
-            <Button variant="destructive" size="sm" onClick={handleConfirmClear} className="text-xs">
-              Clear & Save Draft
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Build Phase Transition Overlay */}
       {showTransitionOverlay && (
         <React.Suspense fallback={null}>
           <BuildPhaseTransitionOverlay
             roomId={activeRoomId}
             docsCount={transitionCounts.docs}
-            tasksCount={transitionCounts.tasks}
+            phasesCount={plan?.completion?.phasesCount ?? 5}
             onNavigate={() => navigate(`/app/room/${activeRoomId}/board`)}
             onComplete={() => setShowTransitionOverlay(false)}
           />
         </React.Suspense>
       )}
+
+      {/* First-time / Manual Plan Guide Modal */}
+      <PlanGuideModal
+        isOpen={showGuideModal}
+        onClose={handleCloseGuide}
+      />
     </div>
   );
 }

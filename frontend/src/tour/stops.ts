@@ -100,7 +100,7 @@ export const TOUR_STOPS: TourStop[] = [
     label: 'Submit',
     sidebarTag: 'SUBMIT > Submission',
     title: 'Submit with time to spare.',
-    caption: "One checklist, built from the event's own rules.",
+    caption: "Mark the project submitted when you've sent it to the event platform.",
     durationMs: 8500,
     Scene: SubmitScene,
   },

@@ -33,7 +33,8 @@ function getCookie(name: string): string | null {
   return match ? decodeURIComponent(match[2]) : null;
 }
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+import { API_BASE_URL } from '@/lib/apiClient';
+export { API_BASE_URL };
 
 export interface ApiFetchOptions extends RequestInit {
   skipRetry?: boolean;
@@ -151,6 +152,11 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 
     const message = body.message || 'Request failed';
     const code = body.code || `HTTP_${res.status}`;
+
+    if (code === 'LIMIT_REACHED') {
+      toast.info(message);
+    }
+
     throw new ApiError(res.status, message, code, body.details, body.requestId, body.fieldErrors);
   }
 

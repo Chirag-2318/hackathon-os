@@ -16,11 +16,16 @@ import java.util.UUID;
 public class InviteController {
 
     private final InviteService inviteService;
+    private final RoomEmailInviteService roomEmailInviteService;
     private final CurrentUser currentUser;
     private final com.hackathonos.backend.common.idempotency.IdempotencyService idempotencyService;
 
-    public InviteController(InviteService inviteService, CurrentUser currentUser, com.hackathonos.backend.common.idempotency.IdempotencyService idempotencyService) {
+    public InviteController(InviteService inviteService,
+                            RoomEmailInviteService roomEmailInviteService,
+                            CurrentUser currentUser,
+                            com.hackathonos.backend.common.idempotency.IdempotencyService idempotencyService) {
         this.inviteService = inviteService;
+        this.roomEmailInviteService = roomEmailInviteService;
         this.currentUser = currentUser;
         this.idempotencyService = idempotencyService;
     }
@@ -33,16 +38,41 @@ public class InviteController {
         return inviteService.createInviteLink(user, roomId, request);
     }
 
-    @GetMapping("/api/v1/rooms/{roomId}/invites")
-    public List<InviteResponse> listActiveInvites(@PathVariable UUID roomId) {
+    @com.hackathonos.backend.common.security.RateLimited(key = "email_invite", limit = 20, periodSeconds = 60)
+    @PostMapping({"/rooms/{roomId}/invites/email", "/api/v1/rooms/{roomId}/invites/email"})
+    public EmailInviteItemDto sendEmailInvite(@PathVariable UUID roomId,
+                                              @Valid @RequestBody InviteEmailRequest request) {
         User user = currentUser.get();
-        return inviteService.listActiveInvites(user, roomId);
+        return roomEmailInviteService.sendEmailInvite(user, roomId, request);
     }
 
-    @DeleteMapping("/api/v1/rooms/{roomId}/invites/{inviteId}")
-    public void revokeInvite(@PathVariable UUID roomId, @PathVariable UUID inviteId) {
+    @GetMapping({"/rooms/{roomId}/invites", "/api/v1/rooms/{roomId}/invites"})
+    public List<EmailInviteItemDto> listRoomInvites(@PathVariable UUID roomId) {
         User user = currentUser.get();
-        inviteService.revokeInvite(user, roomId, inviteId);
+        return roomEmailInviteService.listRoomInvites(user, roomId);
+    }
+
+    @PostMapping({"/rooms/{roomId}/invites/{id}/resend", "/api/v1/rooms/{roomId}/invites/{id}/resend"})
+    public EmailInviteItemDto resendInvite(@PathVariable UUID roomId, @PathVariable UUID id) {
+        User user = currentUser.get();
+        return roomEmailInviteService.resendInvite(user, roomId, id);
+    }
+
+    @DeleteMapping({"/rooms/{roomId}/invites/{id}", "/api/v1/rooms/{roomId}/invites/{id}"})
+    public void revokeInvite(@PathVariable UUID roomId, @PathVariable UUID id) {
+        User user = currentUser.get();
+        roomEmailInviteService.revokeInvite(user, roomId, id);
+    }
+
+    @GetMapping("/api/v1/invites/preview")
+    public TokenInvitePreviewDto previewInviteByToken(@RequestParam String token) {
+        return roomEmailInviteService.previewInvite(token);
+    }
+
+    @PostMapping("/api/v1/invites/accept")
+    public JoinInviteResponse acceptInvite(@Valid @RequestBody AcceptInviteRequest request) {
+        User user = currentUser.get();
+        return roomEmailInviteService.acceptInvite(user, request.token());
     }
 
     @GetMapping("/api/v1/invites/{token}")

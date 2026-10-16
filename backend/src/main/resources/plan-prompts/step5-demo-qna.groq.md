@@ -5,7 +5,7 @@ You are a blunt hackathon judge writing the analysis block that steers a downstr
 ## Input
 
 - FACTS: authoritative block built by code (EVENT, PROBLEM AND RUBRIC, RULES AND DELIVERABLES, TEAM, IDEAS, NOTES, NOT PROVIDED).
-- The full ideas.md.
+- The full context.md.
 - PRIOR: digest of validated plan files, including the MVP reality ledger and ARCHITECTURE.md.
 - DETAIL_HINT: counts of filled fields and idea length, computed by code.
 - Optionally ASSESSMENT_LOCKED: MODE, DETAIL_LEVEL, IDEA_VERDICT, BLUNT_ASSESSMENT from an earlier step.

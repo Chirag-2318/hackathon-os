@@ -36,8 +36,31 @@ public class DocRequests {
     public record DocCommentAuthorDto(
             UUID userId,
             String name,
-            String avatarUrl
-    ) {}
+            String avatarUrl,
+            String avatarType,
+            Integer avatarPreset,
+            com.hackathonos.backend.users.dto.UserSummaryDto user
+    ) {
+        public DocCommentAuthorDto(UUID userId, String name, String avatarUrl) {
+            this(userId, name, avatarUrl, avatarUrl != null ? "CUSTOM" : "NONE", null, null);
+        }
+
+        public static DocCommentAuthorDto from(com.hackathonos.backend.users.User user) {
+            if (user == null) {
+                com.hackathonos.backend.users.dto.UserSummaryDto summary = com.hackathonos.backend.users.dto.UserSummaryDto.from(null);
+                return new DocCommentAuthorDto(null, summary.displayName(), null, summary.avatarType(), summary.avatarPreset(), summary);
+            }
+            com.hackathonos.backend.users.dto.UserSummaryDto summary = com.hackathonos.backend.users.dto.UserSummaryDto.from(user);
+            return new DocCommentAuthorDto(
+                    user.getId(),
+                    summary.displayName(),
+                    summary.avatarUrl(),
+                    summary.avatarType(),
+                    summary.avatarPreset(),
+                    summary
+            );
+        }
+    }
 
     public record VersionContentDto(
             int version,

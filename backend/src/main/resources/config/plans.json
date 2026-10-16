@@ -1,0 +1,47 @@
+{
+  "paymentsEnabled": false,
+  "currency": "USD",
+  "plans": [
+    {
+      "id": "FREE",
+      "name": "Free",
+      "price": 0,
+      "roomsPerMonth": 3,
+      "description": "Essential toolkit for hackathon teams and individual builders.",
+      "features": [
+        { "text": "3 rooms per month", "planned": false },
+        { "text": "Brief, Ideate, Plan, Board, MVP Studio, Docs, Tech, Pitch kit and Submission", "planned": false },
+        { "text": "Export any room as a ZIP", "planned": false },
+        { "text": "Playbooks and tool directory", "planned": false }
+      ]
+    },
+    {
+      "id": "PRO",
+      "name": "Pro",
+      "price": 9,
+      "roomsPerMonth": 25,
+      "description": "For prolific hackers and serial competitors seeking AI superpowers.",
+      "features": [
+        { "text": "Everything in Free", "planned": false },
+        { "text": "25 rooms per month", "planned": false },
+        { "text": "Claude MCP access: connect Hackathon OS to Claude so it can read your room context", "planned": true },
+        { "text": "Post-hackathon support: a continuation plan and a portfolio entry for your project", "planned": true },
+        { "text": "Higher AI limits", "planned": true },
+        { "text": "Priority support", "planned": true }
+      ]
+    },
+    {
+      "id": "MAX",
+      "name": "Max",
+      "price": 19,
+      "roomsPerMonth": null,
+      "description": "Full access for teams, leaders, and hackathon power users.",
+      "features": [
+        { "text": "Everything in Pro", "planned": false },
+        { "text": "Unlimited rooms", "planned": false },
+        { "text": "Review, Retro and Summary pages", "planned": false },
+        { "text": "GitHub branch graph: a visual map of your branches, merges and pull requests so you can see how your code fits together", "planned": true }
+      ]
+    }
+  ]
+}

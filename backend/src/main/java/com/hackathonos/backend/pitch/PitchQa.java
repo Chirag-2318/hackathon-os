@@ -17,7 +17,7 @@ public class PitchQa {
     @Column(name = "position", nullable = false)
     private int position;
 
-    @Column(name = "question", nullable = false, length = 500)
+    @Column(name = "question", nullable = false, columnDefinition = "text")
     private String question;
 
     @Column(name = "answer", columnDefinition = "TEXT")

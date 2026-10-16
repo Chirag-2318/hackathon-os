@@ -133,3 +133,30 @@ public class SubmissionController {
         return submissionService.reopen(roomId, user);
     }
 }
+
+@RestController
+@RequestMapping("/api/v1/rooms/{roomId}")
+class RoomSubmitDirectController {
+
+    private final SubmissionService submissionService;
+
+    public RoomSubmitDirectController(SubmissionService submissionService) {
+        this.submissionService = submissionService;
+    }
+
+    @PostMapping("/submit")
+    public SubmissionDtos.SubmissionResponse submitDirect(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user
+    ) {
+        return submissionService.markSubmitted(roomId, user);
+    }
+
+    @PostMapping({"/submit/reopen", "/reopen"})
+    public SubmissionDtos.SubmissionResponse reopenDirect(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user
+    ) {
+        return submissionService.reopen(roomId, user);
+    }
+}

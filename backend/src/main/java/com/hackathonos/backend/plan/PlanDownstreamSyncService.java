@@ -106,6 +106,11 @@ public class PlanDownstreamSyncService {
 
     @Transactional
     public void savePlanDoc(Room room, String fileName, String content, User user) {
+        savePlanDoc(room, fileName, content, user, null);
+    }
+
+    @Transactional
+    public void savePlanDoc(Room room, String fileName, String content, User user, java.util.function.Consumer<com.hackathonos.backend.plan.dto.ValidationIssueDto> warnConsumer) {
         UUID roomId = room.getId();
         String title = switch (fileName) {
             case "PRD.md" -> "Product Requirements Document";
@@ -120,9 +125,12 @@ public class PlanDownstreamSyncService {
             default -> fileName;
         };
 
+        String safeContent = DefensiveParserUtils.defensivelyTrim(content, 400_000, fileName, warnConsumer);
+        String safeTitle = DefensiveParserUtils.trimAtWordBoundary(title, 2000);
+
         Doc doc = docRepository.findByRoomIdAndFileName(roomId, fileName)
-                .orElseGet(() -> new Doc(roomId, fileName, title, 1));
-        doc.setTitle(title);
+                .orElseGet(() -> new Doc(roomId, fileName, safeTitle, 1));
+        doc.setTitle(safeTitle);
         doc.setSource("PLAN");
         doc.setLastEditedBy(user != null ? user.getId() : null);
         doc.setUpdatedAt(Instant.now());
@@ -133,43 +141,53 @@ public class PlanDownstreamSyncService {
         doc.setCurrentVersion(nextVer);
         docRepository.save(doc);
 
-        docVersionRepository.save(new DocVersion(doc.getId(), nextVer, content, "Validated from plan step", user != null ? user.getId() : null));
+        docVersionRepository.save(new DocVersion(doc.getId(), nextVer, safeContent, "Validated from plan step", user != null ? user.getId() : null));
     }
 
     @Transactional
     public void syncStep(Room room, String stepKey, Map<String, String> files, User user) {
+        syncStep(room, stepKey, files, user, null);
+    }
+
+    @Transactional
+    public void syncStep(Room room, String stepKey, Map<String, String> files, User user, java.util.function.Consumer<com.hackathonos.backend.plan.dto.ValidationIssueDto> warnConsumer) {
         for (Map.Entry<String, String> entry : files.entrySet()) {
-            savePlanDoc(room, entry.getKey(), entry.getValue(), user);
+            savePlanDoc(room, entry.getKey(), entry.getValue(), user, warnConsumer);
         }
         switch (stepKey.toLowerCase()) {
-            case "prd" -> {
+            case "prd", "prd-mvp" -> {
                 String mvpMd = files.get("MVP.md");
                 if (mvpMd != null) {
-                    syncMvpFromMarkdown(room, mvpMd, user);
+                    syncMvpFromMarkdown(room, mvpMd, user, warnConsumer);
                 }
             }
-            case "phases" -> {
+            case "phases", "phases-design" -> {
                 String phasesMd = files.get("PHASES.md");
                 if (phasesMd != null) {
-                    syncPhasesFromMarkdown(room, phasesMd);
+                    syncPhasesFromMarkdown(room, phasesMd, warnConsumer);
                 }
             }
             case "tasks" -> {
                 String tasksMd = files.get("TASKS.md");
                 if (tasksMd != null) {
-                    syncTasksFromMarkdown(room, tasksMd, user);
+                    syncTasksFromMarkdown(room, tasksMd, user, warnConsumer);
                 }
             }
-            case "demo" -> {
+            case "demo", "demo-qna" -> {
                 String demoMd = files.get("DEMO_SCRIPT.md");
                 String qnaMd = files.get("QNA.md");
-                syncPitchKitFromMarkdown(room, demoMd, qnaMd);
+                syncPitchKitFromMarkdown(room, demoMd, qnaMd, warnConsumer);
             }
         }
     }
 
     @Transactional
     public void syncMvpFromMarkdown(Room room, String mvpMd, User user) {
+        syncMvpFromMarkdown(room, mvpMd, user, null);
+    }
+
+    @Transactional
+    public void syncMvpFromMarkdown(Room room, String mvpMd, User user, java.util.function.Consumer<com.hackathonos.backend.plan.dto.ValidationIssueDto> warnConsumer) {
         UUID roomId = room.getId();
         if (mvpMd == null || mvpMd.isBlank()) return;
 
@@ -178,29 +196,48 @@ public class PlanDownstreamSyncService {
         // 1. Wow moment
         String wow = extractSection(mvpMd, "## Wow moment");
         if (wow != null && !wow.isBlank()) {
-            if (wow.length() > 400) wow = wow.substring(0, 397) + "...";
-            state.setWow(wow.trim());
+            wow = DefensiveParserUtils.defensivelyTrim(wow.trim(), 4000, "MVP.md", warnConsumer);
+            state.setWow(wow);
         }
 
         // 2. What breaks first
         String breaks = extractSection(mvpMd, "## What breaks first");
         if (breaks != null && !breaks.isBlank()) {
-            state.setBreaksFirst(breaks.trim());
+            breaks = DefensiveParserUtils.defensivelyTrim(breaks.trim(), 4000, "MVP.md", warnConsumer);
+            state.setBreaksFirst(breaks);
         }
 
         // 3. Differentiation
         String diff = extractSection(mvpMd, "## Differentiation");
         if (diff != null && !diff.isBlank()) {
-            state.setDifferentiation(diff.trim());
+            diff = DefensiveParserUtils.defensivelyTrim(diff.trim(), 4000, "MVP.md", warnConsumer);
+            state.setDifferentiation(diff);
         }
 
         // 4. Health checklist
         String health = extractSection(mvpMd, "## Health checklist");
         if (health != null) {
-            state.setHealthRuns(health.contains("[x]"));
-            state.setHealthStable(health.toLowerCase().contains("external service"));
-            state.setHealthClear30(health.toLowerCase().contains("30 seconds"));
-            state.setHealthWow60(health.toLowerCase().contains("first minute") || health.toLowerCase().contains("60 seconds"));
+            boolean runs = false;
+            boolean stable = false;
+            boolean clear30 = false;
+            boolean wow60 = false;
+            for (String line : health.split("\n")) {
+                String trimmed = line.trim().toLowerCase();
+                boolean isChecked = trimmed.contains("[x]");
+                if (trimmed.contains("runs end to end") || trimmed.contains("walk the core flow")) {
+                    runs = isChecked;
+                } else if (trimmed.contains("external service") || trimmed.contains("flaky")) {
+                    stable = isChecked;
+                } else if (trimmed.contains("30 seconds") || trimmed.contains("30s")) {
+                    clear30 = isChecked;
+                } else if (trimmed.contains("first minute") || trimmed.contains("60 seconds") || trimmed.contains("wow moment")) {
+                    wow60 = isChecked;
+                }
+            }
+            state.setHealthRuns(runs);
+            state.setHealthStable(stable);
+            state.setHealthClear30(clear30);
+            state.setHealthWow60(wow60);
         }
 
         state.setLastEditedBy(user != null ? user.getId() : null);
@@ -217,8 +254,8 @@ public class PlanDownstreamSyncService {
                 if (trimmed.matches("^\\d+\\.\\s+.*")) {
                     String title = trimmed.replaceFirst("^\\d+\\.\\s+", "").trim();
                     if (!title.isEmpty()) {
-                        if (title.length() > 120) title = title.substring(0, 117) + "...";
-                        flowStepRepository.save(new MvpFlowStep(roomId, pos++, title, "PLANNED", null));
+                        title = DefensiveParserUtils.defensivelyTrim(title, 2000, "MVP.md", warnConsumer);
+                        flowStepRepository.save(new MvpFlowStep(roomId, pos++, title, "NOT_YET", null));
                     }
                 }
             }
@@ -239,6 +276,8 @@ public class PlanDownstreamSyncService {
                         String role = parts.length > 3 ? parts[3].trim() : "";
                         String notes = parts.length > 4 ? parts[4].trim() : "";
                         if (!comp.isEmpty()) {
+                            comp = DefensiveParserUtils.defensivelyTrim(comp, 2000, "MVP.md", warnConsumer);
+                            notes = DefensiveParserUtils.defensivelyTrim(notes, 2000, "MVP.md", warnConsumer);
                             ledgerRowRepository.save(new MvpLedgerRow(roomId, rowPos++, comp, normalizeLedgerStatus(status), null, null, notes));
                         }
                     }
@@ -256,6 +295,7 @@ public class PlanDownstreamSyncService {
                 if (trimmed.matches("^\\d+\\.\\s+.*") || trimmed.startsWith("- ")) {
                     String text = trimmed.replaceFirst("^[\\d.-]+\\s+", "").trim();
                     if (!text.isEmpty()) {
+                        text = DefensiveParserUtils.defensivelyTrim(text, 2000, "MVP.md", warnConsumer);
                         cutItemRepository.save(new MvpCutItem(roomId, cutPos++, text, true));
                     }
                 }
@@ -347,53 +387,157 @@ public class PlanDownstreamSyncService {
 
     @Transactional
     public void syncPhasesFromMarkdown(Room room, String phasesMd) {
+        syncPhasesFromMarkdown(room, phasesMd, null);
+    }
+
+    private record ParsedPhase(
+            String phaseKey,
+            String phaseName,
+            Double sHour,
+            Double eHour,
+            String goal,
+            String exitCp,
+            String owners,
+            String deliverables,
+            String rawMarkdown
+    ) {}
+
+    @Transactional
+    public void syncPhasesFromMarkdown(Room room, String phasesMd, java.util.function.Consumer<com.hackathonos.backend.plan.dto.ValidationIssueDto> warnConsumer) {
         UUID roomId = room.getId();
         if (phasesMd == null || phasesMd.isBlank()) return;
 
         phaseRepository.deleteByRoomId(roomId);
 
-        Pattern phaseHeader = Pattern.compile("###\\s+([A-Za-z0-9_-]+)\\s+-\\s+(.+)");
+        Pattern phaseHeader = Pattern.compile("(?im)^###\\s*(?:Phase\\s*(\\d+)|([A-Za-z0-9_-]+))\\s*[-:—–]?\\s*(.*)$");
         Matcher matcher = phaseHeader.matcher(phasesMd);
 
-        int pos = 0;
-        int totalPhases = 0;
-        while (matcher.find()) totalPhases++;
-
-        matcher.reset();
+        List<ParsedPhase> parsedList = new ArrayList<>();
         while (matcher.find()) {
-            String phaseKey = matcher.group(1).trim();
-            String phaseName = matcher.group(2).trim();
+            int headerStart = matcher.start();
+            String pNum = matcher.group(1);
+            String pKey = matcher.group(2);
+            String phaseKey = pKey != null && !pKey.isBlank() ? pKey.trim() : (pNum != null ? "P" + pNum.trim() : "P" + (parsedList.size() + 1));
+            String phaseName = matcher.group(3).replaceAll("[*_]", "").trim();
+            phaseName = DefensiveParserUtils.defensivelyTrim(phaseName, 2000, "PHASES.md", warnConsumer);
 
             int startPos = matcher.end();
             int endPos = phasesMd.length();
-            // Next phase
             Matcher nextMatcher = phaseHeader.matcher(phasesMd);
             if (nextMatcher.find(startPos)) {
                 endPos = nextMatcher.start();
             }
             String block = phasesMd.substring(startPos, endPos);
+            String rawMarkdown = phasesMd.substring(headerStart, endPos).trim();
 
+            Double sHour = null;
+            Double eHour = null;
+            String goal = null;
             String exitCp = "Phase completion verified";
-            for (String line : block.split("\n")) {
-                if (line.toLowerCase().contains("exit checkpoint:")) {
+            String owners = "[]";
+
+            String[] lines = block.split("\n");
+            StringBuilder deliverablesBuilder = new StringBuilder();
+            boolean inDeliverables = false;
+
+            for (String rawLine : lines) {
+                String line = rawLine.trim();
+                String lower = line.toLowerCase();
+
+                if (lower.startsWith("- hours:") || lower.startsWith("hours:")) {
+                    inDeliverables = false;
+                    String val = line.substring(line.indexOf(":") + 1).trim();
+                    Matcher hm = Pattern.compile("(\\d+(?:\\.\\d+)?)\\s*(?:h|hours?)?\\s*[-–—to]+\\s*(\\d+(?:\\.\\d+)?)\\s*(?:h|hours?)?", Pattern.CASE_INSENSITIVE).matcher(val);
+                    if (hm.find()) {
+                        try {
+                            sHour = Double.parseDouble(hm.group(1));
+                            eHour = Double.parseDouble(hm.group(2));
+                        } catch (Exception ignored) {}
+                    }
+                } else if (lower.startsWith("- goal:") || lower.startsWith("goal:")) {
+                    inDeliverables = false;
+                    goal = line.substring(line.indexOf(":") + 1).trim();
+                } else if (lower.startsWith("- exit checkpoint:") || lower.startsWith("exit checkpoint:")) {
+                    inDeliverables = false;
                     exitCp = line.substring(line.indexOf(":") + 1).trim();
-                    break;
+                } else if (lower.startsWith("- owners:") || lower.startsWith("owners:")) {
+                    inDeliverables = false;
+                    String rawOwners = line.substring(line.indexOf(":") + 1).trim();
+                    List<String> ownerList = new ArrayList<>();
+                    Matcher om = Pattern.compile("@[a-zA-Z0-9_.-]+").matcher(rawOwners);
+                    while (om.find()) {
+                        ownerList.add(om.group());
+                    }
+                    if (ownerList.isEmpty() && !rawOwners.isBlank()) {
+                        for (String part : rawOwners.split("[,;]")) {
+                            String p = part.trim();
+                            if (!p.isBlank()) ownerList.add(p.startsWith("@") ? p : "@" + p);
+                        }
+                    }
+                    try {
+                        owners = objectMapper.writeValueAsString(ownerList);
+                    } catch (Exception e) {
+                        owners = "[]";
+                    }
+                } else if (lower.startsWith("- deliverables:") || lower.startsWith("deliverables:")) {
+                    inDeliverables = true;
+                    String rest = line.substring(line.indexOf(":") + 1).trim();
+                    if (!rest.isBlank()) deliverablesBuilder.append(rest).append("\n");
+                } else if (inDeliverables) {
+                    if (line.startsWith("- ") || line.startsWith("* ")) {
+                        deliverablesBuilder.append(line).append("\n");
+                    } else if (line.isBlank()) {
+                        // ignore empty lines
+                    } else {
+                        inDeliverables = false;
+                    }
                 }
             }
 
-            double startPct = totalPhases > 0 ? (pos * 100.0) / totalPhases : 0.0;
-            double endPct = totalPhases > 0 ? ((pos + 1) * 100.0) / totalPhases : 100.0;
+            String deliverables = deliverablesBuilder.toString().trim();
+            exitCp = DefensiveParserUtils.defensivelyTrim(exitCp, 2000, "PHASES.md", warnConsumer);
+            if (goal != null) goal = DefensiveParserUtils.defensivelyTrim(goal, 4000, "PHASES.md", warnConsumer);
+
+            parsedList.add(new ParsedPhase(phaseKey, phaseName, sHour, eHour, goal, exitCp, owners, deliverables, rawMarkdown));
+        }
+
+        double duration = room.getDurationHours() > 0 ? room.getDurationHours() : 36.0;
+        boolean hasInvalidHours = parsedList.stream().anyMatch(p -> p.sHour() == null || p.eHour() == null || p.eHour() <= p.sHour());
+        int totalPhases = parsedList.size();
+        double step = totalPhases > 0 ? duration / totalPhases : duration;
+
+        for (int pos = 0; pos < totalPhases; pos++) {
+            ParsedPhase pp = parsedList.get(pos);
+            double sH = (!hasInvalidHours && pp.sHour() != null) ? pp.sHour() : (pos * step);
+            double eH = (!hasInvalidHours && pp.eHour() != null) ? pp.eHour() : ((pos + 1) * step);
+
+            double startPct = duration > 0 ? (sH / duration) * 100.0 : 0.0;
+            double endPct = duration > 0 ? (eH / duration) * 100.0 : 100.0;
 
             PlanPhase phase = new PlanPhase(
                     roomId,
-                    phaseKey,
-                    pos++,
-                    phaseName,
+                    pp.phaseKey(),
+                    pos,
+                    pp.phaseName(),
                     BigDecimal.valueOf(startPct),
                     BigDecimal.valueOf(endPct),
-                    exitCp,
-                    "[]"
+                    pp.exitCp(),
+                    pp.owners()
             );
+            phase.setStartHour(BigDecimal.valueOf(sH));
+            phase.setEndHour(BigDecimal.valueOf(eH));
+            phase.setGoal(pp.goal());
+            phase.setOwners(pp.owners());
+            phase.setDeliverables(pp.deliverables());
+            phase.setRawMarkdown(pp.rawMarkdown());
+
+            boolean isBuildStage = "build".equalsIgnoreCase(room.getStage()) || "BUILD".equalsIgnoreCase(room.getWorkflowStage());
+            if (isBuildStage && pos == 0) {
+                phase.setStatus("ACTIVE");
+                phase.setActivatedAt(Instant.now());
+            } else {
+                phase.setStatus("NOT_STARTED");
+            }
             phaseRepository.save(phase);
         }
 
@@ -403,6 +547,11 @@ public class PlanDownstreamSyncService {
 
     @Transactional
     public void syncTasksFromMarkdown(Room room, String tasksMd, User user) {
+        syncTasksFromMarkdown(room, tasksMd, user, null);
+    }
+
+    @Transactional
+    public void syncTasksFromMarkdown(Room room, String tasksMd, User user, java.util.function.Consumer<com.hackathonos.backend.plan.dto.ValidationIssueDto> warnConsumer) {
         UUID roomId = room.getId();
         if (tasksMd == null || tasksMd.isBlank()) return;
 
@@ -435,7 +584,13 @@ public class PlanDownstreamSyncService {
         List<PlanPhase> phases = phaseRepository.findByRoomIdOrderByPositionAsc(roomId);
         Map<String, UUID> phaseKeyToId = new HashMap<>();
         for (PlanPhase p : phases) {
-            phaseKeyToId.put(p.getPlanKey().toLowerCase(), p.getId());
+            phaseKeyToId.put(p.getPlanKey().toLowerCase().trim(), p.getId());
+            String pk = p.getPlanKey().toLowerCase().trim();
+            if (pk.startsWith("p")) {
+                phaseKeyToId.put("phase " + pk.substring(1), p.getId());
+                phaseKeyToId.put("phase" + pk.substring(1), p.getId());
+                phaseKeyToId.put(pk.substring(1), p.getId());
+            }
         }
 
         // Only replace unstarted unconfirmed tasks if tasks already started
@@ -446,6 +601,7 @@ public class PlanDownstreamSyncService {
             for (Task t : existingTasks) {
                 if ("TODO".equalsIgnoreCase(t.getStatus()) && t.getConfirmedAt() == null && !t.isConfirmedDone()) {
                     dependencyRepository.deleteByTaskId(t.getId());
+                    dependencyRepository.deleteByDependsOnTaskId(t.getId());
                     acceptanceRepository.deleteByTaskId(t.getId());
                     labelRepository.deleteByTaskId(t.getId());
                     historyRepository.deleteByTaskId(t.getId());
@@ -455,6 +611,7 @@ public class PlanDownstreamSyncService {
         } else {
             for (Task t : existingTasks) {
                 dependencyRepository.deleteByTaskId(t.getId());
+                dependencyRepository.deleteByDependsOnTaskId(t.getId());
                 acceptanceRepository.deleteByTaskId(t.getId());
                 labelRepository.deleteByTaskId(t.getId());
                 historyRepository.deleteByTaskId(t.getId());
@@ -463,7 +620,7 @@ public class PlanDownstreamSyncService {
         }
 
         // Parse TASKS.md
-        Pattern taskHeader = Pattern.compile("###\\s+(T-\\d{3})\\s+-\\s+(.+)");
+        Pattern taskHeader = Pattern.compile("(?im)^###\\s*[*_]*(T-\\d{3})[*_]*\\s*[-:—–]?\\s*(.*)$");
         Matcher m = taskHeader.matcher(tasksMd);
 
         Map<String, Task> createdTasksMap = new HashMap<>();
@@ -474,9 +631,12 @@ public class PlanDownstreamSyncService {
         Instant eventEnd = room.getEventEnd() != null ? room.getEventEnd() : eventStart.plus(Duration.ofHours(36));
 
         while (m.find()) {
-            String taskKeyFromDoc = m.group(1).trim();
-            String taskTitle = m.group(2).trim();
-            if (taskTitle.length() > 140) taskTitle = taskTitle.substring(0, 137) + "...";
+            String taskKeyFromDoc = m.group(1).trim().toUpperCase();
+            String rawTaskTitle = m.group(2).replaceAll("[*_]", "").trim();
+            String taskTitle = DefensiveParserUtils.defensivelyTrim(rawTaskTitle, 200, "TASKS.md", warnConsumer);
+            if (taskTitle.isBlank()) {
+                taskTitle = "Task " + taskKeyFromDoc;
+            }
 
             int start = m.end();
             int end = tasksMd.length();
@@ -494,9 +654,24 @@ public class PlanDownstreamSyncService {
             String prioStr = extractLineValue(block, "- Priority:");
             String depsStr = extractLineValue(block, "- Depends on:");
             String desc = extractMultiLine(block, "- Description:", "- Acceptance:");
+            desc = DefensiveParserUtils.defensivelyTrim(desc != null ? desc : "", 4000, "TASKS.md", warnConsumer);
             List<String> acceptanceLines = extractAcceptanceLines(block);
 
-            UUID phaseUuid = phaseIdStr != null ? phaseKeyToId.get(phaseIdStr.toLowerCase()) : null;
+            UUID phaseUuid = null;
+            if (phaseIdStr != null) {
+                String cleanPhase = phaseIdStr.replaceAll("[*_]", "").toLowerCase().trim();
+                phaseUuid = phaseKeyToId.get(cleanPhase);
+                if (phaseUuid == null) {
+                    Matcher numM = Pattern.compile("\\d+").matcher(cleanPhase);
+                    if (numM.find()) {
+                        phaseUuid = phaseKeyToId.get("p" + numM.group());
+                    }
+                }
+            }
+            if (phaseUuid == null && !phases.isEmpty()) {
+                phaseUuid = phases.get(0).getId();
+            }
+
             UUID assigneeId = null;
             if (assigneeStr != null && !assigneeStr.equalsIgnoreCase("UNASSIGNED")) {
                 assigneeId = handleToUserId.get(assigneeStr.toLowerCase().trim());
@@ -518,6 +693,14 @@ public class PlanDownstreamSyncService {
             }
 
             TaskKeyService.TaskKeyResult keyResult = taskKeyService.nextKeyResult(room);
+            while (taskRepository.findByRoomIdAndTaskKey(roomId, keyResult.key()).isPresent()) {
+                keyResult = taskKeyService.nextKeyResult(room);
+            }
+
+            String safeRole = role != null && !role.isBlank()
+                    ? DefensiveParserUtils.trimAtWordBoundary(role.trim(), 50)
+                    : "Engineering";
+
             Task task = new Task(
                     roomId,
                     keyResult.key(),
@@ -529,7 +712,7 @@ public class PlanDownstreamSyncService {
                     leaderId,
                     prio,
                     phaseUuid,
-                    role != null ? role : "Engineering",
+                    safeRole,
                     estMin,
                     eventEnd,
                     position++,
@@ -538,15 +721,23 @@ public class PlanDownstreamSyncService {
             task = taskRepository.save(task);
             createdTasksMap.put(taskKeyFromDoc, task);
 
+            Set<String> savedLabels = new HashSet<>();
             if (role != null && !role.isBlank()) {
-                labelRepository.save(new TaskLabel(task.getId(), role));
+                String cleanRole = DefensiveParserUtils.trimAtWordBoundary(role.trim(), 50);
+                if (!cleanRole.isBlank() && savedLabels.add(cleanRole.toLowerCase())) {
+                    labelRepository.save(new TaskLabel(task.getId(), cleanRole));
+                }
             }
             if (type != null && !type.isBlank()) {
-                labelRepository.save(new TaskLabel(task.getId(), type));
+                String cleanType = DefensiveParserUtils.trimAtWordBoundary(type.trim(), 50);
+                if (!cleanType.isBlank() && savedLabels.add(cleanType.toLowerCase())) {
+                    labelRepository.save(new TaskLabel(task.getId(), cleanType));
+                }
             }
 
             int accPos = 0;
             for (String crit : acceptanceLines) {
+                crit = DefensiveParserUtils.defensivelyTrim(crit, 500, "TASKS.md", warnConsumer);
                 acceptanceRepository.save(new TaskAcceptanceItem(task.getId(), crit, false, accPos++));
             }
 
@@ -562,14 +753,19 @@ public class PlanDownstreamSyncService {
         }
 
         // Create Task Dependencies
+        Set<String> addedDepPairs = new HashSet<>();
         for (Map.Entry<String, List<String>> entry : taskDependenciesMap.entrySet()) {
             Task task = createdTasksMap.get(entry.getKey());
             if (task == null) continue;
 
             for (String depKey : entry.getValue()) {
-                Task depTask = createdTasksMap.get(depKey);
+                String cleanDep = depKey.trim().toUpperCase();
+                Task depTask = createdTasksMap.get(cleanDep);
                 if (depTask != null && !depTask.getId().equals(task.getId())) {
-                    dependencyRepository.save(new TaskDependency(task.getId(), depTask.getId(), roomId));
+                    String pair = task.getId() + "->" + depTask.getId();
+                    if (addedDepPairs.add(pair)) {
+                        dependencyRepository.save(new TaskDependency(task.getId(), depTask.getId(), roomId));
+                    }
                 }
             }
         }
@@ -577,11 +773,16 @@ public class PlanDownstreamSyncService {
 
     @Transactional
     public void syncPitchKitFromMarkdown(Room room, String demoScriptMd, String qnaMd) {
+        syncPitchKitFromMarkdown(room, demoScriptMd, qnaMd, null);
+    }
+
+    @Transactional
+    public void syncPitchKitFromMarkdown(Room room, String demoScriptMd, String qnaMd, java.util.function.Consumer<com.hackathonos.backend.plan.dto.ValidationIssueDto> warnConsumer) {
         if (demoScriptMd != null && !demoScriptMd.isBlank()) {
-            demoSeedService.seedFromPlan(room);
+            demoSeedService.seedFromPlan(room, warnConsumer);
         }
         if (qnaMd != null && !qnaMd.isBlank()) {
-            qaSeedService.seedFromPlan(room);
+            qaSeedService.seedFromPlan(room, warnConsumer);
         }
     }
 
@@ -594,10 +795,15 @@ public class PlanDownstreamSyncService {
     }
 
     private String extractLineValue(String block, String label) {
+        String cleanLabel = label.replaceAll("[-*\\s:]", "").toLowerCase();
         for (String line : block.split("\n")) {
             String trimmed = line.trim();
-            if (trimmed.startsWith(label)) {
-                return trimmed.substring(label.length()).trim();
+            String normLine = trimmed.replaceAll("[-*\\s]", "").toLowerCase();
+            if (normLine.startsWith(cleanLabel + ":")) {
+                int colon = trimmed.indexOf(":");
+                if (colon >= 0) {
+                    return trimmed.substring(colon + 1).replaceAll("[*_]", "").trim();
+                }
             }
         }
         return null;
@@ -613,14 +819,22 @@ public class PlanDownstreamSyncService {
 
     private List<String> extractAcceptanceLines(String block) {
         List<String> list = new ArrayList<>();
-        int accIdx = block.indexOf("- Acceptance:");
-        if (accIdx < 0) return list;
+        Pattern p = Pattern.compile("(?im)^[-*\\s]*[*_]*acceptance[*_]*:\\s*(.*)$");
+        Matcher m = p.matcher(block);
+        if (!m.find()) return list;
 
-        String sub = block.substring(accIdx + "- Acceptance:".length());
+        int accIdx = m.end();
+        String inline = m.group(1).trim();
+        if (!inline.isBlank() && !inline.startsWith("-") && !inline.startsWith("*")) {
+            list.add(inline.replaceAll("[*_]", "").trim());
+        }
+
+        String sub = block.substring(accIdx);
         for (String line : sub.split("\n")) {
             String trimmed = line.trim();
-            if (trimmed.startsWith("- ")) {
-                list.add(trimmed.substring(2).trim());
+            if (trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.matches("^\\d+\\.\\s+.*")) {
+                String clean = trimmed.replaceAll("^[-*\\d.]+\\s+", "").replaceAll("[*_]", "").trim();
+                if (!clean.isBlank()) list.add(clean);
             } else if (trimmed.startsWith("###") || trimmed.startsWith("##")) {
                 break;
             }

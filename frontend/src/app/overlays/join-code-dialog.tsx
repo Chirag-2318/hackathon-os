@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { KeyRound, Loader2, Check, ArrowRight, ShieldAlert } from 'lucide-react';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { apiFetch } from '@/design/api';
+import { playSound } from '@/shared/sound/sound-effects';
 
 function formatCode(raw: string): string {
   const clean = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
@@ -53,6 +54,7 @@ export function JoinCodeDialogOverlay() {
     },
     onSuccess: async (result) => {
       if (result?.roomId) {
+        playSound('success');
         // Fetch room detail to show leader avatar and confirm step before final entry
         try {
           const detail = await apiFetch<any>(`/api/v1/rooms/${result.roomId}/overview`);
@@ -69,6 +71,7 @@ export function JoinCodeDialogOverlay() {
       }
     },
     onError: (err: any) => {
+      playSound('error');
       setError(err?.message || 'Invalid join code. Please check with your leader or try again.');
     },
   });
@@ -149,7 +152,7 @@ export function JoinCodeDialogOverlay() {
                 size="sm"
                 onClick={() => joinMutation.mutate(unformatCode(rawInput))}
                 disabled={joinMutation.isPending || unformatCode(rawInput).length < 8}
-                className="bg-ink text-white hover:bg-ink/90 font-medium"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
               >
                 Join
               </Button>
@@ -159,7 +162,7 @@ export function JoinCodeDialogOverlay() {
           /* Confirm step showing room name and leader avatar */
           <div className="flex flex-col items-center gap-5 py-2 animate-in zoom-in-95 duration-200">
             <div className="w-full p-4 rounded-2xl bg-surface border border-border flex flex-col items-center text-center gap-3">
-              <div className="ring-4 ring-white dark:ring-zinc-900 rounded-full">
+              <div className="ring-4 ring-border rounded-full">
                 <UserAvatar user={confirmedRoom.leader} size={48} />
               </div>
               <div>
@@ -177,7 +180,7 @@ export function JoinCodeDialogOverlay() {
               <Button
                 size="sm"
                 onClick={handleConfirmEnter}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium gap-1.5"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 font-medium gap-1.5"
               >
                 <span>Enter Workspace</span>
                 <ArrowRight className="size-3.5" />

@@ -16,7 +16,7 @@ const variantMap = {
   neutral: 'bg-active text-ink-2 border border-border',
   success: 'bg-success-bg text-success-fg',
   warn:    'bg-warn-bg text-warn-fg',
-  danger:  'bg-danger text-white',
+  danger:  'bg-danger text-on-danger',
 };
 
 export function Pill({ children, variant = 'default', className }: PillProps) {

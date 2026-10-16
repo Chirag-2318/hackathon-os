@@ -15,7 +15,7 @@ public class Idea {
     @Column(name = "room_id", nullable = false)
     private UUID roomId;
 
-    @Column(name = "author_id", nullable = false)
+    @Column(name = "author_id")
     private UUID authorId;
 
     @Column(nullable = false, columnDefinition = "TEXT")
@@ -24,7 +24,7 @@ public class Idea {
     @Column(nullable = false, length = 20)
     private String status = "PENDING"; // PENDING, APPROVED, REJECTED
 
-    @Column(name = "reject_reason", length = 200)
+    @Column(name = "reject_reason", columnDefinition = "text")
     private String rejectReason;
 
     @Column(name = "is_primary", nullable = false)

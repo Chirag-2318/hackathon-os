@@ -20,7 +20,7 @@ public class Doc {
     @Column(name = "file_name", nullable = false, length = 100)
     private String fileName;
 
-    @Column(nullable = false, length = 200)
+    @Column(nullable = false, columnDefinition = "text")
     private String title;
 
     @Column(name = "current_version", nullable = false)

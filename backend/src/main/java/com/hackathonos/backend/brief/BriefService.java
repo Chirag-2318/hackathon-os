@@ -21,6 +21,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.hackathonos.backend.files.FileTextExtractor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -33,6 +37,8 @@ import java.util.*;
 @Service
 public class BriefService {
 
+    private static final Logger log = LoggerFactory.getLogger(BriefService.class);
+
     private final BriefRepository briefRepository;
     private final BriefRubricItemRepository rubricRepository;
     private final UploadedFileRepository uploadedFileRepository;
@@ -43,12 +49,16 @@ public class BriefService {
     private final NotificationService notificationService;
     private final SsrfGuard ssrfGuard;
     private final BriefPdfParser pdfParser;
+    private final FileTextExtractor fileTextExtractor;
     private final BriefMapper briefMapper;
     private final AiService aiService;
     private final ObjectMapper objectMapper;
 
     @Value("${app.upload-dir:./uploads}")
     private String uploadDir;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.admin.AppSettingsService appSettingsService;
 
     public BriefService(
             BriefRepository briefRepository,
@@ -61,6 +71,7 @@ public class BriefService {
             NotificationService notificationService,
             SsrfGuard ssrfGuard,
             BriefPdfParser pdfParser,
+            FileTextExtractor fileTextExtractor,
             BriefMapper briefMapper,
             AiService aiService,
             ObjectMapper objectMapper) {
@@ -74,6 +85,7 @@ public class BriefService {
         this.notificationService = notificationService;
         this.ssrfGuard = ssrfGuard;
         this.pdfParser = pdfParser;
+        this.fileTextExtractor = fileTextExtractor;
         this.briefMapper = briefMapper;
         this.aiService = aiService;
         this.objectMapper = objectMapper;
@@ -208,7 +220,7 @@ public class BriefService {
     }
 
     /**
-     * Ingests a document (.pdf, .md, or .txt) up to 10MB, extracts text, and saves file.
+     * Ingests a document (.pdf, .docx, .md, or .txt), extracts text via FileTextExtractor, and saves file.
      */
     @Transactional
     public BriefResponseDto setPdfSource(UUID roomId, MultipartFile file, User user) {
@@ -218,21 +230,22 @@ public class BriefService {
             throw new ConflictException("BRIEF_LOCKED", "Cannot modify brief source once build phase has started");
         }
 
+        if (appSettingsService != null && file != null) {
+            appSettingsService.checkUploadQuota(user.getId(), file.getSize());
+        }
+
+        FileTextExtractor.ExtractionResult extractedResult = fileTextExtractor.extractText(file);
+        String rawText = extractedResult.text();
+
         byte[] bytes;
         try {
             bytes = file.getBytes();
         } catch (Exception e) {
-            throw new BadRequestException("READ_FAILED", "Could not read uploaded file");
+            bytes = rawText.getBytes(StandardCharsets.UTF_8);
         }
 
         String origName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "document.txt";
         String lowerName = origName.toLowerCase();
-        String rawText;
-        if (lowerName.endsWith(".pdf")) {
-            rawText = pdfParser.extractText(bytes);
-        } else {
-            rawText = new String(bytes, StandardCharsets.UTF_8);
-        }
 
         // Store file on disk
         String randomName = UUID.randomUUID() + "_" + origName;
@@ -251,15 +264,15 @@ public class BriefService {
                 roomId,
                 user.getId(),
                 origName,
-                file.getContentType() != null ? file.getContentType() : "text/plain",
+                file.getContentType() != null ? file.getContentType() : "application/octet-stream",
                 file.getSize(),
                 targetFile.getAbsolutePath(),
                 "brief"
         );
         uploadedFileRepository.save(uploadedFile);
 
-        Brief brief = briefRepository.findByRoomId(roomId).orElseGet(() -> new Brief(roomId, lowerName.endsWith(".pdf") ? "pdf" : "manual"));
-        brief.setSource(lowerName.endsWith(".pdf") ? "pdf" : "manual");
+        Brief brief = briefRepository.findByRoomId(roomId).orElseGet(() -> new Brief(roomId, lowerName.endsWith(".pdf") ? "pdf" : "file"));
+        brief.setSource(lowerName.endsWith(".pdf") ? "pdf" : "file");
         brief.setFileName(origName);
         brief.setRawText(rawText);
         brief.setConfirmed(false);
@@ -269,6 +282,100 @@ public class BriefService {
 
         List<BriefRubricItem> rubric = rubricRepository.findByBriefIdOrderByPositionAsc(brief.getId());
         return briefMapper.toDto(brief, rubric, true, true);
+    }
+
+    /**
+     * Unified file intake: extracts text from PDF, DOCX, or text/markdown using FileTextExtractor.
+     * Updates Brief rawText when executed by a leader, and optionally runs AI extraction if requested and allowed.
+     */
+    @Transactional
+    public FileIntakeResponse intakeFile(UUID roomId, MultipartFile file, boolean extract, User user) {
+        roomAccess.requireMember(roomId, user);
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        boolean isLeader = roomAccess.isLeader(roomId, user.getId());
+
+        if (appSettingsService != null && file != null) {
+            appSettingsService.checkUploadQuota(user.getId(), file.getSize());
+        }
+
+        FileTextExtractor.ExtractionResult extracted = fileTextExtractor.extractText(file);
+        String fullText = extracted.text();
+        int chars = fullText.length();
+        int pages = extracted.pages();
+        boolean truncated = extracted.truncated();
+        List<String> warnings = new ArrayList<>(extracted.warnings());
+
+        boolean saved = false;
+        BriefResponseDto briefDto = null;
+        BriefFieldsDto fields = null;
+
+        if (isLeader && room.getBuildStartedAt() == null) {
+            String origName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "document";
+            Brief brief = briefRepository.findByRoomId(roomId).orElseGet(() -> new Brief(roomId, "file"));
+            brief.setSource("file");
+            brief.setFileName(origName);
+            brief.setRawText(fullText);
+            brief.setConfirmed(false);
+            brief.setConfirmedFields(null);
+            brief.setUpdatedAt(Instant.now());
+            brief = briefRepository.save(brief);
+            saved = true;
+
+            // Save on disk as well
+            try {
+                byte[] bytes = file.getBytes();
+                String randomName = UUID.randomUUID() + "_" + origName;
+                File roomUploadDir = new File(uploadDir, "rooms/" + roomId);
+                if (!roomUploadDir.exists()) {
+                    roomUploadDir.mkdirs();
+                }
+                File targetFile = new File(roomUploadDir, randomName);
+                try (FileOutputStream fos = new FileOutputStream(targetFile)) {
+                    fos.write(bytes);
+                }
+                UploadedFile uploadedFile = new UploadedFile(
+                        roomId,
+                        user.getId(),
+                        origName,
+                        file.getContentType() != null ? file.getContentType() : "application/octet-stream",
+                        file.getSize(),
+                        targetFile.getAbsolutePath(),
+                        "brief"
+                );
+                uploadedFileRepository.save(uploadedFile);
+            } catch (Exception ignored) {}
+
+            List<BriefRubricItem> rubric = rubricRepository.findByBriefIdOrderByPositionAsc(brief.getId());
+            briefDto = briefMapper.toDto(brief, rubric, true, true);
+        }
+
+        boolean aiAllowed = isAiAllowed(roomId);
+        if (extract && aiAllowed) {
+            try {
+                String toExtract = fullText.length() > 20000 ? fullText.substring(0, 20000) : fullText;
+                ExtractBriefResponseDto aiResult = extractBrief(roomId, toExtract, user);
+                fields = aiResult.fields();
+                if (aiResult.brief() != null) {
+                    briefDto = aiResult.brief();
+                }
+            } catch (Exception ex) {
+                log.warn("Brief AI extraction failed during intake: {}", ex.getMessage());
+                warnings.add("AI extraction could not be completed: " + ex.getMessage());
+            }
+        }
+
+        String preview = fullText.length() > 1500 ? fullText.substring(0, 1500) : fullText;
+        return new FileIntakeResponse(preview, chars, pages, truncated, warnings, saved, fields, briefDto);
+    }
+
+    public boolean isAiAllowed(UUID roomId) {
+        if (roomId == null) return true;
+        return briefRepository.findByRoomId(roomId).map(b -> {
+            String p = b.getAiPolicy();
+            if (p == null || p.isBlank()) return true;
+            String up = p.toUpperCase();
+            return !(up.contains("FORBIDDEN") || up.contains("RESTRICTED") || up.contains("PROHIBITED") || up.contains("NO_AI"));
+        }).orElse(true);
     }
 
     /**
@@ -287,6 +394,11 @@ public class BriefService {
         }
         if (files.size() > 5) {
             throw new BadRequestException("TOO_MANY_FILES", "Cannot upload more than 5 images");
+        }
+
+        if (appSettingsService != null) {
+            long totalSize = files.stream().mapToLong(MultipartFile::getSize).sum();
+            appSettingsService.checkUploadQuota(user.getId(), totalSize);
         }
 
         List<String> allowedTypes = List.of("image/png", "image/jpeg", "image/jpg", "image/webp");

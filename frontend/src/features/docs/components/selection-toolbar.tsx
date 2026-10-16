@@ -16,6 +16,7 @@ import { StreamingText } from '@/components/ui/streaming-text';
 import { TextShimmer } from '@/components/ui/text-shimmer';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { AiGate } from '@/features/ai-gate';
 import type { Format } from './editor-utils';
 import { EASE } from './editor-utils';
 
@@ -148,18 +149,20 @@ export function SelectionToolbar({
       className="group flex origin-bottom scale-90 flex-col overflow-hidden rounded-[22px] border border-border bg-popover/95 backdrop-blur-md whitespace-nowrap text-muted-foreground shadow-2xl"
     >
       <div className="relative flex items-center gap-1 p-1.5">
-        <button
-          type="button"
-          onClick={() => {
-            if (askMode) return;
-            onAsk();
-            input.current?.focus({ preventScroll: true });
-          }}
-          className="flex h-8 shrink-0 items-center gap-1.5 rounded-full ps-1.5 pe-2.5 text-sm font-medium text-foreground hover:bg-accent group-data-ask:hover:bg-transparent cursor-pointer"
-        >
-          <span data-stirring={askMode || undefined} className="editor-orb size-5 shrink-0" />
-          <span className={OUT}>Ask AI</span>
-        </button>
+        <AiGate>
+          <button
+            type="button"
+            onClick={() => {
+              if (askMode) return;
+              onAsk();
+              input.current?.focus({ preventScroll: true });
+            }}
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded-full ps-1.5 pe-2.5 text-sm font-medium text-foreground hover:bg-accent group-data-ask:hover:bg-transparent cursor-pointer"
+          >
+            <span data-stirring={askMode || undefined} className="editor-orb size-5 shrink-0" />
+            <span className={OUT}>Ask AI</span>
+          </button>
+        </AiGate>
 
         <div className={cn('mx-1 h-5 w-px shrink-0 bg-border', OUT)} />
 

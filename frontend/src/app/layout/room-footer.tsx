@@ -156,25 +156,23 @@ export function RoomFooter({
         )}
       </Link>
 
-      {/* 3. Bottom status line: Countdown in --font-mono + IST Clock */}
-      <div className="flex items-center justify-between text-[11px] text-ink-3 pt-0.5 mt-0.5">
-        {countdown ? (
-          <span
-            className="font-mono text-[11px] tabular-nums font-medium text-ink-2 truncate"
+      {/* 3. Bottom status line: Countdown on own line + clock on next line */}
+      <div className="flex flex-col gap-1 pt-1 mt-0.5 text-[11px]">
+        {countdown && (
+          <div
+            className="font-mono text-[11px] text-muted-foreground break-words leading-tight"
             style={{ fontFamily: 'var(--font-mono, monospace)' }}
           >
             {countdown}
-          </span>
-        ) : (
-          <span />
+          </div>
         )}
-        <span
-          className="font-mono text-[11px] tabular-nums text-ink-3 shrink-0 ml-auto"
+        <div
+          className="font-mono text-[11px] tabular-nums text-ink-3"
           style={{ fontFamily: 'var(--font-mono, monospace)' }}
           aria-live="polite"
         >
           {clock}
-        </span>
+        </div>
       </div>
     </div>
   );

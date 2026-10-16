@@ -1,0 +1,54 @@
+<!-- Big Mono Countdown Block -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#EFECE3;border-radius:12px;border:1px solid #E2DDD3;margin-bottom:24px;">
+  <tr>
+    <td align="center" style="padding:28px 20px 24px 20px;text-align:center;">
+      <div style="font-family:'SFMono-Regular', Menlo, Consolas, monospace;font-size:36px;font-weight:700;letter-spacing:3px;color:#0B0B0C;line-height:42px;">
+        {{COUNTDOWN}}
+      </div>
+      <div style="font-family:'SFMono-Regular', Menlo, Consolas, monospace;font-size:12px;font-weight:700;letter-spacing:1px;color:#E8A33D;text-transform:uppercase;margin-top:4px;">
+        {{COUNTDOWN_LABEL}}
+      </div>
+      <div style="font-family:'SFMono-Regular', Menlo, Consolas, monospace;font-size:11px;color:#8E8980;margin-top:6px;">
+        as of {{AS_OF_TIME}}
+      </div>
+    </td>
+  </tr>
+  <!-- Thin Elapsed Progress Bar -->
+  <tr>
+    <td style="padding:0 24px 20px 24px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="height:6px;border-radius:3px;overflow:hidden;background-color:#E2DDD3;table-layout:fixed;">
+        <tr>
+          <td width="{{ELAPSED_PERCENT}}%" style="background-color:#E8A33D;height:6px;border-radius:3px 0 0 3px;"></td>
+          <td width="{{REMAINING_PERCENT}}%" style="background-color:#E2DDD3;height:6px;border-radius:0 3px 3px 0;"></td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<!-- Status Checklist Lines -->
+<div style="background-color:#FBF9F5;border-radius:10px;border:1px solid #EAE6DC;padding:16px 18px;margin-bottom:28px;">
+  <div style="font-family:'SFMono-Regular', Menlo, Consolas, monospace;font-size:11px;font-weight:700;color:#8E8980;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">
+    Current Room Status
+  </div>
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+    {{CHECKLIST_ROWS}}
+  </table>
+</div>
+
+<!-- Primary Action Button -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:20px;">
+  <tr>
+    <td align="center">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td align="center" bgcolor="#0B0B0C" style="border-radius:8px;">
+            <a href="{{BOARD_URL}}" target="_blank" style="display:inline-block;padding:14px 36px;font-family:-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;font-size:15px;font-weight:600;color:#F6F3EC;text-decoration:none;border-radius:8px;">
+              Open the board
+            </a>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>

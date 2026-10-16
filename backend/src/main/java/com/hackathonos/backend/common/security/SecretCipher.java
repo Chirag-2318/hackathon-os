@@ -115,4 +115,49 @@ public class SecretCipher {
             throw new RuntimeException("Decryption failed", e);
         }
     }
+
+    public record EncryptedSecret(String ciphertext, String iv) {}
+
+
+    public EncryptedSecret encryptWithIv(String plaintext) {
+        if (plaintext == null) {
+            return null;
+        }
+        try {
+            byte[] iv = new byte[IV_LENGTH_BYTES];
+            new SecureRandom().nextBytes(iv);
+
+            Cipher cipher = Cipher.getInstance(ALGORITHM);
+            GCMParameterSpec parameterSpec = new GCMParameterSpec(TAG_LENGTH_BITS, iv);
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey, parameterSpec);
+
+            byte[] cipherText = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+            return new EncryptedSecret(
+                    Base64.getEncoder().encodeToString(cipherText),
+                    Base64.getEncoder().encodeToString(iv)
+            );
+        } catch (Exception e) {
+            throw new RuntimeException("Encryption failed", e);
+        }
+    }
+
+    public String decryptWithIv(String ciphertextBase64, String ivBase64) {
+        if (ciphertextBase64 == null || ivBase64 == null) {
+            return null;
+        }
+        try {
+            byte[] iv = Base64.getDecoder().decode(ivBase64);
+            byte[] cipherText = Base64.getDecoder().decode(ciphertextBase64);
+
+            Cipher cipher = Cipher.getInstance(ALGORITHM);
+            GCMParameterSpec parameterSpec = new GCMParameterSpec(TAG_LENGTH_BITS, iv);
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, parameterSpec);
+
+            byte[] plainTextBytes = cipher.doFinal(cipherText);
+            return new String(plainTextBytes, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            throw new RuntimeException("Decryption failed", e);
+        }
+    }
 }
+

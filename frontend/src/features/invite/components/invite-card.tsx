@@ -47,15 +47,18 @@ interface InviteCardProps {
   token: string;
 }
 
+import { useCurrentUser } from '@/features/auth/useCurrentUser';
+
 // Track if animation has played once per session
 let hasAnimatedSession = false;
 
 export function InviteCard({ room, token }: InviteCardProps) {
-  const [selectedRole, setSelectedRole] = useState('');
+  const [selectedRole, setSelectedRole] = useState(room.joinableRoles?.[0]?.label || 'BUILDER');
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const join = useJoinRoom(token);
   const isReduced = useIsMotionReduced();
+  const { data: currentUser } = useCurrentUser();
 
   useEffect(() => {
     if (error) {
@@ -66,14 +69,24 @@ export function InviteCard({ room, token }: InviteCardProps) {
   const handleJoin = () => {
     if (!selectedRole) return;
     setError(null);
+
+    if (!currentUser) {
+      sessionStorage.setItem('pending_invite_token', token);
+      navigate(`/signin?redirect=/invite/${token}`);
+      return;
+    }
+
     join.mutate(selectedRole, {
       onSuccess: (result: any) => {
-        if (result) {
+        sessionStorage.removeItem('pending_invite_token');
+        if (result?.roomId) {
+          navigate(`/app/room/${result.roomId}/overview`);
+        } else {
           navigate(ROUTES.POST_JOIN);
         }
       },
-      onError: () => {
-        setError(COPY.invite.errorMessage);
+      onError: (err: any) => {
+        setError(err?.message || COPY.invite.errorMessage);
       },
     });
   };

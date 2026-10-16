@@ -9,8 +9,12 @@ A manual verification checklist for the golden path, in exact sequence.
 - [ ] **Second user joins by code**: Second teammate types an 8-character join code, confirms room details in the modal, and is added to the room roster.
 - [ ] **Brief intake**: User enters hackathon problem statement via link or text, validates extracted fields, and saves the confirmed brief.
 - [ ] **Ideate (Member idea, leader approve and reject)**: Member submits an idea card, leader rejects one with feedback, and leader approves another into the plan.
-- [ ] **Plan 5 steps**: Team completes Problem, MVP scope, Architecture, Timeline, and Resource checkpoints with real-time green validation indicators.
-- [ ] **Build unlock**: Leader advances stage from Plan to Build, triggering the transition confirmation and an active 10-second Undo toast.
+- [ ] **Plan 4 steps**: Team completes PRD & MVP, Stack & Architecture, Phases & Design, and Demo & Q&A checkpoints with real-time green validation indicators.
+- [ ] **Build unlock**: Validating the 4th plan step unlocks Build and plays the plan-to-build animation showing documents created and phases ready.
+- [ ] **Generate tasks per phase**: In Build stage, active phase P1 shows the generation panel; leader copies prompt or generates with AI, validates TASKS_P1.md, and imports tasks into the sprint board.
+- [ ] **Add missing tasks**: Leader opens "Add missing tasks" from the phase header menu in APPEND mode, validating and importing incremental tasks without touching existing ones.
+- [ ] **Complete a phase**: When all tasks in the active phase are confirmed, dropped, or deferred, PhaseCompleteDialog appears with pacing stats and next phase info.
+- [ ] **Start the next phase**: Leader advances to the next phase (or starts early with carryover DEFER_ALL or DROP_ALL), activating P2 and logging room events.
 - [ ] **Board drag**: User drags a task from To Do to In Progress, observing smooth column snap and automatic persistence.
 - [ ] **Task assign**: User assigns a teammate to a card, displaying their initials avatar immediately across connected tabs.
 - [ ] **Docs download**: User clicks the download icon on a document row and saves the raw markdown file to their local filesystem.

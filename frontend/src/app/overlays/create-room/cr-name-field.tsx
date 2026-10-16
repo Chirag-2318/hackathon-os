@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { Sparkles, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { AiGate } from '@/features/ai-gate';
 
 interface CrNameFieldProps {
   value: string;
@@ -120,7 +121,9 @@ export function CrNameField({
               </TooltipContent>
             </Tooltip>
           ) : (
-            suggestButton
+            <AiGate>
+              {suggestButton}
+            </AiGate>
           )}
         </div>
 

@@ -52,6 +52,9 @@ public class MvpSeedService {
         }
 
         Optional<PlanStep> prdStepOpt = stepRepository.findByRoomIdAndStepKey(room.getId(), "prd");
+        if (prdStepOpt.isEmpty() || !prdStepOpt.get().isValidated()) {
+            prdStepOpt = stepRepository.findByRoomIdAndStepKey(room.getId(), "prd-mvp");
+        }
         if (prdStepOpt.isEmpty() || !prdStepOpt.get().isValidated() || prdStepOpt.get().getAnswer() == null) {
             return;
         }
@@ -61,13 +64,13 @@ public class MvpSeedService {
         if (identity == null || identity.isBlank()) {
             identity = extractSection(answer, "## One-sentence identity", "##");
         }
-        if (identity != null && identity.length() > 200) {
-            identity = identity.substring(0, 197) + "...";
+        if (identity != null) {
+            identity = com.hackathonos.backend.plan.DefensiveParserUtils.trimAtWordBoundary(identity.trim(), 2000);
         }
 
         String wow = extractSection(answer, "## Wow moment", "##");
-        if (wow != null && wow.length() > 400) {
-            wow = wow.substring(0, 397) + "...";
+        if (wow != null) {
+            wow = com.hackathonos.backend.plan.DefensiveParserUtils.trimAtWordBoundary(wow.trim(), 4000);
         }
 
         MvpState state = new MvpState(room.getId(), identity != null ? identity.trim() : "", wow != null ? wow.trim() : "");
@@ -90,7 +93,7 @@ public class MvpSeedService {
             if (trimmed.matches("^\\d+\\.\\s+.*")) {
                 String title = trimmed.replaceFirst("^\\d+\\.\\s+", "").trim();
                 if (!title.isBlank()) {
-                    if (title.length() > 120) title = title.substring(0, 117) + "...";
+                    title = com.hackathonos.backend.plan.DefensiveParserUtils.trimAtWordBoundary(title, 2000);
                     steps.add(title);
                 }
             }
@@ -124,6 +127,10 @@ public class MvpSeedService {
                     else if (statusStr.contains("mocked")) status = "MOCKED";
 
                     if (!partName.isBlank()) {
+                        partName = com.hackathonos.backend.plan.DefensiveParserUtils.trimAtWordBoundary(partName, 2000);
+                        if (notes != null) {
+                            notes = com.hackathonos.backend.plan.DefensiveParserUtils.trimAtWordBoundary(notes, 2000);
+                        }
                         ledgerRowRepository.save(new MvpLedgerRow(roomId, pos++, partName, status, null, null, notes));
                     }
                 }
@@ -142,7 +149,7 @@ public class MvpSeedService {
             if (trimmed.startsWith("-") || trimmed.startsWith("*")) {
                 String text = trimmed.substring(1).trim();
                 if (!text.isBlank()) {
-                    if (text.length() > 255) text = text.substring(0, 252) + "...";
+                    text = com.hackathonos.backend.plan.DefensiveParserUtils.trimAtWordBoundary(text, 2000);
                     cutItemRepository.save(new MvpCutItem(roomId, pos++, text, true));
                 }
             }

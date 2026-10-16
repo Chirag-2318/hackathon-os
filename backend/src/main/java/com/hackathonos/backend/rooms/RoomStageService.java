@@ -30,6 +30,8 @@ public class RoomStageService {
     private final ActivityLogger activityLogger;
     private final RoomAccessService roomAccessService;
     private final com.hackathonos.backend.events.RoomEventService roomEventService;
+    private final com.hackathonos.backend.billing.BillingService billingService;
+    private final com.hackathonos.backend.plan.PlanPhaseRepository phaseRepository;
 
     public RoomStageService(
             BriefRepository briefRepository,
@@ -38,7 +40,11 @@ public class RoomStageService {
             RoomRepository roomRepository,
             ActivityLogger activityLogger,
             RoomAccessService roomAccessService,
-            com.hackathonos.backend.events.RoomEventService roomEventService) {
+            com.hackathonos.backend.events.RoomEventService roomEventService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            com.hackathonos.backend.billing.BillingService billingService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            com.hackathonos.backend.plan.PlanPhaseRepository phaseRepository) {
         this.briefRepository = briefRepository;
         this.ideaRepository = ideaRepository;
         this.stepRepository = stepRepository;
@@ -46,6 +52,8 @@ public class RoomStageService {
         this.activityLogger = activityLogger;
         this.roomAccessService = roomAccessService;
         this.roomEventService = roomEventService;
+        this.billingService = billingService;
+        this.phaseRepository = phaseRepository;
     }
 
     /**
@@ -56,7 +64,7 @@ public class RoomStageService {
 
         boolean planOk = room.isPlanDone();
         rules.add(new StageUnlockRuleDto("BUILD", planOk,
-                planOk ? "Plan completed and validated" : "Requires all 5 plan steps completed and validated"));
+                planOk ? "Plan completed and validated" : "Requires all 4 plan steps completed and validated"));
 
         boolean buildOk = "BUILD".equalsIgnoreCase(room.getWorkflowStage()) || "PRESENT".equalsIgnoreCase(room.getWorkflowStage()) || "REVIEW".equalsIgnoreCase(room.getWorkflowStage());
         rules.add(new StageUnlockRuleDto("PRESENT", buildOk,
@@ -96,9 +104,23 @@ public class RoomStageService {
             if (room.getBuildStartedAt() == null) {
                 room.setBuildStartedAt(Instant.now());
             }
+            if (phaseRepository != null) {
+                List<com.hackathonos.backend.plan.PlanPhase> roomPhases = phaseRepository.findByRoomIdOrderByPositionAsc(room.getId());
+                if (!roomPhases.isEmpty()) {
+                    com.hackathonos.backend.plan.PlanPhase p1 = roomPhases.get(0);
+                    if (!"ACTIVE".equals(p1.getStatus()) && !"COMPLETED".equals(p1.getStatus())) {
+                        p1.setStatus("ACTIVE");
+                        p1.setActivatedAt(Instant.now());
+                        phaseRepository.save(p1);
+                    }
+                }
+            }
         } else if ("PRESENT".equals(normalizedTarget)) {
             room.setStage("present");
         } else if ("REVIEW".equals(normalizedTarget)) {
+            if (billingService != null) {
+                billingService.checkCanAccessReviewPages(leader);
+            }
             room.setStage("review");
         }
 

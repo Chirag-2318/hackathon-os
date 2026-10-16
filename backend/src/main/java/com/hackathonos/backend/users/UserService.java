@@ -8,11 +8,14 @@ import com.hackathonos.backend.common.error.NotFoundException;
 import com.hackathonos.backend.common.error.PayloadTooLargeException;
 import com.hackathonos.backend.common.error.TooManyRequestsException;
 import com.hackathonos.backend.common.security.SecretCipher;
+import com.hackathonos.backend.email.MailService;
 import com.hackathonos.backend.members.RoomMember;
 import com.hackathonos.backend.members.RoomMemberRepository;
 import com.hackathonos.backend.notifications.NotificationRepository;
 import com.hackathonos.backend.rooms.Room;
 import com.hackathonos.backend.rooms.RoomRepository;
+import com.hackathonos.backend.docs.Doc;
+import com.hackathonos.backend.tasks.Task;
 import com.hackathonos.backend.users.dto.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -37,6 +40,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final UserSettingsRepository settingsRepository;
+    private final UserPreferenceRepository preferenceRepository;
     private final UserApiKeyRepository apiKeyRepository;
     private final DataExportRepository exportRepository;
     private final NotificationRepository notificationRepository;
@@ -46,9 +50,75 @@ public class UserService {
     private final SecretCipher secretCipher;
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
+    private final com.hackathonos.backend.email.MailService mailService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private DataRetentionService retentionService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private UserDataExportService userDataExportService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.email.EmailOutboxRepository emailOutboxRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private UserOAuthTokenRepository tokenRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.ideas.IdeaRepository ideaRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.tasks.TaskRepository taskRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.tasks.TaskCommentRepository taskCommentRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.docs.DocCommentRepository docCommentRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.docs.DocVersionRepository docVersionRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.brief.UploadedFileRepository uploadedFileRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.activity.ActivityEventRepository activityEventRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.invites.RoomInviteRepository roomInviteRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.email.UserEmailPreferenceRepository emailPreferenceRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.billing.UserPlanRepository userPlanRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.billing.PlanInterestRepository planInterestRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.ai.AiUsageDailyRepository aiUsageDailyRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.integrations.IntegrationsService integrationsService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.activity.ActivityLogger activityLogger;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.docs.DocRepository docRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.ai.UserAiKeyService userAiKeyService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.admin.AppSettingsService appSettingsService;
+
 
     public UserService(UserRepository userRepository,
                        UserSettingsRepository settingsRepository,
+                       UserPreferenceRepository preferenceRepository,
                        UserApiKeyRepository apiKeyRepository,
                        DataExportRepository exportRepository,
                        NotificationRepository notificationRepository,
@@ -57,9 +127,11 @@ public class UserService {
                        UserMapper userMapper,
                        SecretCipher secretCipher,
                        AppProperties appProperties,
-                       ObjectMapper objectMapper) {
+                       ObjectMapper objectMapper,
+                       com.hackathonos.backend.email.MailService mailService) {
         this.userRepository = userRepository;
         this.settingsRepository = settingsRepository;
+        this.preferenceRepository = preferenceRepository;
         this.apiKeyRepository = apiKeyRepository;
         this.exportRepository = exportRepository;
         this.notificationRepository = notificationRepository;
@@ -69,6 +141,23 @@ public class UserService {
         this.secretCipher = secretCipher;
         this.appProperties = appProperties;
         this.objectMapper = objectMapper;
+        this.mailService = mailService;
+    }
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(UserService.class);
+
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void logOverwrittenAvatarsOnStartup() {
+        try {
+            long count = userRepository.findAll().stream()
+                    .filter(User::isOnboardingCompleted)
+                    .filter(u -> u.getAvatarUrl() != null &&
+                            (u.getAvatarUrl().contains("googleusercontent.com") || u.getAvatarUrl().contains("githubusercontent.com")))
+                    .count();
+            log.info("Migration check: {} completed-onboarding users have avatar_url pointing to googleusercontent.com or githubusercontent.com", count);
+        } catch (Exception e) {
+            log.debug("Migration check skipped: {}", e.getMessage());
+        }
     }
 
     /**
@@ -110,20 +199,26 @@ public class UserService {
                         throw new com.hackathonos.backend.common.error.AccountDeletedException("ACCOUNT_DELETED", "User account has been deleted");
                     }
                     existing.setLastLoginAt(Instant.now());
-                    existing.setName(name);
                     if (email != null) existing.setEmail(email);
-                    if (avatarUrl != null) existing.setAvatarUrl(avatarUrl);
-                    if (login != null) existing.setLogin(login);
+                    if (avatarUrl != null) existing.setProviderAvatarUrl(avatarUrl);
+                    // Login must only update provider-owned fields. Never overwrite name, username, avatar_type, avatar_preset or avatar_url.
                     return userRepository.save(existing);
                 })
-                .orElseGet(() -> userRepository.save(new User(
-                        provider,
-                        providerUserId,
-                        name,
-                        email,
-                        avatarUrl,
-                        login
-                )));
+                .orElseGet(() -> {
+                    if (appSettingsService != null) {
+                        appSettingsService.checkCanSignUp(email);
+                    }
+                    User newUser = new User(
+                            provider,
+                            providerUserId,
+                            name,
+                            email,
+                            null,
+                            login
+                    );
+                    newUser.setProviderAvatarUrl(avatarUrl);
+                    return userRepository.save(newUser);
+                });
 
         if (!settingsRepository.existsById(user.getId())) {
             UserSettings settings = new UserSettings(user.getId(), user.getName());
@@ -140,8 +235,108 @@ public class UserService {
     public UserDetailDto getMe(User user) {
         UserSettings settings = settingsRepository.findById(user.getId())
                 .orElseGet(() -> settingsRepository.save(new UserSettings(user.getId(), user.getName())));
+        UserPreference preferences = getOrCreatePreferences(user);
         long unread = notificationRepository.countByUserIdAndReadAtIsNull(user.getId());
-        return userMapper.toDetailDto(user, settings, unread);
+        com.hackathonos.backend.users.dto.UserAiKeySummaryDto aiKeySummary = userAiKeyService != null
+                ? userAiKeyService.getKeySummary(user.getId())
+                : new com.hackathonos.backend.users.dto.UserAiKeySummaryDto(false, null, null);
+        boolean isAdmin = appSettingsService != null && appSettingsService.isAdmin(user.getEmail());
+        return userMapper.toDetailDto(user, settings, preferences, unread, aiKeySummary, isAdmin);
+    }
+
+
+    public UserPreference getOrCreatePreferences(User user) {
+        return preferenceRepository.findById(user.getId())
+                .orElseGet(() -> {
+                    UserPreference pref = new UserPreference(user.getId());
+                    settingsRepository.findById(user.getId()).ifPresent(s -> {
+                        if (s.getTheme() != null) pref.setTheme(s.getTheme());
+                        if (s.getTimezone() != null) pref.setTimezone(s.getTimezone());
+                    });
+                    return preferenceRepository.save(pref);
+                });
+    }
+
+    public UserPreferenceDto getPreferences(User user) {
+        return userMapper.toPreferenceDto(getOrCreatePreferences(user));
+    }
+
+    @Transactional
+    public UserPreferenceDto updatePreferences(User user, UpdateUserPreferenceRequest request) {
+        if (request == null) {
+            return getPreferences(user);
+        }
+
+        if (request.theme() != null) {
+            String t = request.theme().toLowerCase().trim();
+            if (!List.of("light", "dark", "system").contains(t)) {
+                throw new BadRequestException("INVALID_THEME", "Theme must be one of: light, dark, system");
+            }
+        }
+        if (request.textSize() != null) {
+            String ts = request.textSize().toLowerCase().trim();
+            if (!List.of("small", "default", "large").contains(ts)) {
+                throw new BadRequestException("INVALID_TEXT_SIZE", "Text size must be one of: small, default, large");
+            }
+        }
+        if (request.motion() != null) {
+            String m = request.motion().toLowerCase().trim();
+            if (!List.of("system", "on", "off").contains(m)) {
+                throw new BadRequestException("INVALID_MOTION", "Motion must be one of: system, on, off");
+            }
+        }
+        if (request.sidebarDefault() != null) {
+            String sd = request.sidebarDefault().toLowerCase().trim();
+            if (!List.of("expanded", "collapsed").contains(sd)) {
+                throw new BadRequestException("INVALID_SIDEBAR_DEFAULT", "Sidebar default must be one of: expanded, collapsed");
+            }
+        }
+        if (request.timeFormat() != null) {
+            String tf = request.timeFormat().toLowerCase().trim();
+            if (!List.of("12h", "24h").contains(tf)) {
+                throw new BadRequestException("INVALID_TIME_FORMAT", "Time format must be one of: 12h, 24h");
+            }
+        }
+        if (request.timezone() != null && !request.timezone().isBlank()) {
+            if (request.timezone().length() > 100) {
+                throw new BadRequestException("INVALID_TIMEZONE", "Timezone exceeds maximum length");
+            }
+        }
+
+        UserPreference pref = getOrCreatePreferences(user);
+        if (request.theme() != null) {
+            String t = request.theme().toLowerCase().trim();
+            pref.setTheme(t);
+            settingsRepository.findById(user.getId()).ifPresent(s -> {
+                s.setTheme(t);
+                settingsRepository.save(s);
+            });
+        }
+        if (request.textSize() != null) {
+            pref.setTextSize(request.textSize().toLowerCase().trim());
+        }
+        if (request.motion() != null) {
+            pref.setMotion(request.motion().toLowerCase().trim());
+        }
+        if (request.sidebarDefault() != null) {
+            pref.setSidebarDefault(request.sidebarDefault().toLowerCase().trim());
+        }
+        if (request.timeFormat() != null) {
+            pref.setTimeFormat(request.timeFormat().toLowerCase().trim());
+        }
+        if (request.timezone() != null) {
+            String tz = request.timezone().isBlank() ? null : request.timezone().trim();
+            pref.setTimezone(tz);
+            if (tz != null) {
+                settingsRepository.findById(user.getId()).ifPresent(s -> {
+                    s.setTimezone(tz);
+                    settingsRepository.save(s);
+                });
+            }
+        }
+        pref.setUpdatedAt(Instant.now());
+        UserPreference saved = preferenceRepository.save(pref);
+        return userMapper.toPreferenceDto(saved);
     }
 
     /**
@@ -164,6 +359,73 @@ public class UserService {
         applySettingsUpdate(settings, request);
         settings.setUpdatedAt(Instant.now());
         settingsRepository.save(settings);
+
+        boolean userChanged = false;
+        if (request.displayName() != null && !request.displayName().isBlank()) {
+            user.setName(request.displayName().trim());
+            userChanged = true;
+        }
+
+        if (request.profile() != null) {
+            Map<String, Object> prof = request.profile();
+            if (prof.get("displayName") instanceof String name && !name.isBlank()) {
+                user.setName(name.trim());
+                userChanged = true;
+            }
+            if (prof.get("username") instanceof String un && !un.isBlank()) {
+                String norm = un.trim().toLowerCase();
+                if (!norm.equals(user.getUsername())) {
+                    UsernameAvailableResponse avail = checkUsernameAvailability(norm, user.getId());
+                    if (!avail.available()) {
+                        throw new ConflictException("USERNAME_TAKEN", avail.reason());
+                    }
+                    user.setUsername(norm);
+                    userChanged = true;
+                }
+            } else if (prof.get("githubHandle") instanceof String gh && !gh.isBlank()) {
+                if (user.getUsername() == null || user.getUsername().isBlank()) {
+                    String norm = gh.trim().toLowerCase();
+                    UsernameAvailableResponse avail = checkUsernameAvailability(norm, user.getId());
+                    if (avail.available()) {
+                        user.setUsername(norm);
+                        userChanged = true;
+                    }
+                }
+            }
+            if (prof.get("roleTags") instanceof List<?> roles) {
+                try {
+                    user.setRoleTags(objectMapper.writeValueAsString(roles));
+                    userChanged = true;
+                } catch (Exception ignored) {}
+            }
+            if (prof.get("skills") instanceof String skillsStr) {
+                List<String> list = Arrays.stream(skillsStr.split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .toList();
+                try {
+                    user.setTechStack(objectMapper.writeValueAsString(list));
+                    userChanged = true;
+                } catch (Exception ignored) {}
+            } else if (prof.get("techStack") instanceof List<?> stack) {
+                try {
+                    user.setTechStack(objectMapper.writeValueAsString(stack));
+                    userChanged = true;
+                } catch (Exception ignored) {}
+            }
+            if (prof.get("availability") instanceof String avail && !avail.isBlank()) {
+                user.setExperienceLevel(avail.trim());
+                userChanged = true;
+            }
+            if (prof.get("avatarUrl") instanceof String av && !av.isBlank()) {
+                user.setAvatarUrl(av.trim());
+                userChanged = true;
+            }
+        }
+
+        if (userChanged) {
+            user = userRepository.save(user);
+        }
 
         List<UserApiKey> keys = apiKeyRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
         return userMapper.toSettingsDto(user, settings, keys);
@@ -201,62 +463,393 @@ public class UserService {
         apiKeyRepository.delete(key);
     }
 
-    /**
-     * Generates a downloadable JSON export of the user's data and returns an expiring download link.
-     */
-    @Transactional
-    public DataExportResponse exportUserData(User user) {
-        Map<String, Object> exportMap = buildExportData(user);
-        File exportFile = saveExportFile(user.getId(), exportMap);
+    @Transactional(readOnly = true)
+    public DataSummaryResponse getDataSummary(User user) {
+        // Account
+        List<String> providers = user.getProvider() != null ? List.of(user.getProvider()) : List.of("DEV");
+        DataSummaryResponse.AccountSummary account = new DataSummaryResponse.AccountSummary(
+                user.getEmail(),
+                providers,
+                user.getLastLoginAt()
+        );
 
-        Instant expiresAt = Instant.now().plus(24, ChronoUnit.HOURS);
-        DataExport exportRecord = new DataExport(user.getId(), exportFile.getAbsolutePath(), expiresAt);
-        exportRepository.save(exportRecord);
+        // Profile
+        List<String> roles = parseJsonList(user.getRoleTags());
+        List<String> stack = parseJsonList(user.getTechStack());
+        DataSummaryResponse.ProfileSummary profile = new DataSummaryResponse.ProfileSummary(
+                user.getUsername(),
+                user.getName(),
+                user.getAvatarUrl(),
+                roles,
+                user.getExperienceLevel(),
+                user.getGoal(),
+                stack
+        );
 
-        String downloadUrl = appProperties.getBaseUrl() + "/api/v1/users/me/export/" + exportRecord.getId();
-        return new DataExportResponse(downloadUrl, expiresAt);
+        // Rooms
+        List<RoomMember> memberships = memberRepository.findByUserId(user.getId());
+        List<DataSummaryResponse.RoomMembershipSummary> rooms = new ArrayList<>();
+        for (RoomMember m : memberships) {
+            roomRepository.findById(m.getRoomId()).ifPresent(r ->
+                    rooms.add(new DataSummaryResponse.RoomMembershipSummary(r.getId(), r.getName(), m.getRole())));
+        }
+
+        // Content
+        long ideasCount = ideaRepository != null ? ideaRepository.countByAuthorId(user.getId()) : 0;
+        long tasksCount = taskRepository != null ? taskRepository.countByReporterIdOrAssigneeId(user.getId(), user.getId()) : 0;
+        long taskComments = taskCommentRepository != null ? taskCommentRepository.countByAuthorId(user.getId()) : 0;
+        long docComments = docCommentRepository != null ? docCommentRepository.countByAuthorId(user.getId()) : 0;
+        long docsEdited = docVersionRepository != null ? docVersionRepository.countByCreatedBy(user.getId()) : 0;
+        DataSummaryResponse.ContentSummary content = new DataSummaryResponse.ContentSummary(
+                ideasCount,
+                tasksCount,
+                taskComments + docComments,
+                docsEdited
+        );
+
+        // Files
+        int fileCount = 0;
+        long totalSizeBytes = 0;
+        if (uploadedFileRepository != null) {
+            List<com.hackathonos.backend.brief.UploadedFile> files = uploadedFileRepository.findByUploadedBy(user.getId());
+            fileCount += files.size();
+            for (com.hackathonos.backend.brief.UploadedFile f : files) {
+                totalSizeBytes += f.getSizeBytes();
+            }
+        }
+        if (user.getAvatarUrl() != null && user.getAvatarUrl().startsWith("/uploads/avatars/")) {
+            File avFile = new File(appProperties.getUploadDir(), "avatars/" + user.getAvatarUrl().substring("/uploads/avatars/".length()));
+            if (avFile.exists() && avFile.isFile()) {
+                fileCount += 1;
+                totalSizeBytes += avFile.length();
+            }
+        }
+        DataSummaryResponse.FilesSummary filesSummary = new DataSummaryResponse.FilesSummary(
+                fileCount,
+                totalSizeBytes,
+                formatFileSize(totalSizeBytes)
+        );
+
+        // Notifications
+        long notifCount = notificationRepository.countByUserId(user.getId());
+        DataSummaryResponse.CountSummary notifications = new DataSummaryResponse.CountSummary(notifCount);
+
+        // Email log
+        long emailCount = (emailOutboxRepository != null && user.getEmail() != null)
+                ? emailOutboxRepository.countByToEmailIgnoreCase(user.getEmail())
+                : 0;
+        DataSummaryResponse.CountSummary emailLog = new DataSummaryResponse.CountSummary(emailCount);
+
+        // Integrations
+        boolean ghEncrypted = tokenRepository != null && tokenRepository.findByUserIdAndProvider(user.getId(), "GITHUB").isPresent();
+        DataSummaryResponse.IntegrationsSummary integrations = new DataSummaryResponse.IntegrationsSummary(ghEncrypted);
+
+        // Preferences
+        UserPreferenceDto preferences = getPreferences(user);
+
+        // Retention
+        int notifRetention = retentionService != null ? retentionService.getNotificationsRetentionDays() : 90;
+        int emailRetention = retentionService != null ? retentionService.getEmailLogRetentionDays() : 90;
+        int roomRetention = retentionService != null ? retentionService.getDeletedRoomsRetentionDays() : 30;
+        DataSummaryResponse.RetentionSummary retention = new DataSummaryResponse.RetentionSummary(
+                notifRetention,
+                emailRetention,
+                roomRetention
+        );
+
+        return new DataSummaryResponse(
+                account,
+                profile,
+                rooms,
+                content,
+                filesSummary,
+                notifications,
+                emailLog,
+                integrations,
+                preferences,
+                retention
+        );
     }
 
-    /**
-     * Streams the exported JSON file as an attachment for the owner if not expired.
-     */
-    public Resource getExportAttachment(User user, UUID exportId) {
-        DataExport exportRecord = exportRepository.findByIdAndUserId(exportId, user.getId())
-                .orElseThrow(() -> new NotFoundException("EXPORT_NOT_FOUND", "Export record not found"));
-
-        if (Instant.now().isAfter(exportRecord.getExpiresAt())) {
-            throw new BadRequestException("EXPORT_EXPIRED", "Data export link has expired");
+    public void streamExportZip(User user, java.util.zip.ZipOutputStream zos) throws IOException {
+        if (userDataExportService != null) {
+            userDataExportService.writeExportZip(user, zos);
         }
-
-        exportRecord.setDownloadedAt(Instant.now());
-        exportRepository.save(exportRecord);
-
-        File file = new File(exportRecord.getFilePath());
-        if (!file.exists()) {
-            throw new NotFoundException("FILE_NOT_FOUND", "Export file is no longer on disk");
-        }
-        return new FileSystemResource(file);
     }
 
-    /**
-     * Permanently deletes user account, anonymizes history, and invalidates active session.
-     * Blocks deletion if user is leader of rooms that contain other teammates.
-     */
+    @Transactional(readOnly = true)
+    public DeletePreviewResponse getDeletePreview(User user) {
+        List<RoomMember> memberships = memberRepository.findByUserId(user.getId());
+        List<DeletePreviewResponse.BlockerRoom> blockers = new ArrayList<>();
+        List<DeletePreviewResponse.WillDeleteRoom> willDelete = new ArrayList<>();
+        List<UUID> stayingRoomIds = new ArrayList<>();
+
+        for (RoomMember m : memberships) {
+            Optional<Room> rOpt = roomRepository.findById(m.getRoomId());
+            if (rOpt.isEmpty()) continue;
+            Room r = rOpt.get();
+            long memberCount = memberRepository.countByRoomId(r.getId());
+
+            if (memberCount <= 1) {
+                willDelete.add(new DeletePreviewResponse.WillDeleteRoom(r.getId(), r.getName()));
+            } else {
+                stayingRoomIds.add(r.getId());
+                if ("LEADER".equalsIgnoreCase(m.getRole())) {
+                    blockers.add(new DeletePreviewResponse.BlockerRoom(r.getId(), r.getName(), memberCount));
+                }
+            }
+        }
+
+        long ideasCount = 0;
+        long tasksCount = 0;
+        long commentsCount = 0;
+
+        if (!stayingRoomIds.isEmpty()) {
+            if (ideaRepository != null) {
+                ideasCount = ideaRepository.findByAuthorId(user.getId()).stream()
+                        .filter(i -> stayingRoomIds.contains(i.getRoomId()))
+                        .count();
+            }
+            if (taskRepository != null) {
+                tasksCount = taskRepository.findByReporterIdOrAssigneeId(user.getId(), user.getId()).stream()
+                        .filter(t -> stayingRoomIds.contains(t.getRoomId()))
+                        .count();
+            }
+            if (taskCommentRepository != null) {
+                commentsCount += taskCommentRepository.findByAuthorId(user.getId()).size();
+            }
+            if (docCommentRepository != null) {
+                commentsCount += docCommentRepository.findByAuthorId(user.getId()).size();
+            }
+        }
+
+        return new DeletePreviewResponse(
+                blockers,
+                willDelete,
+                new DeletePreviewResponse.WillAnonymiseSummary(ideasCount, tasksCount, commentsCount)
+        );
+    }
+
     @Transactional
-    public void deleteAccount(User user, DeleteAccountRequest request, HttpServletRequest httpRequest) {
-        if (request == null || !"DELETE".equals(request.confirm())) {
-            throw new BadRequestException("CONFIRMATION_REQUIRED", "Body must include confirm: DELETE");
+    public void deleteAccount(User user, DeleteAccountRequest request, HttpServletRequest httpRequest, jakarta.servlet.http.HttpServletResponse httpResponse) {
+        // 1. Validate username confirmation
+        String confirmedUsername = request != null ? (request.confirmUsername() != null ? request.confirmUsername() : request.confirm()) : null;
+        if (confirmedUsername == null || !confirmedUsername.trim().equalsIgnoreCase(user.getUsername())) {
+            throw new BadRequestException("CONFIRMATION_MISMATCH", "Body must include confirmUsername matching @" + user.getUsername());
         }
 
-        checkLeadershipConstraints(user);
-        cleanupUserRooms(user);
-        cleanupUserData(user);
-        anonymizeUser(user);
+        // 2. Check blockers
+        List<RoomMember> memberships = memberRepository.findByUserId(user.getId());
+        List<Room> blockerRooms = new ArrayList<>();
+        List<Room> soloRooms = new ArrayList<>();
+        List<UUID> stayingRoomIds = new ArrayList<>();
 
-        HttpSession session = httpRequest.getSession(false);
-        if (session != null) {
-            session.invalidate();
+        for (RoomMember m : memberships) {
+            Optional<Room> rOpt = roomRepository.findById(m.getRoomId());
+            if (rOpt.isEmpty()) continue;
+            Room r = rOpt.get();
+            long memberCount = memberRepository.countByRoomId(r.getId());
+            if (memberCount <= 1) {
+                soloRooms.add(r);
+            } else {
+                stayingRoomIds.add(r.getId());
+                if ("LEADER".equalsIgnoreCase(m.getRole())) {
+                    blockerRooms.add(r);
+                }
+            }
         }
+
+        if (!blockerRooms.isEmpty()) {
+            if (!Boolean.TRUE.equals(request.autoTransferLeadership())) {
+                List<String> names = blockerRooms.stream().map(Room::getName).toList();
+                throw new ConflictException("TRANSFER_LEADERSHIP_REQUIRED",
+                        "You are the leader of rooms with teammates: " + String.join(", ", names) +
+                                ". Transfer leadership before deleting your account, or enable autoTransferLeadership.",
+                        names);
+            }
+
+            // Transfer each blocker room to its longest-standing member
+            for (Room br : blockerRooms) {
+                List<RoomMember> team = memberRepository.findByRoomId(br.getId());
+                RoomMember longestStanding = team.stream()
+                        .filter(m -> !m.getUserId().equals(user.getId()))
+                        .min(Comparator.comparing(m -> m.getJoinedAt() != null ? m.getJoinedAt() : Instant.EPOCH))
+                        .orElse(null);
+                if (longestStanding != null) {
+                    longestStanding.setRole("LEADER");
+                    memberRepository.save(longestStanding);
+                    User newLeader = userRepository.findById(longestStanding.getUserId()).orElse(null);
+                    String handle = newLeader != null && newLeader.getUsername() != null ? "@" + newLeader.getUsername() : "a teammate";
+                    if (activityLogger != null) {
+                        activityLogger.log(br, user, "LEADERSHIP_TRANSFERRED", "Leadership transferred to " + handle);
+                    }
+                }
+            }
+        }
+
+        List<File> filesToDelete = new ArrayList<>();
+
+        // 3. Solo rooms: hard delete room and contents
+        for (Room sr : soloRooms) {
+            if (uploadedFileRepository != null) {
+                List<com.hackathonos.backend.brief.UploadedFile> roomFiles = uploadedFileRepository.findByRoomIdOrderByCreatedAtDesc(sr.getId());
+                for (com.hackathonos.backend.brief.UploadedFile rf : roomFiles) {
+                    if (rf.getStoragePath() != null) filesToDelete.add(new File(rf.getStoragePath()));
+                }
+                uploadedFileRepository.deleteByRoomId(sr.getId());
+            }
+            if (roomInviteRepository != null) roomInviteRepository.deleteByRoomId(sr.getId());
+            if (taskCommentRepository != null) {
+                List<Task> roomTasks = taskRepository != null ? taskRepository.findByRoomId(sr.getId()) : Collections.emptyList();
+                for (Task rt : roomTasks) {
+                    taskCommentRepository.deleteByTaskId(rt.getId());
+                }
+            }
+            if (taskRepository != null) taskRepository.deleteByRoomId(sr.getId());
+            if (ideaRepository != null) ideaRepository.deleteByRoomId(sr.getId());
+            if (docCommentRepository != null) {
+                List<Doc> roomDocs = docRepository != null ? docRepository.findByRoomId(sr.getId()) : Collections.emptyList();
+                for (Doc rd : roomDocs) {
+                    docCommentRepository.deleteByDocId(rd.getId());
+                }
+            }
+            if (docVersionRepository != null) {
+                List<Doc> roomDocs = docRepository != null ? docRepository.findByRoomId(sr.getId()) : Collections.emptyList();
+                for (Doc rd : roomDocs) {
+                    docVersionRepository.deleteByDocId(rd.getId());
+                }
+            }
+            if (docRepository != null) docRepository.deleteByRoomId(sr.getId());
+            if (activityEventRepository != null) activityEventRepository.deleteByRoomId(sr.getId());
+            memberRepository.deleteByRoomId(sr.getId());
+            roomRepository.delete(sr);
+        }
+
+        // 4. Staying rooms: anonymize content to null author
+        if (ideaRepository != null) ideaRepository.anonymizeByAuthorId(user.getId());
+        if (taskCommentRepository != null) taskCommentRepository.anonymizeByAuthorId(user.getId());
+        if (docCommentRepository != null) docCommentRepository.anonymizeByAuthorId(user.getId());
+        if (docVersionRepository != null) docVersionRepository.anonymizeByCreatedBy(user.getId());
+        if (activityEventRepository != null) activityEventRepository.anonymizeByActorId(user.getId());
+        if (taskRepository != null) taskRepository.unassignUser(user.getId());
+        if (roomInviteRepository != null) roomInviteRepository.revokePendingByInvitedBy(user.getId());
+        memberRepository.deleteByUserId(user.getId());
+
+        // 5. User records cleanup
+        notificationRepository.deleteByUserId(user.getId());
+        if (emailPreferenceRepository != null) emailPreferenceRepository.deleteByUserId(user.getId());
+        preferenceRepository.deleteById(user.getId());
+        settingsRepository.deleteById(user.getId());
+        apiKeyRepository.deleteByUserId(user.getId());
+        exportRepository.deleteByUserId(user.getId());
+        if (userPlanRepository != null) userPlanRepository.deleteById(user.getId());
+        if (planInterestRepository != null) planInterestRepository.deleteByUserId(user.getId());
+        if (aiUsageDailyRepository != null) aiUsageDailyRepository.deleteByUserId(user.getId());
+        if (emailOutboxRepository != null && user.getEmail() != null) {
+            emailOutboxRepository.deleteByToEmailIgnoreCase(user.getEmail());
+        }
+
+        if (uploadedFileRepository != null) {
+            List<com.hackathonos.backend.brief.UploadedFile> uFiles = uploadedFileRepository.findByUploadedBy(user.getId());
+            for (com.hackathonos.backend.brief.UploadedFile uf : uFiles) {
+                if (uf.getStoragePath() != null) filesToDelete.add(new File(uf.getStoragePath()));
+            }
+            uploadedFileRepository.deleteByUploadedBy(user.getId());
+        }
+
+        if (user.getAvatarUrl() != null && user.getAvatarUrl().startsWith("/uploads/avatars/")) {
+            File avFile = new File(appProperties.getUploadDir(), "avatars/" + user.getAvatarUrl().substring("/uploads/avatars/".length()));
+            filesToDelete.add(avFile);
+        }
+
+        String ghEncryptedToken = null;
+        if (tokenRepository != null) {
+            Optional<UserOAuthToken> ghToken = tokenRepository.findByUserIdAndProvider(user.getId(), "GITHUB");
+            if (ghToken.isPresent()) {
+                ghEncryptedToken = ghToken.get().getAccessTokenEncrypted();
+            }
+            tokenRepository.deleteByUserId(user.getId());
+        }
+
+        UUID userId = user.getId();
+        userRepository.delete(user);
+
+        // 6. Invalidate session and clear cookies
+        if (httpRequest != null) {
+            HttpSession session = httpRequest.getSession(false);
+            if (session != null) {
+                session.invalidate();
+            }
+        }
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
+
+        if (httpResponse != null) {
+            clearCookie(httpResponse, "JSESSIONID");
+            clearCookie(httpResponse, "SESSION");
+            clearCookie(httpResponse, "XSRF-TOKEN");
+        }
+
+        // 7. Post-commit: delete disk files, revoke GitHub grant, log hashed user ID
+        final String finalGhToken = ghEncryptedToken;
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            for (File f : filesToDelete) {
+                                try {
+                                    if (f.exists()) f.delete();
+                                } catch (Exception ignored) {}
+                            }
+                            if (finalGhToken != null && integrationsService != null) {
+                                try {
+                                    integrationsService.tryRevokeGitHubGrant(finalGhToken);
+                                } catch (Exception ignored) {}
+                            }
+                            log.info("Account permanently deleted for user hash: {}", hashUserId(userId));
+                        }
+                    }
+            );
+        } else {
+            for (File f : filesToDelete) {
+                try {
+                    if (f.exists()) f.delete();
+                } catch (Exception ignored) {}
+            }
+            if (finalGhToken != null && integrationsService != null) {
+                try {
+                    integrationsService.tryRevokeGitHubGrant(finalGhToken);
+                } catch (Exception ignored) {}
+            }
+            log.info("Account permanently deleted for user hash: {}", hashUserId(userId));
+        }
+    }
+
+    private void clearCookie(jakarta.servlet.http.HttpServletResponse response, String name) {
+        org.springframework.http.ResponseCookie cookie = org.springframework.http.ResponseCookie.from(name, "")
+                .path("/")
+                .maxAge(0)
+                .build();
+        response.addHeader(org.springframework.http.HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    private String hashUserId(UUID userId) {
+        if (userId == null) return "null";
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(userId.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(hash);
+        } catch (Exception e) {
+            return "redacted";
+        }
+    }
+
+    private String formatFileSize(long bytes) {
+        if (bytes <= 0) return "0 B";
+        if (bytes < 1024) return bytes + " B";
+        int exp = (int) (Math.log(bytes) / Math.log(1024));
+        char pre = "KMGTPE".charAt(exp - 1);
+        return String.format(Locale.ENGLISH, "%.1f %cB", bytes / Math.pow(1024, exp), pre);
     }
 
     private UserSettings getOrCreateSettings(User user) {
@@ -315,76 +908,6 @@ public class UserService {
             Map<String, String> errors = Map.of("timezone", "Invalid IANA timezone identifier: " + timezone);
             throw new BadRequestException("VALIDATION_FAILED", "Invalid timezone", errors);
         }
-    }
-
-    private Map<String, Object> buildExportData(User user) {
-        Map<String, Object> root = new LinkedHashMap<>();
-        root.put("profile", Map.of("id", user.getId(), "name", user.getName(), "email", user.getEmail() != null ? user.getEmail() : ""));
-        root.put("settings", settingsRepository.findById(user.getId()).orElse(null));
-        root.put("memberships", memberRepository.findByUserId(user.getId()));
-        root.put("rooms", roomRepository.findActiveRoomsByMemberUserId(user.getId()));
-        root.put("notifications", notificationRepository.findByUserIdOrderByCreatedAtDesc(user.getId(), org.springframework.data.domain.PageRequest.of(0, 500)));
-        return root;
-    }
-
-    private File saveExportFile(UUID userId, Map<String, Object> data) {
-        File dir = new File(appProperties.getUploadDir(), "exports");
-        if (!dir.exists()) dir.mkdirs();
-        File file = new File(dir, "export-" + userId + "-" + System.currentTimeMillis() + ".json");
-        try (FileWriter writer = new FileWriter(file)) {
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(writer, data);
-            return file;
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to write export file", e);
-        }
-    }
-
-    private void checkLeadershipConstraints(User user) {
-        List<RoomMember> memberships = memberRepository.findByUserId(user.getId());
-        List<String> blockingRooms = new ArrayList<>();
-
-        for (RoomMember m : memberships) {
-            if ("LEADER".equalsIgnoreCase(m.getRole())) {
-                long count = memberRepository.countByRoomId(m.getRoomId());
-                if (count > 1) {
-                    roomRepository.findById(m.getRoomId()).ifPresent(r -> blockingRooms.add(r.getName()));
-                }
-            }
-        }
-
-        if (!blockingRooms.isEmpty()) {
-            throw new ConflictException("TRANSFER_LEADERSHIP_FIRST",
-                    "You are the leader of active rooms with teammates: " + String.join(", ", blockingRooms) +
-                            ". Transfer leadership before deleting your account.");
-        }
-    }
-
-    private void cleanupUserRooms(User user) {
-        List<RoomMember> memberships = memberRepository.findByUserId(user.getId());
-        for (RoomMember m : memberships) {
-            long memberCount = memberRepository.countByRoomId(m.getRoomId());
-            if (memberCount <= 1) {
-                roomRepository.deleteById(m.getRoomId());
-            } else {
-                memberRepository.delete(m);
-            }
-        }
-    }
-
-    private void cleanupUserData(User user) {
-        settingsRepository.deleteById(user.getId());
-        apiKeyRepository.deleteByUserId(user.getId());
-        notificationRepository.deleteByUserId(user.getId());
-        exportRepository.deleteByUserId(user.getId());
-    }
-
-    private void anonymizeUser(User user) {
-        user.setName("Deleted user");
-        user.setEmail(null);
-        user.setAvatarUrl(null);
-        user.setLogin(null);
-        user.setDeletedAt(Instant.now());
-        userRepository.save(user);
     }
 
     private final Map<UUID, List<Long>> usernameRateLimits = new ConcurrentHashMap<>();
@@ -449,6 +972,10 @@ public class UserService {
         }
         if (file.getSize() > 2 * 1024 * 1024) {
             throw new PayloadTooLargeException("PAYLOAD_TOO_LARGE", "Avatar file exceeds 2MB limit");
+        }
+
+        if (appSettingsService != null) {
+            appSettingsService.checkUploadQuota(user.getId(), file.getSize());
         }
 
         byte[] bytes;
@@ -536,7 +1063,40 @@ public class UserService {
             throw new ConflictException("USERNAME_TAKEN", "That handle was just claimed by someone else. Please choose another one.");
         }
 
+        if (user.getConfirmationEmailSentAt() == null && user.getEmail() != null && !user.getEmail().isBlank()) {
+            java.util.Map<String, Object> welcomeVars = new java.util.HashMap<>();
+            welcomeVars.put("handle", user.getUsername() != null ? user.getUsername() : "hacker");
+            welcomeVars.put("displayName", user.getDisplayName() != null ? user.getDisplayName() : user.getName());
+            welcomeVars.put("level", user.getExperienceLevel() != null ? user.getExperienceLevel() : "Rookie");
+            welcomeVars.put("roleTags", parseJsonList(user.getRoleTags()));
+            welcomeVars.put("appUrl", appProperties.getPublicUrl());
+
+            mailService.enqueue("welcome", user.getEmail(), welcomeVars, "welcome:" + user.getId());
+            user.setConfirmationEmailSentAt(Instant.now());
+            user = userRepository.save(user);
+        }
+
         return getMe(user);
+    }
+
+    @Transactional
+    public NotificationPrefsResponse updateNotificationPrefs(User user, NotificationPrefsRequest request) {
+        if (request != null && request.emailReminders() != null) {
+            user.setEmailReminders(request.emailReminders());
+            user = userRepository.save(user);
+        }
+        return new NotificationPrefsResponse(user.isEmailReminders());
+    }
+
+    private java.util.List<String> parseJsonList(String json) {
+        if (json == null || json.isBlank() || "[]".equals(json)) {
+            return java.util.Collections.emptyList();
+        }
+        try {
+            return objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<java.util.List<String>>() {});
+        } catch (Exception e) {
+            return java.util.Collections.emptyList();
+        }
     }
 
     /**
@@ -607,5 +1167,53 @@ public class UserService {
         user.setHotspotsSeen("[]");
         user = userRepository.save(user);
         return getMe(user);
+    }
+
+    /**
+     * Updates avatar settings and/or role tags for the current user.
+     * Idempotent, returns updated UserSummaryDto.
+     */
+    @Transactional
+    public UserSummaryDto updateProfile(User user, UpdateProfileRequest request) {
+        if (request == null) {
+            return UserSummaryDto.from(user);
+        }
+
+        if (request.roleTags() != null) {
+            if (request.roleTags().size() > 3) {
+                throw new BadRequestException("TOO_MANY_ROLES", "You can pick at most 3 roles");
+            }
+            try {
+                user.setRoleTags(objectMapper.writeValueAsString(request.roleTags()));
+            } catch (Exception e) {
+                user.setRoleTags("[]");
+            }
+        }
+
+        String type = request.avatarType() != null ? request.avatarType().trim().toUpperCase() : user.getAvatarType();
+        if ("PRESET".equalsIgnoreCase(type)) {
+            Integer preset = request.avatarPreset() != null ? request.avatarPreset() : user.getAvatarPreset();
+            if (preset == null || preset < 1 || preset > 10) {
+                throw new BadRequestException("INVALID_PRESET", "Avatar preset must be between 1 and 10");
+            }
+            user.setAvatarType("PRESET");
+            user.setAvatarPreset(preset);
+            user.setAvatarUrl(null);
+        } else if ("CUSTOM".equalsIgnoreCase(type)) {
+            String url = request.avatarUrl() != null ? request.avatarUrl().trim() : user.getAvatarUrl();
+            if (url == null || (!url.startsWith("/uploads/avatars/") && !url.contains("/uploads/avatars/"))) {
+                throw new BadRequestException("INVALID_AVATAR_URL", "Custom avatar URL must be one returned by the avatar upload endpoint");
+            }
+            user.setAvatarType("CUSTOM");
+            user.setAvatarUrl(url);
+            user.setAvatarPreset(null);
+        } else if ("NONE".equalsIgnoreCase(type)) {
+            user.setAvatarType("NONE");
+            user.setAvatarPreset(null);
+            user.setAvatarUrl(null);
+        }
+
+        User saved = userRepository.save(user);
+        return UserSummaryDto.from(saved);
     }
 }

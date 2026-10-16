@@ -25,8 +25,10 @@ export function checkDocHealth(name: string, content: string): DocHealthInfo {
     if (!content.includes('|')) warnings.push('Missing phases table');
   } else if (name === 'DEMO_SCRIPT.md') {
     if (!content.includes('# Demo script')) warnings.push('Missing "# Demo script" section');
-  } else if (name === 'QA.md') {
-    if (!content.includes('# Likely judge Q&A')) warnings.push('Missing "# Likely judge Q&A" section');
+  } else if (name === 'QA.md' || name === 'QNA.md') {
+    if (!content.includes('# Likely judge Q&A') && !content.includes('# Q&A')) warnings.push('Missing Q&A section');
+  } else if (name.toUpperCase().startsWith('TASKS_P')) {
+    if (!content.includes('## Tasks')) warnings.push('Missing "## Tasks" section');
   }
   return { isHealthy: warnings.length === 0, warnings };
 }
@@ -58,6 +60,110 @@ export function DocsListPane({
   pushErrorNotice,
   prResultUrl,
 }: DocsListPaneProps) {
+  const planDocNames = [
+    'prd.md', 'mvp.md',
+    'tech_stack.md', 'architecture.md',
+    'phases.md', 'design.md',
+    'demo_script.md', 'qna.md', 'qa.md'
+  ];
+
+  // Strictly plan documents + phase tasks, nothing else
+  const filteredFiles = files.filter((f) => {
+    const lower = f.name.toLowerCase();
+    if (planDocNames.includes(lower)) return true;
+    if (lower.startsWith('tasks_p') && lower.endsWith('.md')) return true;
+    return false;
+  });
+
+  const stepGroups = [
+    { step: 1, title: 'Step 1: PRD & MVP', fileNames: ['PRD.md', 'MVP.md'] },
+    { step: 2, title: 'Step 2: Stack & Arch', fileNames: ['TECH_STACK.md', 'ARCHITECTURE.md'] },
+    { step: 3, title: 'Step 3: Phases & Design', fileNames: ['PHASES.md', 'DESIGN.md'] },
+    { step: 4, title: 'Step 4: Demo & Q&A', fileNames: ['DEMO_SCRIPT.md', 'QNA.md', 'QA.md'] },
+  ];
+
+  const phaseTaskFiles = filteredFiles.filter((f) =>
+    f.name.toUpperCase().startsWith('TASKS_P') && f.name.toUpperCase().endsWith('.MD')
+  ).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+  const renderFileRow = (file: DocFile) => {
+    const isSelected = file.id === selectedFileId;
+    const serverHealth = (file as any).health;
+    const health = serverHealth
+      ? { isHealthy: serverHealth.status === 'ok', warnings: serverHealth.issues || [] }
+      : checkDocHealth(file.name, file.content);
+
+    return (
+      <button
+        key={file.id}
+        onClick={() => onSelectFile(file.id)}
+        className={cn(
+          'w-full h-10 px-3 flex items-center justify-between gap-2 text-left transition-colors cursor-pointer',
+          isSelected
+            ? 'bg-neutral-100 dark:bg-muted text-foreground font-semibold'
+            : 'hover:bg-muted/40 text-muted-foreground hover:text-foreground'
+        )}
+      >
+        <div className="flex items-center gap-2 truncate">
+          <FileText className={cn('size-3.5 shrink-0', isSelected ? 'text-blue-600' : 'text-muted-foreground')} />
+          <span className="text-xs truncate font-mono">
+            {file.name}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-[10px] font-mono px-1 rounded bg-muted/80 text-muted-foreground">
+            v{file.version || 1}
+          </span>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              const blob = new Blob([file.content || ''], { type: 'text/markdown;charset=utf-8' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = file.name;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              URL.revokeObjectURL(url);
+            }}
+            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
+            title={`Download ${file.name}`}
+          >
+            <Download className="size-3" />
+          </button>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="cursor-help">
+                {health.isHealthy ? (
+                  <span className="size-2 rounded-full bg-emerald-500 block" />
+                ) : (
+                  <span className="size-2 rounded-full bg-amber-500 block" />
+                )}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="text-xs max-w-xs">
+              {health.isHealthy ? (
+                <span className="text-emerald-600">All required sections present</span>
+              ) : (
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-semibold text-amber-600">Warnings:</span>
+                  {health.warnings.map((w: string, i: number) => (
+                    <span key={i} className="text-muted-foreground">• {w}</span>
+                  ))}
+                </div>
+              )}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </button>
+    );
+  };
+
   return (
     <div className="w-[260px] shrink-0 border-r border-border flex flex-col h-full bg-card select-none">
       {/* Header */}
@@ -65,21 +171,15 @@ export function DocsListPane({
         <h3 className="text-sm font-semibold text-foreground">
           Plan documents
         </h3>
-        <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-muted text-muted-foreground">
-          {files.length}
+        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-muted/80 text-muted-foreground border border-border/60">
+          {filteredFiles.length}
         </span>
       </div>
 
-      {/* File List grouped by plan step */}
+      {/* File List grouped by plan step and phase tasks */}
       <div className="flex-1 overflow-y-auto divide-y divide-border/30">
-        {[
-          { step: 1, title: 'Step 1: PRD & MVP', fileNames: ['PRD.md', 'MVP.md'] },
-          { step: 2, title: 'Step 2: Stack & Arch', fileNames: ['TECH_STACK.md', 'ARCHITECTURE.md'] },
-          { step: 3, title: 'Step 3: Phases & Design', fileNames: ['PHASES.md', 'DESIGN.md'] },
-          { step: 4, title: 'Step 4: Tasks', fileNames: ['TASKS.md'] },
-          { step: 5, title: 'Step 5: Demo & Q&A', fileNames: ['DEMO_SCRIPT.md', 'QNA.md'] },
-        ].map((group) => {
-          const groupFiles = files.filter(f => group.fileNames.some(fn => fn.toLowerCase() === f.name.toLowerCase()));
+        {stepGroups.map((group) => {
+          const groupFiles = filteredFiles.filter(f => group.fileNames.some(fn => fn.toLowerCase() === f.name.toLowerCase()));
           if (groupFiles.length === 0) return null;
 
           return (
@@ -88,90 +188,22 @@ export function DocsListPane({
                 {group.title}
               </div>
               <div className="divide-y divide-border/20">
-                {groupFiles.map((file) => {
-                  const isSelected = file.id === selectedFileId;
-                  const serverHealth = (file as any).health;
-                  const health = serverHealth
-                    ? { isHealthy: serverHealth.status === 'ok', warnings: serverHealth.issues || [] }
-                    : checkDocHealth(file.name, file.content);
-
-                  return (
-                    <button
-                      key={file.id}
-                      onClick={() => onSelectFile(file.id)}
-                      className={cn(
-                        'w-full h-10 px-3 flex items-center justify-between gap-2 text-left transition-colors',
-                        isSelected
-                          ? 'bg-neutral-100 dark:bg-muted text-foreground font-semibold'
-                          : 'hover:bg-muted/40 text-muted-foreground hover:text-foreground'
-                      )}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <FileText className={cn('size-3.5 shrink-0', isSelected ? 'text-blue-600' : 'text-muted-foreground')} />
-                        <span className="text-xs truncate font-mono">
-                          {file.name}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {/* Version chip */}
-                        <span className="text-[10px] font-mono px-1 rounded bg-muted/80 text-muted-foreground">
-                          v{file.version || 1}
-                        </span>
-
-                        {/* Single Doc Download Icon */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const blob = new Blob([file.content || ''], { type: 'text/markdown;charset=utf-8' });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = file.name;
-                            document.body.appendChild(a);
-                            a.click();
-                            a.remove();
-                            URL.revokeObjectURL(url);
-                          }}
-                          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
-                          title={`Download ${file.name}`}
-                        >
-                          <Download className="size-3" />
-                        </button>
-
-                        {/* Health Dot */}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help">
-                              {health.isHealthy ? (
-                                <span className="size-2 rounded-full bg-emerald-500 block" />
-                              ) : (
-                                <span className="size-2 rounded-full bg-amber-500 block" />
-                              )}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" className="text-xs max-w-xs">
-                            {health.isHealthy ? (
-                              <span className="text-emerald-600">All required sections present</span>
-                            ) : (
-                              <div className="flex flex-col gap-0.5">
-                                <span className="font-semibold text-amber-600">Warnings:</span>
-                                {health.warnings.map((w: string, i: number) => (
-                                  <span key={i} className="text-muted-foreground">• {w}</span>
-                                ))}
-                              </div>
-                            )}
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                    </button>
-                  );
-                })}
+                {groupFiles.map(renderFileRow)}
               </div>
             </div>
           );
         })}
+
+        {phaseTaskFiles.length > 0 && (
+          <div className="border-b border-border/20 last:border-b-0">
+            <div className="px-3 py-1.5 bg-muted/40 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Phase tasks
+            </div>
+            <div className="divide-y divide-border/20">
+              {phaseTaskFiles.map(renderFileRow)}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Footer toolbar */}

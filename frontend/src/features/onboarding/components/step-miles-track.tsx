@@ -45,9 +45,9 @@ export function StepMilesTrack({ value = 'FIRST', onChange }: StepMilesTrackProp
       {/* ── Stepped Track Container ── */}
       <div className="relative flex flex-col px-4">
         {/* Track Line */}
-        <div className="relative h-2 bg-neutral-200 rounded-full my-4">
+        <div className="relative h-2 bg-border rounded-full my-4">
           <div
-            className="absolute left-0 top-0 bottom-0 bg-neutral-900 rounded-full transition-all duration-200"
+            className="absolute left-0 top-0 bottom-0 bg-inverse rounded-full transition-all duration-200"
             style={{ width: `${(currentIndex / (STOPS.length - 1)) * 100}%` }}
           />
 
@@ -64,10 +64,10 @@ export function StepMilesTrack({ value = 'FIRST', onChange }: StepMilesTrackProp
                   onClick={() => onChange(stop.id)}
                   className={`size-5 rounded-full border-2 transition-all duration-150 flex items-center justify-center cursor-pointer ${
                     isSelected
-                      ? 'bg-neutral-900 border-neutral-900 ring-4 ring-neutral-900/10 scale-125'
+                      ? 'bg-inverse border-inverse ring-4 ring-inverse/20 scale-125'
                       : isPassed
-                      ? 'bg-neutral-900 border-neutral-900'
-                      : 'bg-white border-neutral-300 hover:border-neutral-500'
+                      ? 'bg-inverse border-inverse'
+                      : 'bg-surface border-border hover:border-border-strong'
                   }`}
                   aria-label={stop.label}
                 />

@@ -21,5 +21,8 @@ public enum NotificationType {
     DEMO_FROZEN,
     TASK_DONE,
     CHANGES_REQUESTED,
-    TASK_CONFIRMED
+    TASK_CONFIRMED,
+    PHASE_READY,
+    PHASE_STARTED,
+    PROJECT_SUBMITTED
 }

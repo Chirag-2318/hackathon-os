@@ -23,6 +23,10 @@ public class ApiMockSettings {
 
     public ApiMockSettings() {}
 
+    public ApiMockSettings(UUID roomId, boolean enabled, String token) {
+        this(roomId, enabled, token, Instant.now());
+    }
+
     public ApiMockSettings(UUID roomId, boolean enabled, String token, Instant updatedAt) {
         this.roomId = roomId;
         this.enabled = enabled;

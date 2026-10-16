@@ -195,7 +195,7 @@ export function RoomSummaryPage() {
             <Button
               size="sm"
               onClick={handlePrint}
-              className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+              className="h-8 text-xs gap-1.5 bg-inverse text-on-inverse hover:opacity-90 cursor-pointer"
             >
               <Printer className="size-3.5" />
               <span>Print / PDF</span>

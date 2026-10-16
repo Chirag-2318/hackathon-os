@@ -12,7 +12,7 @@ public class MvpState {
     @Column(name = "room_id", nullable = false)
     private UUID roomId;
 
-    @Column(length = 200)
+    @Column(columnDefinition = "text")
     private String identity;
 
     @Column(columnDefinition = "TEXT")

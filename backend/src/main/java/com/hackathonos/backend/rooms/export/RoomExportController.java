@@ -17,10 +17,15 @@ public class RoomExportController {
 
     private final RoomExportService exportService;
     private final CurrentUser currentUser;
+    private final com.hackathonos.backend.billing.BillingService billingService;
 
-    public RoomExportController(RoomExportService exportService, CurrentUser currentUser) {
+    public RoomExportController(RoomExportService exportService,
+                                CurrentUser currentUser,
+                                @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                com.hackathonos.backend.billing.BillingService billingService) {
         this.exportService = exportService;
         this.currentUser = currentUser;
+        this.billingService = billingService;
     }
 
     /**
@@ -44,6 +49,9 @@ public class RoomExportController {
     @GetMapping("/summary")
     public RoomEndSummaryDto getRoomSummary(@PathVariable UUID roomId) {
         User user = currentUser.get();
+        if (billingService != null && user != null) {
+            billingService.checkCanAccessReviewPages(user);
+        }
         return exportService.buildRoomSummary(roomId, user);
     }
 

@@ -51,6 +51,7 @@ public class IdeasService {
     private final NotificationService notificationService;
     private final IdeasMapper ideasMapper;
     private final com.hackathonos.backend.events.RoomEventService roomEventService;
+    private final org.springframework.beans.factory.ObjectProvider<com.hackathonos.backend.plan.PlanPrepareService> planPrepareServiceProvider;
 
     public IdeasService(
             IdeaRepository ideaRepository,
@@ -67,7 +68,8 @@ public class IdeasService {
             ActivityLogger activityLogger,
             NotificationService notificationService,
             IdeasMapper ideasMapper,
-            com.hackathonos.backend.events.RoomEventService roomEventService) {
+            com.hackathonos.backend.events.RoomEventService roomEventService,
+            org.springframework.beans.factory.ObjectProvider<com.hackathonos.backend.plan.PlanPrepareService> planPrepareServiceProvider) {
         this.ideaRepository = ideaRepository;
         this.linkRepository = linkRepository;
         this.noteRepository = noteRepository;
@@ -83,6 +85,7 @@ public class IdeasService {
         this.notificationService = notificationService;
         this.ideasMapper = ideasMapper;
         this.roomEventService = roomEventService;
+        this.planPrepareServiceProvider = planPrepareServiceProvider;
     }
 
     /**
@@ -148,7 +151,8 @@ public class IdeasService {
             User u = userMap.get(entry.getKey());
             if (u != null) {
                 String name = u.getName() != null ? u.getName() : (u.getEmail() != null ? u.getEmail() : "Member");
-                contributors.add(new ContributorDto(u.getId().toString(), name, u.getAvatarUrl(), entry.getValue()));
+                com.hackathonos.backend.users.dto.UserSummaryDto summary = com.hackathonos.backend.users.dto.UserSummaryDto.from(u, name);
+                contributors.add(new ContributorDto(u.getId().toString(), name, summary.avatarUrl(), entry.getValue()));
             }
         }
 
@@ -173,27 +177,40 @@ public class IdeasService {
             throw new ConflictException("IDEATION_LOCKED", "Ideation has ended or room is in build phase");
         }
 
+        if (ideaRepository.countByRoomId(roomId) >= 200) {
+            throw new com.hackathonos.backend.common.error.LimitReachedException(
+                    com.hackathonos.backend.common.error.ErrorCode.LIMIT_REACHED,
+                    "This room has reached the limit of 200 ideas."
+            );
+        }
+
         validateIdeaInput(req);
 
-        Idea idea = ideaRepository.save(new Idea(roomId, user.getId(), req.text().trim()));
+        boolean isAnonymous = Boolean.TRUE.equals(req.anonymous());
+        UUID authorId = isAnonymous ? null : user.getId();
+
+        Idea idea = ideaRepository.save(new Idea(roomId, authorId, req.text().trim()));
 
         List<IdeaLink> savedLinks = saveLinks(idea.getId(), req.links());
         List<IdeaNote> savedNotes = saveNotes(idea.getId(), req.notes());
 
-        activityLogger.log(room, user, "IDEA_POSTED", "Posted an idea");
-        roomEventService.recordEvent(roomId, "idea.posted", "idea", idea.getId().toString(), user.getId());
+        activityLogger.log(room, user, "IDEA_POSTED", isAnonymous ? "Posted an idea anonymously" : "Posted an idea");
+        roomEventService.recordEvent(roomId, "idea.posted", "idea", idea.getId().toString(), authorId);
 
         // Notify leader if poster is not the leader
         Optional<RoomMember> leaderMember = memberRepository.findByRoomIdAndRole(roomId, "leader").stream().findFirst();
         if (leaderMember.isPresent() && !leaderMember.get().getUserId().equals(user.getId())) {
             userRepository.findById(leaderMember.get().getUserId()).ifPresent(leader -> {
                 String snippet = idea.getText().length() > 50 ? idea.getText().substring(0, 50) + "..." : idea.getText();
+                String msg = isAnonymous
+                        ? "An anonymous teammate posted: \"" + snippet + "\""
+                        : user.getName() + " posted: \"" + snippet + "\"";
                 notificationService.notifyUser(leader, room, NotificationType.IDEA_POSTED,
-                        "New idea posted", user.getName() + " posted: \"" + snippet + "\"");
+                        "New idea posted", msg);
             });
         }
 
-        return ideasMapper.toDto(idea, savedLinks, savedNotes, user, user.getId());
+        return ideasMapper.toDto(idea, savedLinks, savedNotes, isAnonymous ? null : user, user.getId());
     }
 
     /**
@@ -409,6 +426,13 @@ public class IdeasService {
         activityLogger.log(room, user, "IDEATION_DONE", "Completed ideation");
         notificationService.notifyRoomMembers(room, null, NotificationType.IDEATION_DONE,
                 "Ideation complete", "Ideation phase completed! Team is moving to Plan.");
+
+        // Asynchronously start prepare for step 1 inside transition (fire and forget, never fail transition)
+        try {
+            planPrepareServiceProvider.ifAvailable(svc -> svc.triggerPrepareAsync(roomId, 1));
+        } catch (Exception e) {
+            // Fire and forget, never fail the transition
+        }
     }
 
     /**
@@ -435,7 +459,9 @@ public class IdeasService {
      */
     @Transactional(readOnly = true)
     public String exportIdeasMarkdown(UUID roomId, User user) {
-        roomAccess.requireMember(roomId, user);
+        if (user != null) {
+            roomAccess.requireMember(roomId, user);
+        }
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
 
         Optional<Brief> briefOpt = briefRepository.findByRoomId(roomId);

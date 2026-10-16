@@ -127,7 +127,7 @@ export function BoardFilterBar({
           className={cn(
             'h-7 px-3 rounded-full text-xs font-medium border transition-colors inline-flex items-center select-none',
             filterState.onlyMine
-              ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-black'
+              ? 'bg-inverse text-on-inverse border-inverse'
               : 'bg-background text-muted-foreground border-border hover:bg-muted'
           )}
         >
@@ -139,7 +139,7 @@ export function BoardFilterBar({
           className={cn(
             'h-7 px-3 rounded-full text-xs font-medium border transition-colors inline-flex items-center select-none',
             filterState.blocked
-              ? 'bg-rose-600 text-white border-rose-600'
+              ? 'bg-danger text-on-danger border-danger'
               : 'bg-background text-muted-foreground border-border hover:bg-muted'
           )}
         >
@@ -151,7 +151,7 @@ export function BoardFilterBar({
           className={cn(
             'h-7 px-3 rounded-full text-xs font-medium border transition-colors inline-flex items-center select-none',
             filterState.dueSoon
-              ? 'bg-amber-600 text-white border-amber-600'
+              ? 'bg-accent text-on-accent border-accent'
               : 'bg-background text-muted-foreground border-border hover:bg-muted'
           )}
         >
@@ -164,7 +164,7 @@ export function BoardFilterBar({
             className={cn(
               'h-7 px-3 rounded-full text-xs font-medium border transition-colors inline-flex items-center gap-1.5 select-none',
               filterState.needsConfirmation
-                ? 'bg-amber-600 text-white border-amber-600'
+                ? 'bg-accent text-on-accent border-accent'
                 : 'bg-background text-muted-foreground border-border hover:bg-muted'
             )}
           >
@@ -172,7 +172,7 @@ export function BoardFilterBar({
             {typeof needsConfirmationCount === 'number' && (
               <span className={cn(
                 'px-1.5 py-0.2 rounded-full text-[10px] font-bold',
-                filterState.needsConfirmation ? 'bg-white/20 text-white' : 'bg-muted text-foreground'
+                filterState.needsConfirmation ? 'bg-surface/25 text-on-accent' : 'bg-muted text-foreground'
               )}>
                 {needsConfirmationCount}
               </span>

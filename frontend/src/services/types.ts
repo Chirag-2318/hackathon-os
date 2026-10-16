@@ -114,6 +114,17 @@ export interface Brief {
   risks: string[];
 }
 
+export interface FileIntakeResult {
+  sourceText: string;
+  chars: number;
+  pages: number;
+  truncated: boolean;
+  warnings: string[];
+  saved?: boolean;
+  fields?: BriefFields | null;
+  brief?: Brief | null;
+}
+
 // ── Idea ──────────────────────────────────────────────────────────────────────
 
 export type IdeaStatus = 'pending' | 'approved' | 'rejected';
@@ -326,7 +337,15 @@ export interface DocFile {
 // ── Board / Task ─────────────────────────────────────────────────────────────
 
 export type TaskPriority = 'highest' | 'high' | 'medium' | 'low' | 'lowest';
-export type TaskStatus = 'todo' | 'inprogress' | 'done';
+export type TaskStatus = 'todo' | 'inprogress' | 'done' | 'dropped';
+
+export interface ValidationIssueDto {
+  code?: string;
+  severity: 'BLOCK' | 'WARN';
+  message: string;
+  line?: number;
+  heading?: string;
+}
 
 export interface TaskSubtask {
   id: string;
@@ -371,6 +390,11 @@ export interface Task {
   reporterId?: string;
   priority: TaskPriority;
   phaseId: string;
+  phaseKey?: string;
+  source?: 'MANUAL' | 'PHASE_IMPORT';
+  localId?: string | null;
+  deferredFrom?: string | null;
+  dropReason?: string | null;
   role: string;
   labels: string[];
   estimateMin: number;

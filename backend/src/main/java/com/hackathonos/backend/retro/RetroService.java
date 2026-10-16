@@ -131,9 +131,9 @@ public class RetroService {
                 .orElse(null);
 
         long commitCount = githubCommitRepository.countByRoomId(roomId);
-        List<Task> tasks = taskRepository.findByRoomId(roomId);
+        List<Task> tasks = taskRepository.findByRoomId(roomId).stream().filter(t -> !t.isDropped()).toList();
         int tasksTotal = tasks.size();
-        int tasksDone = (int) tasks.stream().filter(t -> "DONE".equalsIgnoreCase(t.getStatus())).count();
+        int tasksDone = (int) tasks.stream().filter(Task::isConfirmedDone).count();
         int ideasApproved = ideaRepository.findByRoomIdAndStatusOrderByCreatedAtDesc(roomId, "APPROVED").size();
 
         RetroDtos.RetroFactsDto facts = new RetroDtos.RetroFactsDto(
@@ -209,8 +209,8 @@ public class RetroService {
                 ? Math.max(1, Duration.between(room.getEventStart(), room.getEventEnd()).toHours()) : 24;
 
         for (PlanPhase p : phases) {
-            List<Task> phaseTasks = taskRepository.findByRoomIdAndPhaseId(roomId, p.getId());
-            int pDone = (int) phaseTasks.stream().filter(t -> "DONE".equalsIgnoreCase(t.getStatus())).count();
+            List<Task> phaseTasks = taskRepository.findByRoomIdAndPhaseId(roomId, p.getId()).stream().filter(t -> !t.isDropped()).toList();
+            int pDone = (int) phaseTasks.stream().filter(Task::isConfirmedDone).count();
             double share = (p.getEndPct().doubleValue() - p.getStartPct().doubleValue()) / 100.0;
             double pHours = Math.round(share * totalRoomHours * 10.0) / 10.0;
             timeDist.add(new RetroDtos.TimeDistributionDto(p.getName().toLowerCase(Locale.ROOT), p.getName(), pDone, pHours, pHours, pHours));

@@ -15,7 +15,7 @@ public class DocComment {
     @Column(name = "doc_id", nullable = false)
     private UUID docId;
 
-    @Column(name = "author_id", nullable = false)
+    @Column(name = "author_id")
     private UUID authorId;
 
     @Column(nullable = false, columnDefinition = "TEXT")

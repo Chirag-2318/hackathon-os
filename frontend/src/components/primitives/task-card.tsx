@@ -77,7 +77,7 @@ function TaskCard({
     >
       <div className="flex items-start justify-between mb-2">
         {isBlocked ? (
-          <Chip variant="solid" className="bg-danger-fill text-white">Blocked</Chip>
+          <Chip variant="solid" className="bg-danger text-on-danger">Blocked</Chip>
         ) : isDone ? (
           <Chip fill="var(--color-success-fill)" className="text-ink">
             <Check className="size-3" /> Done

@@ -15,6 +15,7 @@ import { CrScheduleField } from './create-room/cr-schedule-field';
 import { CrMoreSection } from './create-room/cr-more-section';
 import { SectionErrorBoundary } from '@/design/components/error-state';
 import { useMeta } from '@/api/useMeta';
+import { useAiAction } from '@/features/ai-gate';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -36,13 +37,12 @@ function parseDateInput(s: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-type ModeHint = 'prep' | 'speed' | null;
+type ModeHint = 'prep' | null;
 
 function getModeHint(start: Date | null, end: Date | null): ModeHint {
   if (!start) return null;
   const now = Date.now();
   if (start.getTime() > now) return 'prep';
-  if (end && now >= start.getTime() && now <= end.getTime()) return 'speed';
   return null;
 }
 
@@ -229,6 +229,7 @@ export function CreateRoomDialogInner({ prefill: directPrefill }: { prefill?: Cr
 
   // Suggest name
   const { data: meta } = useMeta();
+  const { handleAiError } = useAiAction();
   const aiAllowed = meta?.aiEnabled ?? true;
   const [alternativeNames, setAlternativeNames] = useState<string[]>([]);
   const [suggestError, setSuggestError] = useState<string | null>(null);
@@ -249,6 +250,7 @@ export function CreateRoomDialogInner({ prefill: directPrefill }: { prefill?: Cr
       setSubmitError(null);
     },
     onError: (err: any) => {
+      handleAiError(err);
       setSuggestError(err?.message || 'Failed to suggest names. Please try again.');
     },
   });
@@ -541,8 +543,8 @@ export function CreateRoomDialogInner({ prefill: directPrefill }: { prefill?: Cr
               createMutation.isPending || !isFormValid
                 ? 'bg-active text-ink-3 cursor-not-allowed'
                 : isSuccess
-                ? 'bg-ink text-white cursor-default'
-                : 'bg-ink text-white hover:bg-ink/90 cursor-pointer'
+                ? 'bg-primary text-primary-foreground cursor-default'
+                : 'bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer'
             )}
           >
             {createMutation.isPending ? (

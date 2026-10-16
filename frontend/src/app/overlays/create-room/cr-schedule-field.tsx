@@ -11,7 +11,7 @@ interface CrScheduleFieldProps {
   onStartBlur: () => void;
   endError?: string;
   endTouched: boolean;
-  modeHint: 'prep' | 'speed' | null;
+  modeHint: 'prep' | null;
 }
 
 function getTimezoneAbbr(): string {
@@ -58,9 +58,6 @@ export function CrScheduleField({
         </label>
         {modeHint === 'prep' && (
           <Lozenge variant="neutral">Prep mode</Lozenge>
-        )}
-        {modeHint === 'speed' && (
-          <Lozenge variant="neutral">Speed mode</Lozenge>
         )}
       </div>
 

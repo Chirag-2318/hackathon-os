@@ -17,7 +17,7 @@ public class MvpCutItem {
     @Column(nullable = false)
     private int position = 0;
 
-    @Column(nullable = false, length = 255)
+    @Column(nullable = false, columnDefinition = "text")
     private String text;
 
     @Column(name = "is_cut", nullable = false)

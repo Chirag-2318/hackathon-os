@@ -55,7 +55,7 @@ export function PlaybookDetailPage() {
             <div className="flex-1">
               <div className="mb-6">
                 <Chip variant="soft" className="mb-4">{playbook.eventType}</Chip>
-                <h1 className="text-h1 text-ink-strong mb-4">{playbook.title}</h1>
+                <h1 className="text-3xl sm:text-4xl font-display font-normal text-ink mb-4 leading-none tracking-tight">{playbook.title}</h1>
                 <div className="flex flex-wrap gap-6 text-body text-ink-muted">
                   {playbook.teamSize !== null && (
                     <span className="flex items-center gap-2">

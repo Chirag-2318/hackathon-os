@@ -169,6 +169,8 @@ function CalloutTail({ side, pos, isReducedMotion = false, stopKey }: CalloutTai
   );
 }
 
+import { SeatChoiceCard } from './SeatChoiceCard';
+
 export function GuidedCard({
   cardRef,
   stop,
@@ -185,6 +187,25 @@ export function GuidedCard({
   onSkip,
   onSelectPath,
 }: GuidedCardProps) {
+  if (stop.isSeatChoice) {
+    return (
+      <SeatChoiceCard
+        cardRef={cardRef}
+        stopIndex={stopIndex}
+        totalStops={totalStops}
+        isReducedMotion={isReducedMotion}
+        isMobile={isMobile}
+        onSkip={onSkip}
+        onSelectPath={(path) => {
+          if (onSelectPath) {
+            onSelectPath(path);
+          } else {
+            onNext();
+          }
+        }}
+      />
+    );
+  }
   const titleHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const sceneContainerRef = useRef<HTMLDivElement | null>(null);
   const [sceneScale, setSceneScale] = useState(1);

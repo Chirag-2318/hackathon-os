@@ -1,0 +1,14 @@
+HACKATHON OS - {{HEADER_BADGE}}
+
+{{HEADLINE}}
+
+{{DETAIL_TEXT}}
+
+{{BOX_TITLE}}:
+{{BOX_CONTENT}}
+
+{{ACTION_TEXT}}:
+{{ACTION_URL}}
+
+--
+Hackathon OS - Collaborative command center for intense hackathons

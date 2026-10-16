@@ -8,7 +8,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import {
   OverviewIcon,
   TeamIcon,
-  SpeedModeIcon,
 } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { roomService, planService, ideaService, prepService } from '@/services';
@@ -123,9 +122,8 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
 
   // Current subpath
   const currentSubPath = location.pathname.replace(`/app/room/${roomId}`, '').replace(/^\//, '') || 'overview';
-  const isSpeedModeActive = location.pathname.startsWith(`/speed-mode/${roomId}`);
 
-  // ── Primary Pinned Items (Overview, Team, Speed mode) ─────────────
+  // ── Primary Pinned Items (Overview, Team) ─────────────
   const renderPinnedItem = (
     id: string,
     label: string,
@@ -135,8 +133,6 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
   ) => {
     const isActive = id === 'overview'
       ? currentSubPath === 'overview' || currentSubPath === ''
-      : id === 'speed-mode'
-      ? isSpeedModeActive
       : currentSubPath.startsWith(id);
 
     const content = (
@@ -147,13 +143,13 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
         className={cn(
           'group relative flex items-center h-8 rounded-[8px] px-2 gap-2 w-full outline-none transition-colors duration-150 cursor-pointer text-[13px] font-medium select-none',
           isActive
-            ? 'bg-active text-ink font-semibold'
+            ? 'bg-hover-surface text-ink font-semibold'
             : 'text-ink-2 hover:bg-hover hover:text-ink active:scale-[0.99]'
         )}
       >
         {/* Active left 2px bar */}
         {isActive && (
-          <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-ink" />
+          <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-accent" />
         )}
 
         <span className="size-4 shrink-0 flex items-center justify-center">
@@ -181,7 +177,7 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0 select-none">
+    <div className="flex flex-col h-full min-h-0 select-none bg-[var(--sidebar)]">
       {/* 1. Room Identity Block */}
       <RoomIdentity
         roomId={roomId}
@@ -206,23 +202,6 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
           'Team',
           `/app/room/${roomId}/team`,
           <TeamIcon size={16} />
-        )}
-        {/* Speed mode with bolt icon and On/Off pill */}
-        {renderPinnedItem(
-          'speed-mode',
-          'Speed mode',
-          `/speed-mode/${roomId}`,
-          <SpeedModeIcon size={16} className={isSpeedModeActive ? 'text-amber-500' : undefined} />,
-          <span
-            className={cn(
-              'px-1.5 py-0.2 rounded-full text-[10px] font-semibold tabular-nums border transition-colors',
-              isSpeedModeActive
-                ? 'bg-amber-500/15 border-amber-500/30 text-amber-600 dark:text-amber-400'
-                : 'bg-muted/50 border-border/40 text-ink-3'
-            )}
-          >
-            {isSpeedModeActive ? 'On' : 'Off'}
-          </span>
         )}
       </div>
 
@@ -275,7 +254,7 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
                 setUnlockEarlyOpen(false);
                 toast.success('Build phase unlocked early!');
               }}
-              className="bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 font-semibold"
+              className="bg-inverse text-on-inverse hover:opacity-90 font-semibold"
             >
               Unlock early
             </Button>

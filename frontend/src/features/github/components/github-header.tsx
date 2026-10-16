@@ -63,7 +63,7 @@ export function GithubHeader({
       <div className="flex flex-wrap items-center justify-between gap-4 py-1">
         {/* Left: Title + Repo Chip + Connected Status */}
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">GitHub</h1>
+          <h1 className="text-3xl sm:text-4xl font-display font-normal tracking-tight text-foreground leading-none">GitHub</h1>
 
           {/* Repo Chip */}
           <a
@@ -83,7 +83,11 @@ export function GithubHeader({
             <span className="size-2 rounded-full bg-emerald-500 shrink-0" />
             <span className="font-medium text-emerald-600 dark:text-emerald-400">Connected</span>
             <span className="text-muted-foreground/60">·</span>
-            <span className="tabular-nums">{syncLabel}</span>
+            <span className="capitalize px-1.5 py-0.5 rounded text-[11px] font-medium bg-muted text-foreground border border-border/50">
+              {repo.visibility || 'public'}
+            </span>
+            <span className="text-muted-foreground/60">·</span>
+            <span className="font-mono tabular-nums">{syncLabel}</span>
           </div>
         </div>
 

@@ -12,7 +12,7 @@ import java.util.UUID;
  * Controller exposing brief management, source parsing, and confirmation endpoints.
  */
 @RestController
-@RequestMapping("/api/v1/rooms/{roomId}/brief")
+@RequestMapping({"/api/v1/rooms/{roomId}/brief", "/rooms/{roomId}/brief"})
 public class BriefController {
 
     private final BriefService briefService;
@@ -21,6 +21,15 @@ public class BriefController {
     public BriefController(BriefService briefService, CurrentUser currentUser) {
         this.briefService = briefService;
         this.currentUser = currentUser;
+    }
+
+    @com.hackathonos.backend.common.security.RateLimited(key = "brief_intake", limit = 10, periodSeconds = 60)
+    @PostMapping(value = "/intake/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public FileIntakeResponse intakeFile(
+            @PathVariable UUID roomId,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "extract", defaultValue = "false") boolean extract) {
+        return briefService.intakeFile(roomId, file, extract, currentUser.get());
     }
 
     @GetMapping

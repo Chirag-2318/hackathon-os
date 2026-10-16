@@ -29,15 +29,15 @@ export function ProgressChart({ data, className }: ProgressChartProps) {
     },
     series1: {
       label: 'Code (Est)',
-      color: '#5880D1',
+      color: 'var(--color-info-stroke)',
     },
     series2: {
       label: 'Docs (Est)',
-      color: '#C9EF84',
+      color: 'var(--color-success-stroke)',
     },
     series3: {
       label: 'Design (Est)',
-      color: '#B9D4FE',
+      color: 'var(--color-info-fill)',
     },
   };
 

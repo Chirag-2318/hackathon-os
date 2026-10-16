@@ -17,10 +17,11 @@ import {
 } from 'react-router-dom';
 import { ProtectedRoute } from '@/app/ProtectedRoute';
 import { ResponsiveShell } from '@/app/layout/responsive-shell';
-import { SpeedModeShell } from '@/app/layout/speed-mode-shell';
 import { GlobalOverlays } from '@/app/overlays/global-overlays';
 import { LandingPage } from '@/features/landing/landing-page';
 import { SignInPage } from '@/features/auth/sign-in-page';
+import { UnsubscribedPage } from '@/features/auth/unsubscribed-page';
+import { GoodbyePage } from '@/features/auth/goodbye-page';
 import { InviteLandingPage } from '@/features/invite/invite-landing-page';
 import { PlaybookBrowsePage } from '@/features/playbooks/playbook-browse-page';
 import { PlaybookDetailPage } from '@/features/playbooks/playbook-detail-page';
@@ -31,6 +32,7 @@ import { PlaybooksView } from '@/features/playbooks/playbooks-view';
 import { ToolDirectoryView } from '@/features/tools/tool-directory-view';
 import { isModuleHidden } from '@/config/featureFlags';
 import { RoomErrorBoundary } from '@/shared/ui/RoomErrorBoundary';
+import { FullPage } from '@/features/public/full-page';
 import {
   NotFoundPage,
   ForbiddenPage,
@@ -40,11 +42,17 @@ import {
 } from '@/features/system-pages/system-pages';
 
 // Lazy-loaded app and room pages
+const AdminOverviewPage = lazy(() =>
+  import('@/features/admin/admin-overview-page').then((m) => ({ default: m.AdminOverviewPage }))
+);
 const HomePage = lazy(() => import('@/features/home/home-page').then((m) => ({ default: m.HomePage })));
 const RoomOverviewPage = lazy(() =>
   import('@/features/room-overview/room-overview-page').then((m) => ({ default: m.RoomOverviewPage }))
 );
 const BriefPage = lazy(() => import('@/features/brief/brief-page').then((m) => ({ default: m.BriefPage })));
+const JoinInvitePage = lazy(() =>
+  import('@/features/invite/join-invite-page').then((m) => ({ default: m.JoinInvitePage }))
+);
 const TeamPage = lazy(() => import('@/features/team/team-page').then((m) => ({ default: m.TeamPage })));
 const IdeatePage = lazy(() => import('@/features/ideate/ideate-page').then((m) => ({ default: m.IdeatePage })));
 const PlanPage = lazy(() => import('@/features/plan/plan-page').then((m) => ({ default: m.PlanPage })));
@@ -108,15 +116,16 @@ const NotificationsPage = lazy(() =>
   import('@/features/notifications/notifications-page').then((m) => ({ default: m.NotificationsPage }))
 );
 const MentorPage = lazy(() => import('@/features/mentor/mentor-page').then((m) => ({ default: m.MentorPage })));
-const SpeedModePage = lazy(() =>
-  import('@/features/speed-mode/speed-mode-page').then((m) => ({ default: m.SpeedModePage }))
-);
+
 const MyRoomsPage = lazy(() => import('@/features/room/my-rooms-page').then((m) => ({ default: m.MyRoomsPage })));
 const SocialDashboard = lazy(() =>
   import('@/features/prototypes/social-dashboard').then((m) => ({ default: m.SocialDashboard }))
 );
 const CalendarDashboard = lazy(() =>
   import('@/features/prototypes/calendar-dashboard').then((m) => ({ default: m.CalendarDashboard }))
+);
+const PortfolioPage = lazy(() =>
+  import('@/features/portfolio/portfolio-page').then((m) => ({ default: m.PortfolioPage }))
 );
 
 // Dynamic dev tool loading: only loaded in DEV mode
@@ -234,17 +243,6 @@ function RoomShellLayout() {
   );
 }
 
-/** Speed Mode layout route */
-function SpeedModeLayout() {
-  return (
-    <SpeedModeShell>
-      <GlobalOverlays />
-      <Suspense fallback={<PageSuspenseFallback />}>
-        <Outlet />
-      </Suspense>
-    </SpeedModeShell>
-  );
-}
 
 /** Placeholder page */
 function PlaceholderPage({ title }: { title: string }) {
@@ -291,8 +289,36 @@ const router = createBrowserRouter([
     element: <SignInPage />,
   },
   {
+    path: '/full',
+    element: <FullPage />,
+  },
+  {
+    path: '/terms',
+    element: <PlaceholderPage title="Terms of Service" />,
+  },
+  {
+    path: '/privacy',
+    element: <PlaceholderPage title="Privacy Policy" />,
+  },
+  {
+    path: '/join',
+    element: (
+      <Suspense fallback={<PageSuspenseFallback />}>
+        <JoinInvitePage />
+      </Suspense>
+    ),
+  },
+  {
     path: '/invite/:token',
     element: <InviteLandingPage />,
+  },
+  {
+    path: '/unsubscribed',
+    element: <UnsubscribedPage />,
+  },
+  {
+    path: '/goodbye',
+    element: <GoodbyePage />,
   },
   {
     path: '/playbooks',
@@ -309,6 +335,14 @@ const router = createBrowserRouter([
   {
     path: '/tour',
     element: <Navigate to="/app/home" replace />,
+  },
+  {
+    path: '/u/:username',
+    element: (
+      <Suspense fallback={<PageSuspenseFallback />}>
+        <PortfolioPage />
+      </Suspense>
+    ),
   },
 
   // ── Authenticated routes (with shell) ─────────────────────────
@@ -328,7 +362,7 @@ const router = createBrowserRouter([
       { path: 'playbooks', element: <PlaybooksView /> },
       { path: 'playbooks/:slug', element: <PlaybookDetailPage /> },
       { path: 'tools', element: <ToolDirectoryView /> },
-      { path: 'portfolio', element: <PlaceholderPage title="Portfolio" /> },
+      { path: 'portfolio', element: <PortfolioPage /> },
       {
         path: 'settings',
         element: <SettingsPage />,
@@ -337,13 +371,23 @@ const router = createBrowserRouter([
           { path: 'profile', element: <ProfileSection /> },
           { path: 'appearance', element: <AppearanceSection /> },
           { path: 'notifications', element: <NotificationsSection /> },
+          { path: 'integrations', element: <IntegrationsSection /> },
           { path: 'ai-status', element: <AiKeysSection /> },
           { path: 'ai-keys', element: <AiKeysSection /> },
+          { path: 'ai', element: <AiKeysSection /> },
           { path: 'privacy', element: <PrivacySection /> },
           { path: 'billing', element: <BillingSection /> },
         ],
       },
       { path: 'notifications', element: <NotificationsPage /> },
+      {
+        path: 'admin',
+        element: (
+          <Suspense fallback={<PageSuspenseFallback />}>
+            <AdminOverviewPage />
+          </Suspense>
+        ),
+      },
     ],
   },
   {
@@ -389,7 +433,6 @@ const router = createBrowserRouter([
       { path: 'readiness', element: <ReadinessPage /> },
       { path: 'summary', element: <RoomSummaryPage /> },
       { path: 'retro', element: <RetroPage /> },
-      { path: 'speed-mode', element: <SpeedModePage /> },
       { path: 'notifications', element: <NotificationsPage /> },
     ],
   },
@@ -406,15 +449,7 @@ const router = createBrowserRouter([
       </Suspense>
     ),
   },
-  // S31 Speed Mode
-  {
-    path: '/speed-mode',
-    element: <SpeedModeLayout />,
-    children: [
-      { index: true, element: <SpeedModePage /> },
-      { path: ':roomId', element: <SpeedModePage /> },
-    ],
-  },
+
   // Dev-only preview route for icons
   {
     path: '/dev/icons',

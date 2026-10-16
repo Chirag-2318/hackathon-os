@@ -6,9 +6,17 @@ package com.hackathonos.backend.ai;
 public interface LlmClient {
 
     /**
+     * Executes a chat completion against the LLM provider using the given API key.
+     */
+    LlmResult chat(LlmRequest request, String apiKey);
+
+    /**
      * Executes a chat completion against the LLM provider.
      */
-    LlmResult chat(LlmRequest request);
+    default LlmResult chat(LlmRequest request) {
+        return chat(request, null);
+    }
+
 
     /**
      * Returns whether the client has credentials and is configured.

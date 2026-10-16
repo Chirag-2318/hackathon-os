@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { boardService } from '@/services/boardService';
 import { roomService } from '@/services/roomService';
+import { phaseService, type PhaseSummary } from '@/services/phaseService';
 import type { Task, BoardPhase, RoomMember, TaskStatus } from '@/services/types';
 
 import { BoardHeader } from './components/board-header';
@@ -12,9 +14,16 @@ import { BoardSwimlanes } from './components/board-swimlanes';
 import { BoardListView } from './components/board-list-view';
 import { CreateTaskModal } from './create-task-modal';
 import { TaskDetailModal } from './task-detail-modal';
+import { PhaseRail } from './components/phase-rail';
+import { PhaseHeaderRow } from './components/phase-header-row';
+import { PhaseGenerationPanel } from './components/phase-generation-panel';
+import { PhaseCompleteDialog } from './components/phase-complete-dialog';
 import { SegmentedControl, SegmentedControlItem } from '@/components/primitives/segmented-control';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { ArrowRight, Check } from 'lucide-react';
 import { EmptyState, ErrorState, celebrateAchievement } from '@/design';
+import { playSound } from '@/shared/sound/sound-effects';
 
 import { useCurrentUser } from '@/features/auth/useCurrentUser';
 
@@ -39,6 +48,40 @@ export function BoardPage() {
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [activeMobileColumn, setActiveMobileColumn] = useState<TaskStatus>('todo');
+
+  const [dismissedReadyKey, setDismissedReadyKey] = useState<string | null>(null);
+
+  // Phases from phase engine
+  const { data: phasesData = [], refetch: refetchPhases } = useQuery({
+    queryKey: ['phases', roomId],
+    queryFn: () => phaseService.getPhases(roomId!),
+    enabled: Boolean(roomId),
+  });
+
+  const activePhase = useMemo(
+    () => phasesData.find((p) => p.status === 'ACTIVE') || phasesData[0] || null,
+    [phasesData]
+  );
+
+  const phaseParam = searchParams.get('phase');
+  const selectedPhaseKey = phaseParam === 'all' ? null : (phaseParam || activePhase?.key || null);
+
+  const currentPhase = useMemo(() => {
+    if (!selectedPhaseKey) return activePhase;
+    return phasesData.find((p) => p.key.toUpperCase() === selectedPhaseKey.toUpperCase()) || activePhase;
+  }, [selectedPhaseKey, phasesData, activePhase]);
+
+  const nextPhase = useMemo(() => {
+    if (!activePhase?.nextPhaseKey) return null;
+    return phasesData.find((p) => p.key.toUpperCase() === activePhase.nextPhaseKey?.toUpperCase()) || null;
+  }, [activePhase, phasesData]);
+
+  const handleSelectPhase = (key: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (key === null) next.set('phase', 'all');
+    else next.set('phase', key);
+    setSearchParams(next, { replace: true });
+  };
 
   // Summary quick filter ('open' | 'blocked' | 'unassigned' | 'duetoday' | null)
   const [summaryFilter, setSummaryFilter] = useState<'open' | 'blocked' | 'unassigned' | 'duetoday' | null>(null);
@@ -182,6 +225,7 @@ export function BoardPage() {
       await boardService.moveTask(roomId, taskId, newStatus, 0, (prevTask as any).version);
 
       if (newStatus === 'done') {
+        playSound('success');
         const remainingOpen = tasks.filter(t => t.id !== taskId && t.status !== 'done').length;
         const totalDoneBefore = tasks.filter(t => t.status === 'done').length;
         if (totalDoneBefore === 0) {
@@ -258,16 +302,47 @@ export function BoardPage() {
   // Inline Create
   const handleInlineCreate = async (status: TaskStatus, summary: string) => {
     if (!roomId) return;
-    const currentPhase = phases[0]?.id || 'p-0';
+    const targetPhaseKey = currentPhase?.key || phases[0]?.id || 'P1';
     const newTask = await boardService.createTask(roomId, {
       summary,
       status,
-      phaseId: currentPhase,
+      phaseId: targetPhaseKey,
+      phaseKey: targetPhaseKey,
       assigneeId: currentUserId,
       reporterId: currentUserId,
     });
     setTasks(prev => [...prev, newTask]);
+    refetchPhases();
     toast.success(`Created ${newTask.key}`);
+  };
+
+  // Defer Task (leader only)
+  const handleDeferTask = async (taskId: string) => {
+    if (!roomId) return;
+    try {
+      await phaseService.deferTask(roomId, taskId);
+      toast.success('Task deferred to next phase');
+      loadData();
+      refetchPhases();
+      handleCloseTaskModal();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to defer task');
+    }
+  };
+
+  // Drop Task (leader only)
+  const handleDropTaskLeader = async (taskId: string) => {
+    if (!roomId) return;
+    try {
+      playSound('destructive');
+      await phaseService.dropTask(roomId, taskId, 'Dropped by leader');
+      toast.success('Task dropped');
+      loadData();
+      refetchPhases();
+      handleCloseTaskModal();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to drop task');
+    }
   };
 
   // Create Task via Modal
@@ -275,6 +350,7 @@ export function BoardPage() {
     if (!roomId) return;
     const newTask = await boardService.createTask(roomId, draft);
     setTasks(prev => [...prev, newTask]);
+    refetchPhases();
     toast.success(`Created ${newTask.key}`);
     if (!createAnother) {
       setIsCreateModalOpen(false);
@@ -286,6 +362,7 @@ export function BoardPage() {
     if (!roomId) return;
     await boardService.deleteTask(roomId, taskId);
     setTasks(prev => prev.filter(t => t.id !== taskId));
+    refetchPhases();
     handleCloseTaskModal();
     toast.success('Task deleted');
   };
@@ -293,6 +370,18 @@ export function BoardPage() {
   // Filter Tasks
   const filteredTasks = useMemo(() => {
     return tasks.filter(task => {
+      // Exclude dropped tasks
+      if (task.status === 'dropped') return false;
+
+      // Phase filter
+      if (selectedPhaseKey !== null) {
+        const matchesPhase =
+          task.phaseKey?.toUpperCase() === selectedPhaseKey.toUpperCase() ||
+          task.phaseId === selectedPhaseKey ||
+          (currentPhase?.id && task.phaseId === currentPhase.id);
+        if (!matchesPhase) return false;
+      }
+
       // Summary filter
       if (summaryFilter === 'open' && task.status === 'done') return false;
       if (summaryFilter === 'blocked' && !task.flagged && !task.blockedReason) return false;
@@ -454,17 +543,107 @@ export function BoardPage() {
   const inProgressTasks = useMemo(() => filteredTasks.filter(t => t.status === 'inprogress'), [filteredTasks]);
   const doneTasks = useMemo(() => filteredTasks.filter(t => t.status === 'done'), [filteredTasks]);
 
+  const [isControlsCollapsed, setIsControlsCollapsed] = useState(false);
+
   const currentMember = members.find((m) => m.id === currentUserId) || members[0] || null;
   const isLeader = currentMember?.role === 'leader';
   const needsConfirmationCount = useMemo(() => {
     return tasks.filter((t) => t.status === 'done' && t.reviewState === 'AWAITING').length;
   }, [tasks]);
 
+  const currentPhaseTasks = useMemo(() => {
+    if (!currentPhase) return [];
+    return tasks.filter(t => t.phaseKey?.toUpperCase() === currentPhase.key?.toUpperCase() || t.phaseId === currentPhase.id);
+  }, [tasks, currentPhase]);
+
+  // Directly show generation panel if current phase has not generated tasks or has 0 tasks and is not completed
+  const showGenerationPanel = Boolean(
+    currentPhase &&
+    (!currentPhase.tasksGenerated || currentPhaseTasks.length === 0) &&
+    currentPhase.status !== 'COMPLETED'
+  );
+
+  const hasTasks = Boolean(!showGenerationPanel && tasks.length > 0);
+
+  const isActivePhaseComplete = Boolean(
+    activePhase &&
+    activePhase.status === 'ACTIVE' &&
+    (activePhase.ready || (currentPhaseTasks.length > 0 && currentPhaseTasks.every(t => t.status === 'done' || t.status === 'dropped')))
+  );
+
+  const showPhaseCompleteDialog = Boolean(
+    isLeader &&
+    activePhase &&
+    activePhase.status === 'ACTIVE' &&
+    activePhase.ready &&
+    dismissedReadyKey !== activePhase.key
+  );
+
   return (
     <div className="flex flex-col gap-4 p-5 max-w-full min-h-[calc(100vh-64px)]">
+      {/* Phase Rail at top of Board */}
+      {phasesData.length > 0 && (
+        <PhaseRail
+          phases={phasesData}
+          selectedPhaseKey={selectedPhaseKey}
+          onSelectPhase={handleSelectPhase}
+        />
+      )}
+
+      {/* Active Phase Completed - Jump into Next Phase Banner */}
+      {isActivePhaseComplete && nextPhase && (
+        <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-emerald-950 dark:text-emerald-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="size-8 rounded-full bg-emerald-500/20 text-emerald-600 flex items-center justify-center shrink-0">
+              <Check className="size-4 stroke-[3]" />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-semibold text-sm">
+                Phase {activePhase.key} is completed!
+              </span>
+              <span className="text-xs text-muted-foreground">
+                All deliverables in {activePhase.key} are finished. You can now advance to Phase {nextPhase.key} ({nextPhase.name}).
+              </span>
+            </div>
+          </div>
+
+          {isLeader ? (
+            <Button
+              onClick={async () => {
+                try {
+                  await phaseService.advancePhase(roomId!, activePhase.key);
+                  playSound('success');
+                  toast.success(`Phase ${activePhase.key} completed! Welcome to Phase ${nextPhase.key}.`);
+                  handleSelectPhase(nextPhase.key);
+                  loadData();
+                  refetchPhases();
+                } catch (err: any) {
+                  toast.error(err?.message || 'Failed to advance phase');
+                }
+              }}
+              className="h-9 px-5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-2 cursor-pointer shadow-xs shrink-0"
+            >
+              <span>Phase {activePhase.key} is completed. Jump into {nextPhase.key}</span>
+              <ArrowRight className="size-3.5" />
+            </Button>
+          ) : (
+            <span className="text-xs font-mono text-muted-foreground">
+              Waiting for leader to advance to Phase {nextPhase.key}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Non-blocking banner for members when active phase is complete */}
+      {!isLeader && !isActivePhaseComplete && activePhase && activePhase.status === 'ACTIVE' && activePhase.ready && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between">
+          <span>{activePhase.key} is complete. Waiting for the leader to start {nextPhase?.key || 'the next phase'}.</span>
+        </div>
+      )}
+
       {/* 1 & 2: Header & Summary chips */}
       <BoardHeader
-        currentPhaseName={currentPhaseName || phases[0]?.name || 'Sprint'}
+        currentPhaseName={currentPhase?.name || currentPhaseName || phases[0]?.name || 'Sprint'}
         timeLeftText={hoursLeft !== null ? `${hoursLeft}h left` : undefined}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
@@ -472,21 +651,62 @@ export function BoardPage() {
         tasks={tasks}
         activeFilter={summaryFilter}
         onSelectSummaryFilter={setSummaryFilter}
+        showControls={hasTasks}
+        isControlsCollapsed={isControlsCollapsed}
+        onToggleCollapse={() => setIsControlsCollapsed(c => !c)}
       />
 
-      {/* 3: Quick filter bar */}
-      <BoardFilterBar
-        members={members}
-        currentUserId={currentUserId}
-        isLeader={isLeader}
-        needsConfirmationCount={needsConfirmationCount}
-        filterState={filterState}
-        onFilterChange={handleFilterChange}
-        onClearFilters={handleClearFilters}
-      />
+      {/* Slim Header Row when phase has tasks */}
+      {currentPhase && currentPhase.tasksGenerated && (
+        <PhaseHeaderRow
+          roomId={roomId!}
+          phase={currentPhase}
+          nextPhase={nextPhase}
+          isLeader={isLeader}
+          tasks={tasks}
+          onRefresh={() => {
+            loadData();
+            refetchPhases();
+          }}
+          onAdvanceEarly={async (choice) => {
+            try {
+              await phaseService.advancePhase(roomId!, currentPhase.key, choice);
+              toast.success(`Advanced to ${nextPhase?.key || 'next phase'}`);
+              loadData();
+              refetchPhases();
+            } catch (err: any) {
+              toast.error(err?.message || 'Failed to advance phase');
+            }
+          }}
+        />
+      )}
+
+      {/* 3: Quick filter bar - only rendered when tasks are generated and not collapsed */}
+      {hasTasks && !isControlsCollapsed && (
+        <BoardFilterBar
+          members={members}
+          currentUserId={currentUserId}
+          isLeader={isLeader}
+          needsConfirmationCount={needsConfirmationCount}
+          filterState={filterState}
+          onFilterChange={handleFilterChange}
+          onClearFilters={handleClearFilters}
+        />
+      )}
 
       {/* Main Board / List View Area */}
-      {isLocked?.locked ? (
+      {showGenerationPanel && currentPhase ? (
+        <PhaseGenerationPanel
+          roomId={roomId!}
+          phase={currentPhase}
+          isLeader={isLeader}
+          mode="FRESH"
+          onImportSuccess={() => {
+            loadData();
+            refetchPhases();
+          }}
+        />
+      ) : isLocked?.locked ? (
         <EmptyState
           illustration="checklist"
           headline="Board is Locked"
@@ -521,12 +741,8 @@ export function BoardPage() {
       ) : tasks.length === 0 ? (
         <EmptyState
           illustration="clipboard"
-          headline="No tasks yet. Generate them from your plan."
-          subtext="Kickstart your sprint by generating actionable engineering tasks from your validated plan."
-          primaryAction={{
-            label: 'Generate from Plan',
-            onClick: () => navigate(`/app/room/${roomId}/plan`),
-          }}
+          headline={`No tasks yet for ${currentPhase?.key || 'this phase'}`}
+          subtext="Create tasks manually or wait for phase import."
           secondaryAction={{
             label: 'Create task manually',
             variant: 'secondary',
@@ -595,10 +811,13 @@ export function BoardPage() {
                 isDropTarget={dropTargetCol === 'todo'}
                 dropIndex={dropTargetCol === 'todo' ? dropIndex : null}
                 draggingTaskId={draggingTaskId}
+                isLeader={isLeader}
                 onOpenTask={handleOpenTask}
                 onStatusChange={handleStatusChange}
                 onAssignToMe={handleAssignToMe}
                 onToggleBlock={handleToggleBlock}
+                onDeferTask={handleDeferTask}
+                onDropTaskLeader={handleDropTaskLeader}
                 onInlineCreate={handleInlineCreate}
                 onPointerDownDrag={handlePointerDownDrag}
                 onDropTask={handleDropTask}
@@ -618,10 +837,13 @@ export function BoardPage() {
                 isDropTarget={dropTargetCol === 'inprogress'}
                 dropIndex={dropTargetCol === 'inprogress' ? dropIndex : null}
                 draggingTaskId={draggingTaskId}
+                isLeader={isLeader}
                 onOpenTask={handleOpenTask}
                 onStatusChange={handleStatusChange}
                 onAssignToMe={handleAssignToMe}
                 onToggleBlock={handleToggleBlock}
+                onDeferTask={handleDeferTask}
+                onDropTaskLeader={handleDropTaskLeader}
                 onInlineCreate={handleInlineCreate}
                 onPointerDownDrag={handlePointerDownDrag}
                 onDropTask={handleDropTask}
@@ -641,10 +863,13 @@ export function BoardPage() {
                 isDropTarget={dropTargetCol === 'done'}
                 dropIndex={dropTargetCol === 'done' ? dropIndex : null}
                 draggingTaskId={draggingTaskId}
+                isLeader={isLeader}
                 onOpenTask={handleOpenTask}
                 onStatusChange={handleStatusChange}
                 onAssignToMe={handleAssignToMe}
                 onToggleBlock={handleToggleBlock}
+                onDeferTask={handleDeferTask}
+                onDropTaskLeader={handleDropTaskLeader}
                 onInlineCreate={handleInlineCreate}
                 onPointerDownDrag={handlePointerDownDrag}
                 onDropTask={handleDropTask}
@@ -669,6 +894,8 @@ export function BoardPage() {
             setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
           }}
           onDeleteTask={handleDeleteTask}
+          onDeferTask={handleDeferTask}
+          onDropTask={handleDropTaskLeader}
           onOpenTaskByKey={(key) => {
             const nextParams = new URLSearchParams(searchParams);
             nextParams.set('task', key);
@@ -685,6 +912,32 @@ export function BoardPage() {
           members={members}
           onClose={() => setIsCreateModalOpen(false)}
           onCreate={handleCreateTask}
+        />
+      )}
+
+      {/* Phase Complete Dialog */}
+      {showPhaseCompleteDialog && activePhase && (
+        <PhaseCompleteDialog
+          isOpen={showPhaseCompleteDialog}
+          phase={activePhase}
+          nextPhase={nextPhase}
+          roomId={roomId!}
+          isLeader={isLeader}
+          onClose={() => {
+            setDismissedReadyKey(activePhase.key);
+            phaseService.dismissReady(roomId!, activePhase.key).catch(() => {});
+          }}
+          onAdvanceSuccess={(newPhaseKey, isBuildComplete) => {
+            if (isBuildComplete) {
+              toast.success('Build complete!');
+              navigate(`/app/room/${roomId}/overview`);
+            } else {
+              toast.success(`Started ${newPhaseKey || 'next phase'}`);
+              handleSelectPhase(newPhaseKey);
+              loadData();
+              refetchPhases();
+            }
+          }}
         />
       )}
     </div>

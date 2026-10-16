@@ -192,6 +192,7 @@ public class TeamService {
     private Map<UUID, List<Task>> loadTasksByUser(UUID roomId) {
         Map<UUID, List<Task>> map = new HashMap<>();
         for (Task t : taskRepository.findByRoomId(roomId)) {
+            if (t.isDropped()) continue;
             if (t.getAssigneeId() != null) {
                 map.computeIfAbsent(t.getAssigneeId(), k -> new ArrayList<>()).add(t);
             }

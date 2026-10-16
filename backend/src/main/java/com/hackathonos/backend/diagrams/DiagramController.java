@@ -64,4 +64,13 @@ public class DiagramController {
     ) {
         diagramService.deleteDiagram(roomId, id, resolveUser(user));
     }
+
+    @PostMapping("/fix")
+    public DiagramDtos.FixDiagramResponse fixDiagram(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user,
+            @RequestBody DiagramDtos.FixDiagramRequest request
+    ) {
+        return diagramService.fixDiagram(roomId, resolveUser(user), request);
+    }
 }

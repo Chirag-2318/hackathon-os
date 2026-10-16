@@ -2,6 +2,7 @@ package com.hackathonos.backend.portfolio;
 
 import jakarta.persistence.*;
 import java.io.Serializable;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -19,7 +20,16 @@ public class PortfolioVisibility {
     private UUID roomId;
 
     @Column(name = "visible", nullable = false)
-    private boolean visible;
+    private boolean visible = true;
+
+    @Column(name = "is_pinned", nullable = false)
+    private boolean pinned = false;
+
+    @Column(name = "pin_order", nullable = false)
+    private int pinOrder = 0;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt = Instant.now();
 
     public PortfolioVisibility() {}
 
@@ -27,6 +37,9 @@ public class PortfolioVisibility {
         this.userId = userId;
         this.roomId = roomId;
         this.visible = visible;
+        this.pinned = false;
+        this.pinOrder = 0;
+        this.updatedAt = Instant.now();
     }
 
     public UUID getUserId() { return userId; }
@@ -37,6 +50,15 @@ public class PortfolioVisibility {
 
     public boolean isVisible() { return visible; }
     public void setVisible(boolean visible) { this.visible = visible; }
+
+    public boolean isPinned() { return pinned; }
+    public void setPinned(boolean pinned) { this.pinned = pinned; }
+
+    public int getPinOrder() { return pinOrder; }
+    public void setPinOrder(int pinOrder) { this.pinOrder = pinOrder; }
+
+    public Instant getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
 
     public static class PortfolioVisibilityId implements Serializable {
         private UUID userId;

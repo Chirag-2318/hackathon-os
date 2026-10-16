@@ -31,5 +31,9 @@ public record UserDetailDto(
         String tourPath,
         int tourVersion,
         Instant tourCompletedAt,
-        List<String> hotspotsSeen
+        List<String> hotspotsSeen,
+        UserPreferenceDto preferences,
+        UserAiKeySummaryDto aiKey,
+        boolean isAdmin
 ) {}
+

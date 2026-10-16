@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Popover,
@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { getRoomCover } from '@/shared/utils/room-cover';
 import { useSyncTabTitleUnread } from '@/shared/hooks/use-unread-title';
+import { playSound } from '@/shared/sound/sound-effects';
 import type { Notification } from '@/features/notifications/api/types';
 import {
   useUserNotifications,
@@ -53,6 +54,14 @@ export function NotificationsPopover({ currentRoomId, roomList = [] }: Notificat
 
   // Sync tab title: e.g. "(3) Hackathon OS"
   useSyncTabTitleUnread(unreadCount);
+
+  const prevCount = useRef(unreadCount);
+  useEffect(() => {
+    if (unreadCount > prevCount.current && prevCount.current !== 0) {
+      playSound('notification');
+    }
+    prevCount.current = unreadCount;
+  }, [unreadCount]);
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
@@ -132,8 +141,8 @@ export function NotificationsPopover({ currentRoomId, roomList = [] }: Notificat
                 'absolute -top-0.5 -right-0.5',
                 'flex items-center justify-center',
                 'min-w-4 h-4 px-1 rounded-full',
-                'bg-rose-500 text-white text-[10px] font-semibold tabular-nums font-mono',
-                'ring-2 ring-white dark:ring-zinc-900 animate-in zoom-in-75'
+                'bg-danger text-on-danger text-[10px] font-semibold tabular-nums font-mono',
+                'ring-2 ring-surface animate-in zoom-in-75'
               )}
               aria-label={`${unreadCount} notifications`}
             >

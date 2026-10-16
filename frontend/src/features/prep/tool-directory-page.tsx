@@ -54,8 +54,8 @@ function FilterPill({ label, active, onClick }: FilterPillProps) {
       className={cn(
         'inline-flex items-center justify-between w-full px-3 py-1.5 rounded-control text-body transition-colors text-left group',
         active
-          ? 'bg-lav-600 text-white font-semibold'
-          : 'text-ink hover:bg-surface-sunken font-normal'
+          ? 'bg-primary text-primary-foreground font-semibold'
+          : 'text-ink hover:bg-hover font-normal'
       )}
       aria-pressed={active}
     >
@@ -469,7 +469,7 @@ export function ToolDirectoryPage() {
 
       {/* Page header */}
       <div className="flex flex-col gap-1">
-        <h1 className="text-h1 text-ink">Tools & Playbooks</h1>
+        <h1 className="text-3xl sm:text-4xl font-display font-normal text-ink tracking-tight leading-none">Tools & Playbooks</h1>
         <p className="text-body text-ink-muted">
           A curated directory of tools and playbooks for hackathon teams.
         </p>
@@ -486,14 +486,14 @@ export function ToolDirectoryPage() {
             <TabsTrigger
               value="tools"
               id="tab-tools"
-              className="rounded-none px-4 py-2 data-active:border-b-2 data-active:border-lav-600 data-active:text-ink data-active:shadow-none data-active:bg-transparent text-ink-muted font-medium hover:text-ink"
+              className="rounded-none px-4 py-2 data-active:border-b-2 data-active:border-ink data-active:text-ink data-active:shadow-none data-active:bg-transparent text-ink-muted font-medium hover:text-ink"
             >
               Tool directory
             </TabsTrigger>
             <TabsTrigger
               value="playbooks"
               id="tab-playbooks"
-              className="rounded-none px-4 py-2 data-active:border-b-2 data-active:border-lav-600 data-active:text-ink data-active:shadow-none data-active:bg-transparent text-ink-muted font-medium hover:text-ink"
+              className="rounded-none px-4 py-2 data-active:border-b-2 data-active:border-ink data-active:text-ink data-active:shadow-none data-active:bg-transparent text-ink-muted font-medium hover:text-ink"
             >
               Playbooks
             </TabsTrigger>

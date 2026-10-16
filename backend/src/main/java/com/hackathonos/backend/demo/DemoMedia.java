@@ -12,10 +12,10 @@ public class DemoMedia {
     @Column(name = "room_id")
     private UUID roomId;
 
-    @Column(name = "video_url")
+    @Column(name = "video_url", columnDefinition = "text")
     private String videoUrl;
 
-    @Column(name = "fallback_url")
+    @Column(name = "fallback_url", columnDefinition = "text")
     private String fallbackUrl;
 
     @Column(name = "local_recording_saved", nullable = false)

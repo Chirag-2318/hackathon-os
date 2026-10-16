@@ -73,7 +73,7 @@ export function SchedulePage() {
           </Button>
 
           <CreateEventPopover defaultDate={new Date('2026-11-20')} onAdd={handleAddEvent}>
-            <Button className="rounded-full h-9 bg-[#2A2D32] hover:bg-black text-white pl-3 pr-5">
+            <Button className="rounded-full h-9 bg-inverse text-on-inverse hover:opacity-90 pl-3 pr-5 cursor-pointer">
               <Plus className="h-4 w-4 mr-2" />
               Add
             </Button>
@@ -94,25 +94,25 @@ export function SchedulePage() {
           </div>
 
           {/* Next up card */}
-          <div className="p-4 r-card bg-[#2A2D32] text-white space-y-4">
+          <div className="p-4 r-card bg-surface-raised border border-border text-foreground space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[#C7CAC4] uppercase tracking-wider">Next up</span>
-              <Badge variant="secondary" className="r-chip bg-peach-500 text-white border-none text-xs font-bold px-2 py-0.5">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Next up</span>
+              <Badge variant="secondary" className="r-chip bg-accent text-on-accent border-none text-xs font-bold px-2 py-0.5">
                 14 min
               </Badge>
             </div>
             <div>
               <h4 className="font-bold text-lg leading-tight">Rehearsal 1</h4>
-              <div className="flex items-center gap-2 text-xs text-[#C7CAC4] mt-1">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                 <Clock className="h-3 w-3" />
                 <span>14:00 – 14:45</span>
               </div>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" className="h-8 rounded-full border-white/20 text-white hover:bg-white/10 w-full text-xs">
+              <Button variant="outline" className="h-8 rounded-full border-border text-foreground hover:bg-muted w-full text-xs">
                 Later
               </Button>
-              <Button className="h-8 rounded-full bg-white text-ink hover:bg-white/90 w-full text-xs">
+              <Button className="h-8 rounded-full bg-inverse text-on-inverse hover:opacity-90 w-full text-xs cursor-pointer">
                 Details
               </Button>
             </div>

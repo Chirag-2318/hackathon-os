@@ -61,6 +61,7 @@ public class ReadinessService {
     private final GithubHealthItemRepository githubHealthRepository;
     private final GithubFrozenDemoRepository frozenDemoRepository;
     private final TaskRepository taskRepository;
+    private final com.hackathonos.backend.plan.PlanPhaseRepository phaseRepository;
     private final RoomRepository roomRepository;
     private final RoomAccess roomAccess;
     private final AiService aiService;
@@ -87,6 +88,7 @@ public class ReadinessService {
             GithubHealthItemRepository githubHealthRepository,
             GithubFrozenDemoRepository frozenDemoRepository,
             TaskRepository taskRepository,
+            com.hackathonos.backend.plan.PlanPhaseRepository phaseRepository,
             RoomRepository roomRepository,
             RoomAccess roomAccess,
             AiService aiService,
@@ -112,6 +114,7 @@ public class ReadinessService {
         this.githubHealthRepository = githubHealthRepository;
         this.frozenDemoRepository = frozenDemoRepository;
         this.taskRepository = taskRepository;
+        this.phaseRepository = phaseRepository;
         this.roomRepository = roomRepository;
         this.roomAccess = roomAccess;
         this.aiService = aiService;
@@ -390,7 +393,18 @@ public class ReadinessService {
 
     private List<ReadinessCalculator.ReadinessItem> calculateDeliveryItems(UUID roomId) {
         List<ReadinessCalculator.ReadinessItem> list = new ArrayList<>();
-        List<Task> tasks = taskRepository.findByRoomId(roomId);
+        List<com.hackathonos.backend.plan.PlanPhase> phases = phaseRepository != null
+                ? phaseRepository.findByRoomIdOrderByPositionAsc(roomId)
+                : Collections.emptyList();
+        Set<String> validPhaseKeys = phases.stream()
+                .filter(p -> "COMPLETED".equalsIgnoreCase(p.getStatus()) || "ACTIVE".equalsIgnoreCase(p.getStatus()))
+                .map(p -> p.getPhaseKey() != null ? p.getPhaseKey().toUpperCase() : "")
+                .collect(java.util.stream.Collectors.toSet());
+
+        List<Task> tasks = taskRepository.findByRoomId(roomId).stream()
+                .filter(t -> !t.isDropped())
+                .filter(t -> t.getPhaseKey() == null || validPhaseKeys.isEmpty() || validPhaseKeys.contains(t.getPhaseKey().toUpperCase()))
+                .toList();
         int total = tasks.size();
         int done = (int) tasks.stream().filter(Task::isConfirmedDone).count();
         int pct = total > 0 ? Math.round(((float) done / total) * 100) : 0;

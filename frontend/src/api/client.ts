@@ -147,7 +147,11 @@ export const saveRehearsalRun = (roomId: string, body: {
 // ── Canva integration ────────────────────────────────────────────────────────
 export const fetchCanvaStatus = (roomId: string) =>
   apiFetch<{ connected: boolean }>(`/api/v1/integrations/canva/status`);
-export const fetchCanvaDesigns = (q?: string) =>
-  apiFetch<any[]>(`/api/v1/integrations/canva/designs${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+export const submitRoom = (roomId: string) =>
+  apiFetch<any>(`/api/v1/rooms/${roomId}/submission/submit`, { method: 'POST' });
+export const reopenSubmission = (roomId: string) =>
+  apiFetch<any>(`/api/v1/rooms/${roomId}/submission/reopen`, { method: 'POST' });
+export const fetchRoomSummary = (roomId: string) =>
+  apiFetch<any>(`/api/v1/rooms/${roomId}/summary`);
 
 

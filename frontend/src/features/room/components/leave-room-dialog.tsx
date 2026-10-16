@@ -164,8 +164,7 @@ export function LeaveRoomDialog({
                       >
                         <div className="flex items-center gap-2">
                           <span
-                            className="size-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-                            style={{ backgroundColor: member.avatarColor || '#6366f1' }}
+                            className="size-5 rounded-full flex items-center justify-center text-[10px] font-bold bg-inverse text-on-inverse shrink-0"
                           >
                             {member.initials}
                           </span>

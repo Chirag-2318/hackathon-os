@@ -43,12 +43,11 @@ import java.util.stream.Collectors;
 @Service
 public class PlanService {
 
-    public static final List<String> STEP_KEYS = List.of("prd", "tech", "phases", "tasks", "demo");
+    public static final List<String> STEP_KEYS = List.of("prd-mvp", "stack-arch", "phases-design", "demo-qna");
     public static final List<String> STEP_TITLES = List.of(
             "PRD and MVP",
             "Tech stack and architecture",
             "Phases and design",
-            "Tasks",
             "Demo and Q&A"
     );
 
@@ -82,6 +81,7 @@ public class PlanService {
     private final PlanDocumentParser planDocumentParser;
     private final PlanDownstreamSyncService planDownstreamSyncService;
     private final com.hackathonos.backend.rooms.RoomService roomService;
+    private final PlanValidationService planValidationService;
 
     public PlanService(
             PlanStepRepository stepRepository,
@@ -113,7 +113,8 @@ public class PlanService {
             PlanPromptService planPromptService,
             PlanDocumentParser planDocumentParser,
             PlanDownstreamSyncService planDownstreamSyncService,
-            com.hackathonos.backend.rooms.RoomService roomService) {
+            com.hackathonos.backend.rooms.RoomService roomService,
+            PlanValidationService planValidationService) {
         this.stepRepository = stepRepository;
         this.phaseRepository = phaseRepository;
         this.docRepository = docRepository;
@@ -144,6 +145,7 @@ public class PlanService {
         this.planDocumentParser = planDocumentParser;
         this.planDownstreamSyncService = planDownstreamSyncService;
         this.roomService = roomService;
+        this.planValidationService = planValidationService;
     }
 
     /**
@@ -219,6 +221,16 @@ public class PlanService {
             String key = STEP_KEYS.get(i);
             String title = STEP_TITLES.get(i);
             PlanStep step = stepMap.get(key);
+            if (step == null) {
+                String alias = switch (key) {
+                    case "prd-mvp" -> "prd";
+                    case "stack-arch" -> "tech";
+                    case "phases-design" -> "phases";
+                    case "demo-qna" -> "demo";
+                    default -> null;
+                };
+                if (alias != null) step = stepMap.get(alias);
+            }
 
             boolean validated = step != null && step.isValidated();
             String status;
@@ -237,7 +249,9 @@ public class PlanService {
 
             PlanPromptResponseDto promptResp = null;
             try {
-                promptResp = planPromptService.getOrAssemblePrompt(roomId, i + 1, false, user);
+                if (planPromptService.hasCachedOrPersistedPrompt(roomId, i + 1)) {
+                    promptResp = planPromptService.getOrAssemblePrompt(roomId, i + 1, false, user);
+                }
             } catch (Exception ignored) {}
 
             String promptText = promptResp != null ? promptResp.prompt() : promptBuilder.buildPromptForStep(
@@ -251,7 +265,6 @@ public class PlanService {
             int charCount = answer != null ? answer.length() : (promptText != null ? promptText.length() : 0);
 
             List<ContextFileDto> contextFiles = List.of(
-                    new ContextFileDto("ideas.md", "/api/v1/rooms/" + roomId + "/ideas/export.md"),
                     new ContextFileDto("context.md", "/api/v1/rooms/" + roomId + "/plan/context.md?step=" + key)
             );
 
@@ -270,7 +283,8 @@ public class PlanService {
                     contextFiles,
                     mode,
                     ideaVerdict,
-                    stale
+                    stale,
+                    step != null && step.isValidatedWithOverrides()
             ));
         }
 
@@ -371,7 +385,7 @@ public class PlanService {
         boolean textChanged = !Objects.equals(step.getAnswer(), newAnswer);
 
         if (step.isValidated() && textChanged) {
-            int currentIdx = STEP_KEYS.indexOf(stepKey);
+            int currentIdx = STEP_KEYS.indexOf(PlanPromptService.normalizeStepKey(stepKey));
             List<String> laterValidatedKeys = new ArrayList<>();
 
             for (int i = currentIdx + 1; i < STEP_KEYS.size(); i++) {
@@ -418,101 +432,7 @@ public class PlanService {
      */
     @Transactional
     public ValidatePlanResponse validateStep(UUID roomId, ValidatePlanRequest req, User user) {
-        roomAccess.requireMember(roomId, user);
-        Room room = roomAccess.getActiveRoomOrThrow(roomId);
-        if (room.getPlanStartedAt() == null) {
-            throw new ConflictException("PLAN_NOT_STARTED", "Planning has not started yet. Complete the 'Before we plan' setup first.");
-        }
-        if (room.getBuildStartedAt() != null) {
-            throw new ConflictException("PLAN_LOCKED", "Plan is locked");
-        }
-
-        int stepIdx = STEP_KEYS.indexOf(req.stepKey());
-        if (stepIdx < 0) {
-            throw new BadRequestException("INVALID_STEP", "Unknown step key: " + req.stepKey());
-        }
-
-        // Enforce step order
-        if (stepIdx > 0) {
-            String prevKey = STEP_KEYS.get(stepIdx - 1);
-            PlanStep prevStep = stepRepository.findByRoomIdAndStepKey(roomId, prevKey).orElse(null);
-            if (prevStep == null || !prevStep.isValidated()) {
-                throw new ConflictException("STEP_ORDER", "Previous step (" + prevKey + ") must be validated first");
-            }
-        }
-
-        Brief brief = briefRepository.findByRoomId(roomId).orElse(null);
-        List<BriefRubricItem> rubric = brief != null ? rubricRepository.findByBriefIdOrderByPositionAsc(brief.getId()) : Collections.emptyList();
-        List<RoomMember> members = memberRepository.findByRoomId(roomId);
-        Map<UUID, User> memberUsers = userRepository.findAllById(members.stream().map(RoomMember::getUserId).filter(Objects::nonNull).toList())
-                .stream().collect(Collectors.toMap(User::getId, u -> u));
-        List<Idea> approvedIdeas = ideaRepository.findByRoomIdAndStatus(roomId, "APPROVED");
-
-        long durationHours = 36;
-        if (room.getEventStart() != null && room.getEventEnd() != null) {
-            durationHours = Math.max(1, Duration.between(room.getEventStart(), room.getEventEnd()).toHours());
-        }
-
-        PlanDocumentParser.ParseResult parseResult = planDocumentParser.parseAndValidate(
-                req.stepKey(),
-                req.answer(),
-                room,
-                brief,
-                rubric,
-                members,
-                memberUsers,
-                approvedIdeas,
-                durationHours
-        );
-
-        PlanStep step = stepRepository.findByRoomIdAndStepKey(roomId, req.stepKey())
-                .orElseGet(() -> new PlanStep(roomId, req.stepKey()));
-        step.setAnswer(req.answer());
-        step.setUpdatedAt(Instant.now());
-
-        if (!parseResult.valid()) {
-            step.setValidated(false);
-            step.setErrors(toJson(parseResult.errors()));
-            step.setWarnings(toJson(parseResult.warnings()));
-            stepRepository.save(step);
-
-            String repairPrompt = "Your previous answer had these problems:\n" + String.join("\n", parseResult.errors())
-                    + "\n\nFix ONLY those problems and reply again in the exact required format with =====FILE: NAME.md===== and =====END FILE===== delimiters.\nPrevious answer:\n" + req.answer();
-            return new ValidatePlanResponse(false, parseResult.errors(), parseResult.warnings(), "Validation failed", repairPrompt, null, false, null);
-        }
-
-        // Save documents and sync downstream
-        planDownstreamSyncService.syncStep(room, req.stepKey(), parseResult.files(), user);
-
-        step.setValidated(true);
-        step.setErrors(null);
-        step.setWarnings(toJson(parseResult.warnings()));
-        step.setParsed(toJson(parseResult.files()));
-        step.setValidatedAt(Instant.now());
-        stepRepository.save(step);
-        roomEventService.recordEvent(roomId, "plan_step.validated", "plan_step", req.stepKey(), user.getId());
-
-        String nextStepKey = stepIdx < STEP_KEYS.size() - 1 ? STEP_KEYS.get(stepIdx + 1) : null;
-        boolean isDemo = "demo".equalsIgnoreCase(req.stepKey());
-
-        boolean allValidated = true;
-        for (String k : STEP_KEYS) {
-            if (k.equals(req.stepKey())) continue;
-            PlanStep s = stepRepository.findByRoomIdAndStepKey(roomId, k).orElse(null);
-            if (s == null || !s.isValidated()) {
-                allValidated = false;
-                break;
-            }
-        }
-
-        PlanCompletionSummaryDto completion = null;
-        boolean planComplete = false;
-        if (isDemo && allValidated) {
-            completion = planCompletionService.complete(room);
-            planComplete = true;
-        }
-
-        return new ValidatePlanResponse(true, Collections.emptyList(), parseResult.warnings(), "Validated successfully: " + String.join(", ", parseResult.files().keySet()), null, nextStepKey, planComplete, completion);
+        return planValidationService.validateStepText(roomId, req.stepKey(), req.answer(), Boolean.TRUE.equals(req.confirmWarnings()), user);
     }
 
     /**
@@ -532,7 +452,7 @@ public class PlanService {
             throw new BadRequestException("AI_RESTRICTED_BY_EVENT", "AI generation is disabled by event rules");
         }
 
-        int stepIdx = STEP_KEYS.indexOf(stepKey.toLowerCase());
+        int stepIdx = STEP_KEYS.indexOf(PlanPromptService.normalizeStepKey(stepKey));
         if (stepIdx < 0) {
             throw new BadRequestException("INVALID_STEP", "Unknown step key: " + stepKey);
         }
@@ -541,9 +461,9 @@ public class PlanService {
         String ideasMd = ideasService.exportIdeasMarkdown(roomId, user);
 
         String systemPrompt = "You are a senior technical architect and hackathon strategist. Produce the complete, real markdown documents requested with =====FILE: NAME.md===== and =====END FILE===== delimiters exactly as specified. Do not summarize or skip sections.";
-        String userMessage = promptResp.prompt() + "\n\nAttached IDEAS.MD:\n" + ideasMd;
+        String userMessage = promptResp.prompt() + "\n\nAttached CONTEXT.MD:\n" + ideasMd;
 
-        String feature = "plan.generate." + stepKey.toLowerCase();
+        String feature = "plan.generate." + PlanPromptService.normalizeStepKey(stepKey);
         String answer = aiService.text(feature, roomId, user.getId(), systemPrompt, userMessage);
         return new GenerateStepResponse(answer);
     }
@@ -559,12 +479,13 @@ public class PlanService {
             throw new ConflictException("PLAN_NOT_STARTED", "Planning has not started yet. Complete the 'Before we plan' setup first.");
         }
         String ideasMd = ideasService.exportIdeasMarkdown(roomId, user);
-        if ("prd".equalsIgnoreCase(stepKey)) {
+        String normKey = PlanPromptService.normalizeStepKey(stepKey);
+        if ("prd-mvp".equalsIgnoreCase(normKey)) {
             return ideasMd;
         }
 
         StringBuilder sb = new StringBuilder(ideasMd);
-        int targetIdx = STEP_KEYS.indexOf(stepKey);
+        int targetIdx = STEP_KEYS.indexOf(normKey);
         if (targetIdx < 0) targetIdx = STEP_KEYS.size();
 
         for (int i = 0; i < targetIdx; i++) {
@@ -594,6 +515,18 @@ public class PlanService {
             room.setBuildStartedAt(Instant.now());
             room.setStage("build");
             roomRepository.save(room);
+
+            // Auto-activate first phase
+            List<PlanPhase> roomPhases = phaseRepository.findByRoomIdOrderByPositionAsc(roomId);
+            if (!roomPhases.isEmpty()) {
+                PlanPhase p1 = roomPhases.get(0);
+                if (!"ACTIVE".equals(p1.getStatus()) && !"COMPLETED".equals(p1.getStatus())) {
+                    p1.setStatus("ACTIVE");
+                    p1.setActivatedAt(Instant.now());
+                    phaseRepository.save(p1);
+                }
+            }
+
             checkpointService.createForRoom(room);
             activityLogger.log(room, user, "BUILD_STARTED", "Entered build phase");
             notificationService.notifyRoomMembers(room, null, NotificationType.ROOM_CREATED,
@@ -613,6 +546,18 @@ public class PlanService {
             room.setBuildStartedAt(Instant.now());
             room.setStage("build");
             roomRepository.save(room);
+
+            // Auto-activate first phase
+            List<PlanPhase> roomPhases = phaseRepository.findByRoomIdOrderByPositionAsc(roomId);
+            if (!roomPhases.isEmpty()) {
+                PlanPhase p1 = roomPhases.get(0);
+                if (!"ACTIVE".equals(p1.getStatus()) && !"COMPLETED".equals(p1.getStatus())) {
+                    p1.setStatus("ACTIVE");
+                    p1.setActivatedAt(Instant.now());
+                    phaseRepository.save(p1);
+                }
+            }
+
             checkpointService.createForRoom(room);
             activityLogger.log(room, user, "BUILD_UNLOCKED_EARLY", "Build unlocked early");
             notificationService.notifyRoomMembers(room, null, NotificationType.ROOM_CREATED,
@@ -622,52 +567,20 @@ public class PlanService {
 
     private ValidationResult runValidator(UUID roomId, String stepKey, String answer) {
         return switch (stepKey.toLowerCase()) {
-            case "prd" -> prdValidator.validate(answer);
-            case "tech" -> techValidator.validate(answer);
-            case "phases" -> phasesValidator.validate(answer);
-            case "tasks" -> {
-                Room room = roomAccess.getActiveRoomOrThrow(roomId);
-                List<RoomMember> members = memberRepository.findByRoomId(roomId);
-                long hours = 36;
-                if (room.getEventStart() != null && room.getEventEnd() != null) {
-                    hours = Math.max(1, Duration.between(room.getEventStart(), room.getEventEnd()).toHours());
-                }
-
-                // Known phase IDs from phases step
-                PlanStep phasesStep = stepRepository.findByRoomIdAndStepKey(roomId, "phases").orElse(null);
-                Set<String> knownPhaseIds = new HashSet<>();
-                if (phasesStep != null && phasesStep.getAnswer() != null) {
-                    ValidationResult pv = phasesValidator.validate(phasesStep.getAnswer());
-                    if (pv.parsed() instanceof List<?> list) {
-                        for (Object o : list) {
-                            if (o instanceof PhasesValidator.NormalizedPhase np) knownPhaseIds.add(np.id);
-                        }
-                    }
-                }
-
-                Set<String> knownRoles = new HashSet<>();
-                for (RoomMember m : members) {
-                    knownRoles.add(m.getRole().toLowerCase());
-                    List<RoomMemberSkill> mSkills = skillRepository.findByMemberId(m.getId());
-                    for (RoomMemberSkill s : mSkills) {
-                        knownRoles.add(s.getSkill().toLowerCase());
-                    }
-                }
-
-                yield tasksValidator.validate(answer, knownPhaseIds, knownRoles, members.size(), hours);
-            }
-            case "demo" -> demoValidator.validate(answer);
+            case "prd", "prd-mvp" -> prdValidator.validate(answer);
+            case "tech", "stack-arch" -> techValidator.validate(answer);
+            case "phases", "phases-design" -> phasesValidator.validate(answer);
+            case "demo", "demo-qna" -> demoValidator.validate(answer);
             default -> new ValidationResult(false, List.of("Unknown step key: " + stepKey), Collections.emptyList(), "Validation failed", null);
         };
     }
 
     private String getExpectedFormat(String stepKey) {
         return switch (stepKey.toLowerCase()) {
-            case "prd" -> promptBuilder.getExpectedFormatPrd();
-            case "tech" -> promptBuilder.getExpectedFormatTech();
-            case "phases" -> promptBuilder.getExpectedFormatPhases();
-            case "tasks" -> promptBuilder.getExpectedFormatTasks();
-            case "demo" -> promptBuilder.getExpectedFormatDemo();
+            case "prd", "prd-mvp" -> promptBuilder.getExpectedFormatPrd();
+            case "tech", "stack-arch" -> promptBuilder.getExpectedFormatTech();
+            case "phases", "phases-design" -> promptBuilder.getExpectedFormatPhases();
+            case "demo", "demo-qna" -> promptBuilder.getExpectedFormatDemo();
             default -> "";
         };
     }

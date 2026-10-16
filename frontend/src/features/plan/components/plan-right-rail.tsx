@@ -148,19 +148,8 @@ export function PlanRightRail({
           <div className="flex flex-col gap-1 text-xs">
             <button
               type="button"
-              onClick={onDownloadIdeas}
-              className="flex items-center justify-between p-1.5 rounded hover:bg-surface-raised transition-colors text-left"
-            >
-              <div className="flex items-center gap-1.5 text-ink">
-                <FileText className="size-3.5 text-lav-600" />
-                <span className="font-mono text-[11px]">ideas.md</span>
-              </div>
-              <span className="text-[10px] text-ink-muted">Available</span>
-            </button>
-            <button
-              type="button"
-              onClick={onDownloadContext}
-              className="flex items-center justify-between p-1.5 rounded hover:bg-surface-raised transition-colors text-left"
+              onClick={onDownloadContext || onDownloadIdeas}
+              className="flex items-center justify-between p-1.5 rounded hover:bg-surface-raised transition-colors text-left cursor-pointer"
             >
               <div className="flex items-center gap-1.5 text-ink">
                 <FileText className="size-3.5 text-emerald-600" />

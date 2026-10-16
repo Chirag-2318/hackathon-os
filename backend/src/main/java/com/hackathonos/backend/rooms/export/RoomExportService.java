@@ -62,6 +62,7 @@ public class RoomExportService {
     private final RoomMemberRepository roomMemberRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private final com.hackathonos.backend.plan.PlanPhaseRepository phaseRepository;
 
     public RoomExportService(RoomAccess roomAccess,
                              DocRepository docRepository,
@@ -79,7 +80,9 @@ public class RoomExportService {
                              GithubBranchRepository githubBranchRepository,
                              RoomMemberRepository roomMemberRepository,
                              UserRepository userRepository,
-                             ObjectMapper objectMapper) {
+                             ObjectMapper objectMapper,
+                             @org.springframework.beans.factory.annotation.Autowired(required = false)
+                             com.hackathonos.backend.plan.PlanPhaseRepository phaseRepository) {
         this.roomAccess = roomAccess;
         this.docRepository = docRepository;
         this.docVersionRepository = docVersionRepository;
@@ -97,6 +100,7 @@ public class RoomExportService {
         this.roomMemberRepository = roomMemberRepository;
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
+        this.phaseRepository = phaseRepository;
     }
 
     /**
@@ -173,9 +177,26 @@ public class RoomExportService {
                 .max(Comparator.naturalOrder())
                 .orElse(null);
 
-        Optional<Submission> submissionOpt = submissionRepository.findById(roomId);
-        Instant submissionStarted = submissionOpt.map(Submission::getCreatedAt).orElse(null);
-        Instant submittedAt = room.getSubmittedAt();
+        Brief brief = briefRepository.findByRoomId(roomId).orElse(null);
+        Instant briefConfirmed = (brief != null && brief.isConfirmed())
+                ? (brief.getUpdatedAt() != null ? brief.getUpdatedAt() : brief.getCreatedAt())
+                : null;
+        Instant buildStarted = room.getBuildStartedAt();
+
+        List<com.hackathonos.backend.rooms.export.dto.RoomEndSummaryDto.PhaseMilestoneDto> phaseMilestones = new ArrayList<>();
+        if (phaseRepository != null) {
+            var phases = phaseRepository.findByRoomIdOrderByPositionAsc(roomId);
+            for (var p : phases) {
+                if ("DONE".equalsIgnoreCase(p.getStatus()) || "COMPLETED".equalsIgnoreCase(p.getStatus())) {
+                    Instant completedAt = p.getCompletedAt() != null ? p.getCompletedAt() : (p.getActivatedAt() != null ? p.getActivatedAt() : room.getCreatedAt());
+                    phaseMilestones.add(new com.hackathonos.backend.rooms.export.dto.RoomEndSummaryDto.PhaseMilestoneDto(p.getName(), completedAt));
+                }
+            }
+        }
+
+        Optional<Submission> subOpt = submissionRepository.findByRoomId(roomId);
+        Instant submissionStarted = subOpt.map(Submission::getCreatedAt).orElse(null);
+        Instant submittedAt = room.getSubmittedAt() != null ? room.getSubmittedAt() : subOpt.map(Submission::getSubmittedAt).orElse(null);
 
         var timeline = new com.hackathonos.backend.rooms.export.dto.RoomEndSummaryDto.TimelineMilestonesDto(
                 room.getCreatedAt(),
@@ -183,18 +204,22 @@ public class RoomExportService {
                 planValidated,
                 null,
                 submissionStarted,
-                submittedAt
+                submittedAt,
+                briefConfirmed,
+                buildStarted,
+                phaseMilestones.isEmpty() ? null : phaseMilestones
         );
 
         // 3. Stats
-        int completedTasks = (int) tasks.stream().filter(t -> "DONE".equalsIgnoreCase(t.getStatus())).count();
+        List<Task> validTasks = tasks.stream().filter(t -> !t.isDropped()).toList();
+        int completedTasks = (int) validTasks.stream().filter(Task::isConfirmedDone).count();
         int acceptedIdeas = (int) ideaRepository.findByRoomIdOrderByCreatedAtDesc(roomId).stream()
                 .filter(i -> "ACCEPTED".equalsIgnoreCase(i.getStatus())).count();
         int docsWritten = docRepository.findByRoomIdOrderByFileNameAsc(roomId).size();
 
         var stats = new com.hackathonos.backend.rooms.export.dto.RoomEndSummaryDto.EventStatsDto(
                 completedTasks,
-                tasks.size(),
+                validTasks.size(),
                 acceptedIdeas,
                 docsWritten
         );

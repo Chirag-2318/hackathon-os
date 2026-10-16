@@ -98,7 +98,7 @@ export function RoomCard({ room, onInvite, variant = 'default', className }: Roo
 
   const handleCopyCode = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const code = (room as any).joinCode || room.id.slice(0, 4).toUpperCase();
+    const code = ((room as any).joinCode || room.id.replace(/-/g, '').slice(0, 8)).toUpperCase();
     navigator.clipboard.writeText(code);
     toast.success(`Room code ${code} copied to clipboard`);
   };
@@ -170,14 +170,14 @@ export function RoomCard({ room, onInvite, variant = 'default', className }: Roo
 
           {/* Faint large monogram in --font-display */}
           <span
-            className="absolute -right-1 -bottom-3 text-[64px] font-[var(--font-display)] font-bold text-black/[0.12] dark:text-white/[0.12] leading-none pointer-events-none select-none tracking-tight"
+            className="absolute -right-1 -bottom-3 text-[64px] font-[var(--font-display)] font-bold text-foreground/[0.12] leading-none pointer-events-none select-none tracking-tight"
             aria-hidden="true"
           >
             {monogram}
           </span>
 
           {/* Phase chip on top-left */}
-          <div className="relative z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/85 dark:bg-neutral-900/85 backdrop-blur-xs text-xs font-semibold text-ink shadow-2xs border border-white/40">
+          <div className="relative z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface/85 backdrop-blur-xs text-xs font-semibold text-foreground shadow-2xs border border-border/40">
             <span
               className={cn(
                 'size-2 rounded-full shrink-0',
@@ -194,7 +194,7 @@ export function RoomCard({ room, onInvite, variant = 'default', className }: Roo
           <div className="relative z-10 flex items-center gap-1.5 ml-auto">
             {attentionCount > 0 && (
               <span
-                className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[#E11D48] text-white text-[11px] font-mono font-bold shadow-xs leading-none"
+                className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-danger text-on-danger text-[11px] font-mono font-bold shadow-xs leading-none"
                 title={`${attentionCount} pending attention item${attentionCount === 1 ? '' : 's'}`}
               >
                 {attentionCount}

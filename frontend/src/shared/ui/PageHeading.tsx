@@ -18,13 +18,13 @@ export function PageHeading({
   return (
     <div className={cn('pt-6 mb-6', className)}>
       <h1
-        className="text-[32px] leading-[36px] font-bold tracking-[-0.02em] text-ink"
+        className="text-3xl sm:text-4xl font-display font-normal tracking-tight text-ink leading-tight"
         data-testid={titleTestId}
       >
         {title}
       </h1>
       <p
-        className="mt-1 max-w-[560px] text-[14px] leading-[20px] text-ink-2"
+        className="mt-1 max-w-[560px] text-xs sm:text-sm text-ink-2 font-sans"
         data-testid={subtitleTestId}
       >
         {subtitle}

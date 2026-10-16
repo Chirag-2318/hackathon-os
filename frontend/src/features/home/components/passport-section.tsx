@@ -30,11 +30,11 @@ interface PassportSectionProps {
 }
 
 function getLevelColor(count: number): string {
-  if (count <= 0) return 'bg-black/[0.05] dark:bg-white/[0.08]';
-  if (count === 1) return 'bg-[#E8A33D]/25';
-  if (count === 2) return 'bg-[#E8A33D]/50';
-  if (count === 3) return 'bg-[#E8A33D]/75';
-  return 'bg-[#E8A33D]';
+  if (count <= 0) return 'bg-[rgba(0,0,0,0.05)] dark:bg-[rgba(255,255,255,0.06)]';
+  if (count === 1) return 'bg-[var(--heatmap-1)]';
+  if (count === 2) return 'bg-[var(--heatmap-2)]';
+  if (count === 3) return 'bg-[var(--heatmap-3)]';
+  return 'bg-[var(--heatmap-4)]';
 }
 
 function getNextLevelName(currentLevel: string): string {
@@ -184,11 +184,11 @@ export function PassportSection({ passport, userSummary }: PassportSectionProps)
         {/* Legend */}
         <div className="flex items-center justify-end gap-1.5 text-[11px] text-muted-foreground pt-0.5">
           <span>Less</span>
-          <span className="size-[8px] rounded-[2px] bg-black/[0.05] dark:bg-white/[0.08]" />
-          <span className="size-[8px] rounded-[2px] bg-[#E8A33D]/25" />
-          <span className="size-[8px] rounded-[2px] bg-[#E8A33D]/50" />
-          <span className="size-[8px] rounded-[2px] bg-[#E8A33D]/75" />
-          <span className="size-[8px] rounded-[2px] bg-[#E8A33D]" />
+          <span className="size-[8px] rounded-[2px] bg-[rgba(0,0,0,0.05)] dark:bg-[rgba(255,255,255,0.06)]" />
+          <span className="size-[8px] rounded-[2px] bg-[var(--heatmap-1)]" />
+          <span className="size-[8px] rounded-[2px] bg-[var(--heatmap-2)]" />
+          <span className="size-[8px] rounded-[2px] bg-[var(--heatmap-3)]" />
+          <span className="size-[8px] rounded-[2px] bg-[var(--heatmap-4)]" />
           <span>More</span>
         </div>
       </div>

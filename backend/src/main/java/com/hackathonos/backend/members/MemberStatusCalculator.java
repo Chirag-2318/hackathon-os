@@ -39,6 +39,7 @@ public class MemberStatusCalculator {
 
         if (userTasks != null) {
             for (Task t : userTasks) {
+                if (t.isDropped()) continue;
                 String status = t.getStatus() != null ? t.getStatus().toUpperCase() : "TODO";
                 boolean isDone = "DONE".equals(status);
                 if (!isDone && t.isFlagged()) {

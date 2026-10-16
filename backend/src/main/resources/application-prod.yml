@@ -1,0 +1,47 @@
+# Production Profile Configuration
+server:
+  error:
+    include-stacktrace: never
+    include-message: always
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: true
+        domain: ${COOKIE_DOMAIN:}
+
+spring:
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        show_sql: false
+        format_sql: false
+  h2:
+    console:
+      enabled: false
+  devtools:
+    restart:
+      enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+app:
+  mail:
+    test-endpoint-enabled: false

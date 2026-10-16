@@ -1,0 +1,16 @@
+HACKATHON OS - DEADLINE REMINDER
+
+COUNTDOWN: {{COUNTDOWN}} {{COUNTDOWN_LABEL}}
+STATUS AS OF: {{AS_OF_TIME}}
+PROGRESS: {{ELAPSED_PERCENT}}% completed
+
+ROOM STATUS:
+{{CHECKLIST_TEXT}}
+
+Open the board:
+{{BOARD_URL}}
+
+--
+You received this because you enabled email reminders for your rooms.
+Unsubscribe with one click:
+{{UNSUBSCRIBE_URL}}

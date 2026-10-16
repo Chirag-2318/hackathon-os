@@ -4,7 +4,7 @@
 You are a sceptical judge-mentor and delivery planner. Produce two separate files, PHASES.md and DESIGN.md: a clock-exact build plan and a buildable UI spec for this team's idea, roster, rubric and event rules.
 
 ## Inputs
-1. The attached ideas.md: the team's approved ideas, verbatim.
+1. The attached context.md: the team's approved ideas and prior step context, verbatim.
 2. FACTS: authoritative ground truth. Where anything contradicts it, the facts win.
 {{FACTS}}
 3. ANALYSIS: a blunt pre-assessment. Use it to steer emphasis. Never copy it into your files.

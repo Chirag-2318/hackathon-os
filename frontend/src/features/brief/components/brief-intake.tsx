@@ -7,9 +7,13 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ApiError } from '@/lib/apiClient';
 
+import { BriefFileUpload } from './brief-file-upload';
+
 interface BriefIntakeProps {
   roomId: string;
   isLeader: boolean;
+  aiAllowed?: boolean;
+  aiDisabledReason?: string;
   onSuccess: (brief: Brief) => void;
 }
 
@@ -23,7 +27,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   PDF_PROTECTED: 'This PDF is password protected.',
 };
 
-export function BriefIntake({ roomId, isLeader, onSuccess }: BriefIntakeProps) {
+export function BriefIntake({ roomId, isLeader, aiAllowed = true, aiDisabledReason, onSuccess }: BriefIntakeProps) {
   const [tab, setTab] = useState<'link' | 'file' | 'write'>('link');
   const [linkUrl, setLinkUrl] = useState('');
   const [isParsing, setIsParsing] = useState(false);
@@ -346,56 +350,47 @@ export function BriefIntake({ roomId, isLeader, onSuccess }: BriefIntakeProps) {
             )}
 
             {tab === 'file' && (
-              <div className="flex flex-col gap-4">
-                <label className="relative flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed border-border hover:border-neutral-400 dark:hover:border-neutral-600 bg-muted/20 cursor-pointer transition-colors text-center">
-                  <input
-                    type="file"
-                    accept=".pdf,image/png,image/jpeg,image/webp"
-                    multiple
-                    onChange={handleFileUpload}
-                    disabled={isParsing || !isLeader}
-                    className="hidden"
-                  />
-                  <div className="size-10 rounded-2xl bg-muted flex items-center justify-center text-muted-foreground mb-3">
-                    <Upload className="size-5" />
-                  </div>
-                  <span className="text-xs font-bold text-foreground">Drop 1 PDF or up to 5 images (PNG, JPG, WEBP), or click to upload</span>
-                  <span className="text-[11px] text-muted-foreground mt-0.5">Maximum file size: 10MB per file</span>
-                </label>
-
-                {fileError && (
-                  <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 flex flex-col gap-2.5">
-                    <p className="font-medium leading-relaxed">{fileError}</p>
-                    <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-red-500/20">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowPasteText(true)}
-                        className="text-xs h-8 gap-1.5 bg-background text-foreground"
-                      >
-                        <FileText className="size-3.5" /> Paste the text instead
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleOpenStructuredForm}
-                        className="text-xs h-8 gap-1.5 bg-background text-foreground"
-                      >
-                        <Edit3 className="size-3.5" /> Fill the form by hand
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {isParsing && (
-                  <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-600 flex items-center gap-3">
-                    <Loader2 className="size-4 animate-spin shrink-0" />
-                    <span>Uploading and reading file content ({fileProgress}%)...</span>
-                  </div>
-                )}
-              </div>
+              <BriefFileUpload
+                roomId={roomId}
+                isLeader={isLeader}
+                aiAllowed={aiAllowed}
+                aiDisabledReason={aiDisabledReason}
+                onSuccess={(res) => {
+                  if (res.brief) {
+                    if (res.fields) {
+                      onSuccess({ ...res.brief, fields: res.fields, needsStructuring: false });
+                    } else {
+                      onSuccess(res.brief);
+                    }
+                  } else {
+                    briefService.getBrief(roomId).then((b) => {
+                      if (b) onSuccess(b);
+                    });
+                  }
+                }}
+                onExtractWithAi={async (text) => {
+                  setIsReadingStatement(true);
+                  try {
+                    const aiResult = await briefService.extractBrief(roomId, text);
+                    if (aiResult.fields) {
+                      toast.success('Brief fields extracted');
+                      if (aiResult.brief) {
+                        onSuccess(aiResult.brief);
+                      } else {
+                        const current = await briefService.getBrief(roomId);
+                        if (current) onSuccess({ ...current, fields: aiResult.fields, needsStructuring: false });
+                      }
+                    } else {
+                      toast.info('Could not auto-extract fields. You can fill them below.');
+                    }
+                  } catch (err: any) {
+                    toast.error(err.message || 'AI extraction failed');
+                  } finally {
+                    setIsReadingStatement(false);
+                  }
+                }}
+                onPasteTextInstead={() => setShowPasteText(true)}
+              />
             )}
 
             {tab === 'write' && (

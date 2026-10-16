@@ -75,7 +75,7 @@ export function CreateEventPopover({ children, defaultDate, onAdd }: CreateEvent
           <button className="text-ink-muted hover:text-ink h-8 w-8 flex items-center justify-center rounded-full hover:bg-surface-sunken">
             <MoreHorizontal className="h-4 w-4" />
           </button>
-          <Button className="bg-[#2A2D32] hover:bg-black text-white r-control px-6" onClick={handleAdd}>
+          <Button className="bg-inverse text-on-inverse hover:opacity-90 r-control px-6 cursor-pointer" onClick={handleAdd}>
             Add
           </Button>
         </div>

@@ -42,15 +42,19 @@ export function UserAvatar({
 }: UserAvatarProps) {
   const [imgError, setImgError] = useState(false);
 
-  // 1. Resolve image source
+  // 1. Resolve image source from avatarType, avatarPreset and avatarUrl only
   let resolvedSrc: string | null = null;
   if (!imgError && user) {
-    if (user.avatarType === 'PRESET' && user.avatarPreset) {
+    if (user.avatarType === 'NONE') {
+      resolvedSrc = null;
+    } else if (user.avatarType === 'PRESET' && user.avatarPreset) {
       resolvedSrc = getPresetAvatarUrl(user.avatarPreset);
-    } else if (user.avatarUrl) {
+    } else if (user.avatarType === 'CUSTOM' && user.avatarUrl) {
       resolvedSrc = user.avatarUrl;
     } else if (user.avatarPreset) {
       resolvedSrc = getPresetAvatarUrl(user.avatarPreset);
+    } else if (user.avatarUrl) {
+      resolvedSrc = user.avatarUrl;
     }
   }
 

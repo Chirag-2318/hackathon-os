@@ -33,33 +33,33 @@ function EmptyIllustration() {
   return (
     <div className="relative size-32 mb-6 flex items-center justify-center select-none" aria-hidden="true">
       {/* Background soft glow circle */}
-      <div className="absolute inset-0 rounded-full bg-blue-500/10 dark:bg-blue-400/10 blur-xl" />
+      <div className="absolute inset-0 rounded-full bg-amber-500/10 dark:bg-amber-400/10 blur-xl" />
       {/* Layered CSS & SVG geometric shapes */}
       <svg viewBox="0 0 120 120" className="size-full">
         {/* Soft floating polygon */}
         <polygon
           points="20,70 60,95 100,70 60,45"
-          className="fill-blue-500/15 stroke-blue-500/30 dark:stroke-blue-400/40"
+          className="fill-amber-500/10 stroke-amber-500/20"
           strokeWidth="1.5"
         />
         {/* Upper cube / room box */}
         <path
           d="M60,25 L92,42 L92,68 L60,85 L28,68 L28,42 Z"
           className="fill-card stroke-border"
-          strokeWidth="2"
+          strokeWidth="1.5"
         />
         <path
           d="M60,25 L60,85 M60,55 L92,42 M60,55 L28,42"
           className="stroke-border"
           strokeWidth="1.5"
         />
-        {/* Accent spark / flag */}
-        <circle cx="60" cy="55" r="4.5" className="fill-blue-600 animate-pulse" />
-        <circle cx="36" cy="30" r="3" className="fill-amber-500" />
-        <circle cx="84" cy="78" r="2.5" className="fill-purple-500" />
+        {/* Accent spark */}
+        <circle cx="60" cy="55" r="4" className="fill-amber-500" />
+        <circle cx="36" cy="30" r="2.5" className="fill-border" />
+        <circle cx="84" cy="78" r="2.5" className="fill-border" />
         <path
           d="M86,28 L90,32 M88,26 L88,34 M84,30 L92,30"
-          className="stroke-amber-500/70"
+          className="stroke-amber-500/60"
           strokeWidth="1.5"
           strokeLinecap="round"
         />
@@ -182,15 +182,15 @@ export function MyRoomsPage() {
   }, [rawRooms, filter, search, sort]);
 
   return (
-    <div className="w-full min-h-screen bg-[var(--shell)] p-4 sm:p-6 lg:p-8 font-[var(--font-inter)]">
+    <div className="w-full min-h-screen bg-[var(--shell)] p-4 sm:p-6 lg:p-8 font-sans">
       <div className="max-w-[1200px] mx-auto flex flex-col gap-6">
         {/* ── HEADER ────────────────────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2">
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl sm:text-4xl font-[var(--font-display)] text-ink tracking-tight">
+            <h1 className="text-3xl sm:text-4xl font-display font-normal text-ink tracking-tight leading-none">
               My rooms
             </h1>
-            <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full bg-surface border border-border text-ink-2 font-mono text-xs font-semibold tabular-nums">
+            <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full bg-muted/80 border border-border/60 text-muted-foreground font-mono text-[11px] font-semibold tabular-nums">
               {rawRooms.length}
             </span>
           </div>
@@ -207,7 +207,7 @@ export function MyRoomsPage() {
             </Button>
             <Button
               onClick={() => createRoomModal.open()}
-              className="h-9 sm:h-10 px-3.5 sm:px-4 rounded-[var(--r-control,10px)] gap-2 bg-ink text-white hover:bg-ink/90 text-xs sm:text-sm font-medium shadow-xs cursor-pointer"
+              className="h-9 sm:h-10 px-3.5 sm:px-4 rounded-[var(--r-control,10px)] gap-2 bg-primary text-primary-foreground hover:bg-primary/90 text-xs sm:text-sm font-medium shadow-xs cursor-pointer"
             >
               <Plus className="size-4" />
               <span>New room</span>
@@ -235,7 +235,7 @@ export function MyRoomsPage() {
                   className={cn(
                     'px-3 py-1.5 rounded-[var(--r-control,8px)] text-xs font-medium cursor-pointer whitespace-nowrap transition-colors flex items-center gap-1.5',
                     active
-                      ? 'bg-ink text-white font-semibold shadow-2xs'
+                      ? 'bg-selected text-on-selected font-semibold shadow-2xs'
                       : 'text-ink-2 hover:text-ink hover:bg-hover'
                   )}
                 >
@@ -243,7 +243,7 @@ export function MyRoomsPage() {
                   <span
                     className={cn(
                       'text-[11px] font-mono tabular-nums leading-none',
-                      active ? 'text-white/80' : 'text-ink-3'
+                      active ? 'text-on-selected/80' : 'text-ink-3'
                     )}
                   >
                     {tab.count}
@@ -327,7 +327,7 @@ export function MyRoomsPage() {
             <div className="flex items-center gap-3">
               <Button
                 onClick={() => createRoomModal.open()}
-                className="h-10 px-4 rounded-[var(--r-control,10px)] bg-ink text-white gap-2 text-sm font-medium hover:bg-ink/90 cursor-pointer"
+                className="h-10 px-4 rounded-[var(--r-control,10px)] bg-primary text-primary-foreground gap-2 text-sm font-medium hover:bg-primary/90 cursor-pointer"
               >
                 <Plus className="size-4" /> Create a room
               </Button>
@@ -378,7 +378,7 @@ export function MyRoomsPage() {
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
               )}
             >
-              <div className="size-11 rounded-full bg-secondary group-hover:bg-ink group-hover:text-white flex items-center justify-center transition-all mb-3 text-ink-2 group-hover:scale-105">
+              <div className="size-11 rounded-full bg-secondary group-hover:bg-inverse group-hover:text-on-inverse flex items-center justify-center transition-all mb-3 text-ink-2 group-hover:scale-105">
                 <Plus className="size-5" />
               </div>
               <span className="font-[var(--font-display)] text-xl text-ink font-bold">

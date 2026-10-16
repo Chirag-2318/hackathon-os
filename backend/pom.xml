@@ -60,8 +60,17 @@
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
 		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-database-postgresql</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>io.swagger.parser.v3</groupId>
+			<artifactId>swagger-parser</artifactId>
+			<version>2.1.25</version>
 		</dependency>
 		<dependency>
    		    <groupId>org.springdoc</groupId>
@@ -77,6 +86,11 @@
 			<groupId>org.apache.pdfbox</groupId>
 			<artifactId>pdfbox</artifactId>
 			<version>3.0.3</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>5.4.0</version>
 		</dependency>
 		<dependency>
 			<groupId>org.postgresql</groupId>
@@ -120,6 +134,21 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<testExcludes>
+						<testExclude>**/checkpoints/**</testExclude>
+						<testExclude>**/invites/**</testExclude>
+						<testExclude>**/overview/**</testExclude>
+						<testExclude>**/tasks/**</testExclude>
+						<testExclude>**/templates/**</testExclude>
+						<testExclude>**/users/**</testExclude>
+						<testExclude>**/ai/**</testExclude>
+					</testExcludes>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>

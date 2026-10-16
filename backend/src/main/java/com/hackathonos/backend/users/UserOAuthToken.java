@@ -28,8 +28,41 @@ public class UserOAuthToken {
     @Column(name = "github_login", length = 100)
     private String githubLogin;
 
+    @Column(name = "status", length = 20, nullable = false)
+    private String status = "CONNECTED";
+
+    @Column(name = "connected_at", nullable = false)
+    private Instant connectedAt = Instant.now();
+
+    @Column(name = "last_used_at")
+    private Instant lastUsedAt;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    public String getStatus() {
+        return status != null ? status : "CONNECTED";
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public Instant getConnectedAt() {
+        return connectedAt != null ? connectedAt : updatedAt;
+    }
+
+    public void setConnectedAt(Instant connectedAt) {
+        this.connectedAt = connectedAt;
+    }
+
+    public Instant getLastUsedAt() {
+        return lastUsedAt;
+    }
+
+    public void setLastUsedAt(Instant lastUsedAt) {
+        this.lastUsedAt = lastUsedAt;
+    }
 
     public UserOAuthToken() {}
 

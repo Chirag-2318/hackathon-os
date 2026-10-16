@@ -114,7 +114,7 @@ export function JourneyRail({
         icon: (p: any) => <IdeateIcon {...p} />,
         isDone: Boolean(stageDone.ideate),
         badge: approvedIdeasCount > 0 ? () => (
-          <span className="px-1.5 py-0.2 rounded-full bg-surface border border-border text-[10px] font-semibold text-ink tabular-nums">
+          <span className="px-1.5 py-0.2 rounded-full bg-surface border border-border text-[10px] font-mono font-semibold text-ink tabular-nums">
             {approvedIdeasCount}
           </span>
         ) : undefined,
@@ -173,7 +173,7 @@ export function JourneyRail({
         path: `/app/room/${roomId}/board`,
         icon: (p: any) => <BoardIcon {...p} />,
         badge: () => (
-          <span className="px-1.5 py-0.2 rounded-full bg-surface border border-border text-[10px] font-semibold text-ink tabular-nums">
+          <span className="px-1.5 py-0.2 rounded-full bg-surface border border-border text-[10px] font-mono font-semibold text-ink tabular-nums">
             {openTasks}
           </span>
         ),
@@ -232,7 +232,7 @@ export function JourneyRail({
     ].filter((item) => !isModuleHidden(item.id));
 
     // 4. PRESENT Group
-    const isPresentDone = ['submit', 'submitted', 'review'].includes(stage);
+    const isPresentDone = ['submit', 'submitted', 'review'].includes(stage) || !!roomData?.submittedAt || !!overviewData?.submittedAt;
     const isPresentCurrent = ['polish', 'deck', 'pitch', 'rehearse'].includes(stage);
     const presentState: GroupState = isSampleRoom
       ? (presentGroupActive ? 'current' : (reviewGroupActive ? 'done' : 'upcoming'))
@@ -269,21 +269,9 @@ export function JourneyRail({
 
     const reviewItems: JourneyItemDef[] = [
       {
-        id: 'readiness',
-        label: 'Readiness',
-        path: `/app/room/${roomId}/readiness`,
-        icon: (p: any) => <ReadinessIcon {...p} />,
-      },
-      {
         id: 'summary',
         label: 'Summary',
         path: `/app/room/${roomId}/summary`,
-        icon: (p: any) => <RetroIcon {...p} />,
-      },
-      {
-        id: 'retro',
-        label: 'Retro',
-        path: `/app/room/${roomId}/retro`,
         icon: (p: any) => <RetroIcon {...p} />,
       },
     ].filter((item) => !isModuleHidden(item.id));
@@ -328,7 +316,7 @@ export function JourneyRail({
       {
         id: 'REVIEW',
         label: 'Review',
-        icon: ({ size, className }) => <ReadinessIcon size={size} className={className} />,
+        icon: ({ size, className }) => <RetroIcon size={size} className={className} />,
         state: reviewState,
         unlockRequirement: 'Unlocks after hackathon ends',
         progressText: null,
@@ -408,7 +396,7 @@ export function JourneyRail({
     switch (state) {
       case 'done':
         return (
-          <span className="size-5 rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 flex items-center justify-center shadow-2xs z-10">
+          <span className="size-5 rounded-full bg-inverse text-on-inverse flex items-center justify-center shadow-2xs z-10">
             <Check className="size-2.5 stroke-[2.5]" />
           </span>
         );
@@ -464,7 +452,7 @@ export function JourneyRail({
               <PopoverContent
                 side="right"
                 sideOffset={12}
-                className="w-[200px] p-2 rounded-[18px] bg-card border border-border shadow-xl font-[var(--font-inter)] z-50"
+                className="w-[200px] p-2 rounded-[18px] bg-card border border-border shadow-xl font-sans z-50"
               >
                 <div className="flex items-center justify-between px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-ink-3 border-b border-border/50 mb-1">
                   <span>{group.label}</span>

@@ -293,19 +293,29 @@ The following items are intentionally cut from the initial hackathon sprint to p
 
     private static final Set<String> PLAN_DOC_NAMES = Set.of(
             "PRD.MD", "MVP.MD", "TECH_STACK.MD", "ARCHITECTURE.MD",
-            "PHASES.MD", "DESIGN.MD", "TASKS.MD", "DEMO_SCRIPT.MD", "QNA.MD"
+            "PHASES.MD", "DESIGN.MD", "DEMO_SCRIPT.MD", "QNA.MD"
     );
 
+    public static boolean isAllowedDoc(Doc doc) {
+        if (doc == null || doc.getFileName() == null) return false;
+        String fn = doc.getFileName().toUpperCase();
+        if (fn.equals("TASKS.MD")) return false;
+        if (PLAN_DOC_NAMES.contains(fn)) return true;
+        if (fn.matches("TASKS_P[0-9A-Z_]+\\.MD")) return true;
+        if ("PLAN".equalsIgnoreCase(doc.getSource()) && fn.startsWith("TASKS_P")) return true;
+        return false;
+    }
+
     /**
-     * Lists only real planning documents (PRD, MVP, TECH_STACK, ARCHITECTURE, PHASES, DESIGN, TASKS, DEMO_SCRIPT, QNA)
-     * with health status and latest version preview. Never seeds static placeholder documents.
+     * Lists only real planning documents (PRD, MVP, TECH_STACK, ARCHITECTURE, PHASES, DESIGN, DEMO_SCRIPT, QNA)
+     * plus generated phase tasks documents (TASKS_P1.md, etc.) in group 'Phase tasks'; nothing else, no static documents.
      */
     @Transactional
     public DocListResponseDto listDocs(UUID roomId, User user) {
         roomAccess.requireMember(roomId, user);
         List<Doc> allDocs = docRepository.findByRoomIdOrderByFileNameAsc(roomId);
         List<Doc> docs = allDocs.stream()
-                .filter(d -> PLAN_DOC_NAMES.contains(d.getFileName().toUpperCase()) || "PLAN".equalsIgnoreCase(d.getSource()))
+                .filter(DocService::isAllowedDoc)
                 .toList();
 
         List<DocItemDto> items = new ArrayList<>();
@@ -394,8 +404,11 @@ The following items are intentionally cut from the initial hackathon sprint to p
         Doc doc = docRepository.findByRoomIdAndFileName(roomId, fileName)
                 .orElseThrow(() -> new NotFoundException("DOC_NOT_FOUND", "Document not found: " + fileName));
 
-        if (req.content() != null && req.content().length() > 200_000) {
-            throw new BadRequestException("CONTENT_TOO_LARGE", "Document content cannot exceed 200,000 characters");
+        if (req.content() != null && req.content().getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 400 * 1024) {
+            throw new com.hackathonos.backend.common.error.LimitReachedException(
+                    com.hackathonos.backend.common.error.ErrorCode.LIMIT_REACHED,
+                    "Document exceeds the maximum size limit of 400 KB."
+            );
         }
         if (req.summary() != null && req.summary().length() > 120) {
             throw new BadRequestException("SUMMARY_TOO_LONG", "Summary cannot exceed 120 characters");
@@ -474,12 +487,26 @@ The following items are intentionally cut from the initial hackathon sprint to p
         roomAccess.requireMember(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
 
+        if (docRepository.countByRoomId(roomId) >= 100) {
+            throw new com.hackathonos.backend.common.error.LimitReachedException(
+                    com.hackathonos.backend.common.error.ErrorCode.LIMIT_REACHED,
+                    "This room has reached the limit of 100 documents."
+            );
+        }
+
         if (req.fileName() == null || !req.fileName().matches("^[a-zA-Z0-9_-]{1,57}\\.md$")) {
             throw new BadRequestException("INVALID_FILENAME", "Filename must end with .md and contain alphanumeric characters, dash, or underscore (max 60 chars)");
         }
 
         if (docRepository.findByRoomIdAndFileName(roomId, req.fileName()).isPresent()) {
             throw new ConflictException("DOC_EXISTS", "Document already exists: " + req.fileName());
+        }
+
+        if (req.content() != null && req.content().getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 400 * 1024) {
+            throw new com.hackathonos.backend.common.error.LimitReachedException(
+                    com.hackathonos.backend.common.error.ErrorCode.LIMIT_REACHED,
+                    "Document exceeds the maximum size limit of 400 KB."
+            );
         }
 
         String title = req.title() != null && !req.title().isBlank() ? req.title().trim() : req.fileName();
@@ -536,11 +563,9 @@ The following items are intentionally cut from the initial hackathon sprint to p
         List<DocCommentDto> dtos = new ArrayList<>();
         for (DocComment c : comments) {
             User author = userMap.get(c.getAuthorId());
-            DocCommentAuthorDto authorDto = new DocCommentAuthorDto(
-                    c.getAuthorId(),
-                    author != null ? author.getName() : "Member",
-                    author != null ? author.getAvatarUrl() : null
-            );
+            DocCommentAuthorDto authorDto = author != null
+                    ? DocCommentAuthorDto.from(author)
+                    : new DocCommentAuthorDto(c.getAuthorId(), "Member", null);
             boolean isMine = user.getId().equals(c.getAuthorId());
             dtos.add(new DocCommentDto(c.getId(), authorDto, c.getText(), c.getCreatedAt(), isMine));
         }
@@ -564,7 +589,7 @@ The following items are intentionally cut from the initial hackathon sprint to p
         DocComment comment = new DocComment(doc.getId(), user.getId(), text.trim());
         comment = commentRepository.save(comment);
 
-        DocCommentAuthorDto authorDto = new DocCommentAuthorDto(user.getId(), user.getName(), user.getAvatarUrl());
+        DocCommentAuthorDto authorDto = DocCommentAuthorDto.from(user);
         return new DocCommentDto(comment.getId(), authorDto, comment.getText(), comment.getCreatedAt(), true);
     }
 
@@ -596,7 +621,9 @@ The following items are intentionally cut from the initial hackathon sprint to p
     public byte[] downloadAllZip(UUID roomId, User user) {
         roomAccess.requireMember(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
-        List<Doc> docs = docRepository.findByRoomIdOrderByFileNameAsc(roomId);
+        List<Doc> docs = docRepository.findByRoomIdOrderByFileNameAsc(roomId).stream()
+                .filter(DocService::isAllowedDoc)
+                .toList();
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try (ZipOutputStream zos = new ZipOutputStream(baos, StandardCharsets.UTF_8)) {

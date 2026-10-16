@@ -2,6 +2,7 @@
  * docsService.ts — Docs vault files service calling backend API directly.
  */
 import { apiFetch } from '@/api/client';
+import { API_BASE_URL } from '@/lib/apiClient';
 import type { DocFile } from './types';
 
 export interface DocHealth {
@@ -83,12 +84,12 @@ export const docsService = {
   },
 
   downloadAllZipUrl(roomId: string): string {
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+    const baseUrl = API_BASE_URL;
     return `${baseUrl}/api/v1/rooms/${roomId}/docs/download.zip`;
   },
 
   downloadDocUrl(roomId: string, fileName: string): string {
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+    const baseUrl = API_BASE_URL;
     return `${baseUrl}/api/v1/rooms/${roomId}/docs/${fileName}/download`;
   },
 

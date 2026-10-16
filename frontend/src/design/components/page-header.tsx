@@ -27,17 +27,17 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        'flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-zinc-200/80 dark:border-zinc-800/80',
+        'flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-border/60',
         className
       )}
     >
       <div className="space-y-1 min-w-0">
-        {eyebrow && <div className="text-xs font-mono text-zinc-500 mb-1">{eyebrow}</div>}
-        <h1 className="text-2xl sm:text-3xl font-serif tracking-tight text-zinc-900 dark:text-zinc-50 truncate">
+        {eyebrow && <div className="text-xs font-mono text-muted-foreground mb-1">{eyebrow}</div>}
+        <h1 className="text-3xl sm:text-4xl font-display font-normal tracking-tight text-foreground truncate">
           {title}
         </h1>
         {subtitle && (
-          <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 font-sans">
+          <p className="text-xs sm:text-sm text-muted-foreground font-sans">
             {subtitle}
           </p>
         )}

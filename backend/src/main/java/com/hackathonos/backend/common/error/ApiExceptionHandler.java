@@ -88,6 +88,21 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
     }
 
+    @ExceptionHandler(LimitReachedException.class)
+    public ResponseEntity<ErrorResponse> handleLimitReached(LimitReachedException ex) {
+        String reqId = resolveRequestId();
+        ErrorResponse body = new ErrorResponse(
+                Instant.now().toString(),
+                HttpStatus.BAD_REQUEST.value(),
+                ex.getCode() != null ? ex.getCode() : "LIMIT_REACHED",
+                ex.getMessage(),
+                reqId,
+                null,
+                null
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ErrorResponse> handleBadRequest(BadRequestException ex) {
         String reqId = resolveRequestId();
@@ -205,7 +220,52 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(status).body(body);
     }
 
+    @ExceptionHandler(AiKeyMissingException.class)
+    public ResponseEntity<ErrorResponse> handleAiKeyMissing(AiKeyMissingException ex) {
+        String reqId = resolveRequestId();
+        ErrorResponse body = new ErrorResponse(
+                ex.getCode() != null ? ex.getCode() : ErrorCode.AI_KEY_MISSING.getCode(),
+                ex.getMessage(),
+                null,
+                reqId
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
+    @ExceptionHandler(AiKeyInvalidException.class)
+    public ResponseEntity<ErrorResponse> handleAiKeyInvalid(AiKeyInvalidException ex) {
+        String reqId = resolveRequestId();
+        ErrorResponse body = new ErrorResponse(
+                ex.getCode() != null ? ex.getCode() : ErrorCode.AI_KEY_INVALID.getCode(),
+                ex.getMessage(),
+                null,
+                reqId
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    @ExceptionHandler(AiKeyRateLimitedException.class)
+    public ResponseEntity<ErrorResponse> handleAiKeyRateLimited(AiKeyRateLimitedException ex) {
+        String reqId = resolveRequestId();
+        Map<String, Object> details = new HashMap<>();
+        if (ex.getRetryAfterSeconds() > 0) {
+            details.put("retryAfterSeconds", ex.getRetryAfterSeconds());
+        }
+        ErrorResponse body = new ErrorResponse(
+                ex.getCode() != null ? ex.getCode() : ErrorCode.AI_KEY_RATE_LIMITED.getCode(),
+                ex.getMessage(),
+                details,
+                reqId
+        );
+        var builder = ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS);
+        if (ex.getRetryAfterSeconds() > 0) {
+            builder.header(org.springframework.http.HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()));
+        }
+        return builder.body(body);
+    }
+
     @ExceptionHandler(BadGatewayException.class)
+
     public ResponseEntity<ErrorResponse> handleBadGateway(BadGatewayException ex) {
         String reqId = resolveRequestId();
         ErrorResponse body = new ErrorResponse(
@@ -238,6 +298,32 @@ public class ApiExceptionHandler {
                 HttpStatus.PAYLOAD_TOO_LARGE.value(),
                 ex.getCode(),
                 ex.getMessage(),
+                reqId
+        );
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(body);
+    }
+
+    @ExceptionHandler(FileExtractionException.class)
+    public ResponseEntity<ErrorResponse> handleFileExtraction(FileExtractionException ex) {
+        String reqId = resolveRequestId();
+        ErrorResponse body = new ErrorResponse(
+                Instant.now().toString(),
+                ex.getStatus().value(),
+                ex.getCode(),
+                ex.getMessage(),
+                reqId
+        );
+        return ResponseEntity.status(ex.getStatus()).body(body);
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSize(org.springframework.web.multipart.MaxUploadSizeExceededException ex) {
+        String reqId = resolveRequestId();
+        ErrorResponse body = new ErrorResponse(
+                Instant.now().toString(),
+                HttpStatus.PAYLOAD_TOO_LARGE.value(),
+                "FILE_TOO_LARGE",
+                "Uploaded file exceeds the maximum allowed size (12MB limit).",
                 reqId
         );
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(body);
@@ -317,14 +403,29 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(body);
     }
 
+    @ExceptionHandler({org.springframework.dao.DataAccessException.class, java.sql.SQLException.class})
+    public ResponseEntity<ErrorResponse> handleDatabaseError(Exception ex) {
+        String reqId = resolveRequestId();
+        log.error("Database error [{}]", reqId, ex);
+        ErrorResponse body = new ErrorResponse(
+                Instant.now().toString(),
+                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                ErrorCode.INTERNAL_SERVER_ERROR.getCode(),
+                "A database error occurred. Please try again later.",
+                reqId
+        );
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
         String reqId = resolveRequestId();
         log.error("Internal error [{}]", reqId, ex);
         ErrorResponse body = new ErrorResponse(
+                Instant.now().toString(),
+                HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 ErrorCode.INTERNAL_SERVER_ERROR.getCode(),
                 "An unexpected internal error occurred. Please try again later.",
-                null,
                 reqId
         );
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);

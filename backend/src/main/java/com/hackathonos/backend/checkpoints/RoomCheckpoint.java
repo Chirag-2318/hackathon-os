@@ -23,7 +23,7 @@ public class RoomCheckpoint {
     @Column(name = "rule_key", nullable = false, length = 50)
     private String ruleKey;
 
-    @Column(nullable = false, length = 200)
+    @Column(nullable = false, columnDefinition = "text")
     private String title;
 
     @Column(columnDefinition = "TEXT")

@@ -133,10 +133,14 @@ public class BoardService {
 
         Instant now = clock.instant();
         Instant in24h = now.plus(Duration.ofHours(24));
-        long total = tasks.size(), open = 0, todoCount = 0, inProgCount = 0, doneCount = 0;
+        long total = 0, open = 0, todoCount = 0, inProgCount = 0, doneCount = 0;
         long blocked = 0, unassigned = 0, dueToday = 0;
 
         for (Task t : tasks) {
+            if (t.isDropped()) {
+                continue;
+            }
+            total++;
             String normStatus = taskDtoMapper.normalizeStatus(t.getStatus());
             boolean isDone = t.isConfirmedDone();
 
@@ -226,7 +230,7 @@ public class BoardService {
             Task target = taskById.get(dep.getDependsOnTaskId());
             if (target != null) {
                 map.computeIfAbsent(dep.getTaskId(), k -> new ArrayList<>()).add(
-                        new TaskDependencyItemDto(target.getId(), target.getTaskKey(), target.getSummary(), taskDtoMapper.normalizeStatus(target.getStatus()), target.isConfirmedDone())
+                        new TaskDependencyItemDto(target.getId(), target.getTaskKey(), target.getSummary(), taskDtoMapper.normalizeStatus(target.getStatus()), target.isSatisfiedForDependency())
                 );
             }
         }
@@ -239,9 +243,9 @@ public class BoardService {
         for (TaskDependency dep : dependencyRepository.findAll()) {
             if (taskIds.contains(dep.getDependsOnTaskId())) {
                 Task blocker = taskById.get(dep.getTaskId());
-                if (blocker != null) {
+                if (blocker != null && !blocker.isDropped()) {
                     map.computeIfAbsent(dep.getDependsOnTaskId(), k -> new ArrayList<>()).add(
-                            new TaskDependencyItemDto(blocker.getId(), blocker.getTaskKey(), blocker.getSummary(), taskDtoMapper.normalizeStatus(blocker.getStatus()), blocker.isConfirmedDone())
+                            new TaskDependencyItemDto(blocker.getId(), blocker.getTaskKey(), blocker.getSummary(), taskDtoMapper.normalizeStatus(blocker.getStatus()), blocker.isSatisfiedForDependency())
                     );
                 }
             }

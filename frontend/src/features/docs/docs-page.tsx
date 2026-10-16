@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { docsService } from '@/services/docsService';
 import type { DocFile, DocVersion } from '@/services/types';
 import { DocsListPane } from './components/docs-list-pane';
@@ -15,6 +15,7 @@ import { exportRoomZip } from '@/shared/utils/room-export';
 
 export function DocsPage() {
   const { roomId } = useParams<{ roomId: string }>();
+  const location = useLocation();
   const [files, setFiles] = useState<DocFile[]>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,17 +29,23 @@ export function DocsPage() {
       .then(async (docs) => {
         if (mounted) {
           if (docs && docs.length > 0) {
-            const first = docs[0];
+            const returnDocId = (location.state as any)?.docId;
+            const returnDocName = (location.state as any)?.docName;
+            let target = docs[0];
+            if (returnDocId || returnDocName) {
+              const matched = docs.find(d => (returnDocId && d.id === returnDocId) || (returnDocName && d.name === returnDocName));
+              if (matched) target = matched;
+            }
             try {
-              const detail = await docsService.getDoc(roomId, first.name);
-              const fullDocs = docs.map((d, i) => i === 0 && detail ? { ...d, content: detail.content, versions: detail.versions } : d);
+              const detail = await docsService.getDoc(roomId, target.name);
+              const fullDocs = docs.map(d => d.id === target.id && detail ? { ...d, content: detail.content, versions: detail.versions } : d);
               setFiles(fullDocs);
               saveCachedDocs(roomId, fullDocs);
             } catch {
               setFiles(docs);
               saveCachedDocs(roomId, docs);
             }
-            setSelectedFileId(first.id);
+            setSelectedFileId(target.id);
           } else {
             setFiles([]);
             setSelectedFileId(null);

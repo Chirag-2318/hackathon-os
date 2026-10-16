@@ -5,6 +5,9 @@ import com.hackathonos.backend.common.config.AppProperties;
 import com.hackathonos.backend.common.error.BadRequestException;
 import com.hackathonos.backend.common.error.NotFoundException;
 import com.hackathonos.backend.common.security.RoomAccess;
+import com.hackathonos.backend.common.error.ConflictException;
+import com.hackathonos.backend.email.EmailOutboxRepository;
+import com.hackathonos.backend.email.MailService;
 import com.hackathonos.backend.invites.dto.*;
 import com.hackathonos.backend.members.*;
 import com.hackathonos.backend.notifications.NotificationService;
@@ -41,6 +44,8 @@ public class InviteService {
     private final AppProperties appProperties;
     private final com.hackathonos.backend.templates.EventTemplateRepository templateRepository;
     private final com.hackathonos.backend.events.RoomEventService roomEventService;
+    private final MailService mailService;
+    private final EmailOutboxRepository outboxRepository;
 
     public InviteService(InviteRepository inviteRepository,
                          RoomRepository roomRepository,
@@ -54,7 +59,9 @@ public class InviteService {
                          NotificationService notificationService,
                          AppProperties appProperties,
                          com.hackathonos.backend.templates.EventTemplateRepository templateRepository,
-                         com.hackathonos.backend.events.RoomEventService roomEventService) {
+                         com.hackathonos.backend.events.RoomEventService roomEventService,
+                         MailService mailService,
+                         EmailOutboxRepository outboxRepository) {
         this.inviteRepository = inviteRepository;
         this.roomRepository = roomRepository;
         this.memberRepository = memberRepository;
@@ -68,6 +75,8 @@ public class InviteService {
         this.appProperties = appProperties;
         this.templateRepository = templateRepository;
         this.roomEventService = roomEventService;
+        this.mailService = mailService;
+        this.outboxRepository = outboxRepository;
     }
 
     /**
@@ -99,6 +108,8 @@ public class InviteService {
         inviteRepository.save(invite);
         return new InviteResponse(token, buildUrl(token), expiresAt);
     }
+
+
 
     /**
      * Lists active invite links for a room. Requires leader privileges.
@@ -148,7 +159,8 @@ public class InviteService {
         List<String> needed = computeSkillsNeeded(room.getId());
         Boolean already = (callerOrNull != null) ? memberRepository.existsByRoomIdAndUserId(room.getId(), callerOrNull.getId()) : null;
 
-        return new InvitePreviewDto(true, null, room.getName(), host.getName(), host.getAvatarUrl(), count, needed, invite.getExpiresAt(), already);
+        String hostAvatarUrl = com.hackathonos.backend.users.dto.UserSummaryDto.resolveAvatar(host).avatarUrl();
+        return new InvitePreviewDto(true, null, room.getName(), host.getName(), hostAvatarUrl, count, needed, invite.getExpiresAt(), already);
     }
 
     /**
@@ -209,9 +221,15 @@ public class InviteService {
     }
 
     private void checkRoomCapacity(Room room) {
+        long current = memberRepository.countByRoomId(room.getId());
+        if (current >= 20) {
+            throw new com.hackathonos.backend.common.error.LimitReachedException(
+                    com.hackathonos.backend.common.error.ErrorCode.LIMIT_REACHED,
+                    "This room has reached the limit of 20 members."
+            );
+        }
         if (room.getTemplateId() != null) {
             templateRepository.findById(room.getTemplateId()).ifPresent(tpl -> {
-                long current = memberRepository.countByRoomId(room.getId());
                 if (tpl.getTeamMax() > 0 && current >= tpl.getTeamMax()) {
                     throw new BadRequestException("ROOM_FULL", "Room has reached the maximum capacity of " + tpl.getTeamMax() + " members");
                 }
@@ -219,7 +237,7 @@ public class InviteService {
         }
     }
 
-    private void addMemberAndProcessInvites(User caller, Room room, String role) {
+    public void addMemberAndProcessInvites(User caller, Room room, String role) {
         RoomMember member = new RoomMember(room.getId(), caller.getId(), role);
         member = memberRepository.save(member);
 
@@ -231,6 +249,103 @@ public class InviteService {
             userRepository.findById(room.getOwnerId()).ifPresent(leader ->
                     notificationService.notifyUser(leader, room, NotificationType.MEMBER_JOINED,
                             "Teammate joined", caller.getName() + " joined " + room.getName()));
+        }
+
+        sendJoinedEmails(caller, room);
+    }
+
+    private void sendJoinedEmails(User caller, Room room) {
+        if (caller.getEmail() != null && !caller.getEmail().isBlank()) {
+            Map<String, Object> selfVars = new HashMap<>();
+            selfVars.put("variant", "SELF");
+            selfVars.put("roomName", room.getName());
+            selfVars.put("roomId", room.getId().toString());
+            selfVars.put("appUrl", appProperties.getPublicUrl());
+            selfVars.put("teammates", buildTeammateRoster(room.getId()));
+            selfVars.put("nextStep", resolveNextStep(room));
+
+            mailService.enqueue("joined", caller.getEmail(), selfVars, "joined-self:" + room.getId() + ":" + caller.getId());
+        }
+
+        if (room.getOwnerId() != null && !room.getOwnerId().equals(caller.getId())) {
+            userRepository.findById(room.getOwnerId()).ifPresent(leader -> {
+                if (leader.getEmail() != null && !leader.getEmail().isBlank()) {
+                    java.time.ZonedDateTime nowPacific = java.time.ZonedDateTime.now(java.time.ZoneId.of("America/Los_Angeles"));
+                    Instant midnightPacific = nowPacific.toLocalDate().atStartOfDay(java.time.ZoneId.of("America/Los_Angeles")).toInstant();
+                    long leaderCountToday = outboxRepository.countByDedupeKeyPrefixSince(
+                            "joined-lead:" + room.getId() + ":",
+                            midnightPacific
+                    );
+                    if (leaderCountToday < 6) {
+                        long currentMembers = memberRepository.countByRoomId(room.getId());
+                        int cap = 4;
+                        if (room.getTemplateId() != null) {
+                            cap = templateRepository.findById(room.getTemplateId())
+                                    .map(com.hackathonos.backend.templates.EventTemplate::getTeamMax)
+                                    .orElse(4);
+                        }
+                        Map<String, Object> leadVars = new HashMap<>();
+                        leadVars.put("variant", "LEADER");
+                        leadVars.put("roomName", room.getName());
+                        leadVars.put("roomId", room.getId().toString());
+                        leadVars.put("appUrl", appProperties.getPublicUrl());
+                        leadVars.put("handle", caller.getUsername() != null ? caller.getUsername() : caller.getName());
+                        leadVars.put("displayName", caller.getDisplayName() != null ? caller.getDisplayName() : caller.getName());
+                        leadVars.put("memberCount", (int) currentMembers);
+                        leadVars.put("memberCap", cap);
+                        leadVars.put("roleTags", parseJsonRoles(caller.getRoleTags()));
+
+                        mailService.enqueue("joined", leader.getEmail(), leadVars, "joined-lead:" + room.getId() + ":" + caller.getId());
+                    }
+                }
+            });
+        }
+    }
+
+    private List<Map<String, Object>> buildTeammateRoster(UUID roomId) {
+        List<RoomMember> members = memberRepository.findByRoomId(roomId);
+        List<Map<String, Object>> roster = new ArrayList<>();
+        int count = 0;
+        for (RoomMember m : members) {
+            if (count++ >= 6) break;
+            userRepository.findById(m.getUserId()).ifPresent(u -> {
+                com.hackathonos.backend.users.dto.UserSummaryDto.ResolvedAvatar summary = com.hackathonos.backend.users.dto.UserSummaryDto.resolveAvatar(u);
+                Map<String, Object> map = new HashMap<>();
+                map.put("handle", u.getUsername() != null ? u.getUsername() : u.getName());
+                map.put("displayName", u.getDisplayName() != null ? u.getDisplayName() : u.getName());
+                map.put("role", m.getRole() != null ? m.getRole() : "Builder");
+                map.put("isLeader", "LEADER".equalsIgnoreCase(m.getRole()));
+                map.put("avatarUrl", summary.avatarUrl());
+                roster.add(map);
+            });
+        }
+        return roster;
+    }
+
+    private String resolveNextStep(Room room) {
+        if (!room.isBriefDone()) {
+            return "Review the event brief and extract project goals.";
+        }
+        if (!room.isIdeateDone()) {
+            return "Contribute and vote on ideas on the Ideate board.";
+        }
+        if (!room.isPlanDone()) {
+            return "Draft the execution plan and lock the MVP cut-list.";
+        }
+        return "Pick up tasks from the build board and assemble the prototype.";
+    }
+
+    private List<String> parseJsonRoles(String json) {
+        if (json == null || json.isBlank() || "[]".equals(json)) {
+            return Collections.emptyList();
+        }
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+                    json,
+                    new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {}
+            );
+        } catch (Exception e) {
+            return Collections.emptyList();
         }
     }
 

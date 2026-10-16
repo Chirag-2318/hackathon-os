@@ -86,6 +86,7 @@ public class SpeedModeService {
         List<Task> allMyTasks = taskRepository.findByRoomId(roomId);
         List<Task> myOpen = new ArrayList<>();
         for (Task t : allMyTasks) {
+            if (t.isDropped()) continue;
             if (user.getId().equals(t.getAssigneeId()) && !"done".equalsIgnoreCase(t.getStatus())) {
                 myOpen.add(t);
             }
@@ -125,7 +126,9 @@ public class SpeedModeService {
         }
 
         // Blockers
-        List<Task> blockedTasks = taskRepository.findByRoomIdAndFlaggedTrueAndStatusNot(roomId, "DONE");
+        List<Task> blockedTasks = taskRepository.findByRoomIdAndFlaggedTrueAndStatusNot(roomId, "DONE").stream()
+                .filter(t -> !t.isDropped())
+                .toList();
         Set<UUID> ownerIds = new HashSet<>();
         for (Task t : blockedTasks) if (t.getAssigneeId() != null) ownerIds.add(t.getAssigneeId());
         Map<UUID, User> userMap = new HashMap<>();
@@ -227,6 +230,7 @@ public class SpeedModeService {
         // Pick next task for caller
         List<Task> myOpen = new ArrayList<>();
         for (Task t : taskRepository.findByRoomId(roomId)) {
+            if (t.isDropped()) continue;
             if (user.getId().equals(t.getAssigneeId()) && !"done".equalsIgnoreCase(t.getStatus())) {
                 myOpen.add(t);
             }

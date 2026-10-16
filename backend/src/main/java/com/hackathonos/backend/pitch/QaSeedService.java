@@ -57,13 +57,24 @@ public class QaSeedService {
      */
     @Transactional
     public void seedFromPlan(Room room) {
+        seedFromPlan(room, null);
+    }
+
+    /**
+     * Parses demo plan step and tech stack to seed Q&A and code defense drills.
+     */
+    @Transactional
+    public void seedFromPlan(Room room, java.util.function.Consumer<com.hackathonos.backend.plan.dto.ValidationIssueDto> warnConsumer) {
         UUID roomId = room.getId();
 
         // 1. Seed Q&A items from demo step
         Optional<PlanStep> demoStep = planStepRepository.findByRoomIdAndStepKey(roomId, "demo");
+        if (demoStep.isEmpty() || !demoStep.get().isValidated()) {
+            demoStep = planStepRepository.findByRoomIdAndStepKey(roomId, "demo-qna");
+        }
         String demoAnswer = demoStep.filter(PlanStep::isValidated).map(PlanStep::getAnswer).orElse("");
 
-        List<PitchQa> seededQas = parseQaPairs(demoAnswer, roomId);
+        List<PitchQa> seededQas = parseQaPairs(demoAnswer, roomId, warnConsumer);
         Map<String, PitchQa> existingByQ = new HashMap<>();
         for (PitchQa q : qaRepository.findByRoomIdOrderByPositionAsc(roomId)) {
             existingByQ.put(q.getQuestion().trim().toLowerCase(Locale.ROOT), q);
@@ -100,11 +111,14 @@ public class QaSeedService {
 
         // 2. Seed Code Defense drills from tech step table rows
         Optional<PlanStep> techStep = planStepRepository.findByRoomIdAndStepKey(roomId, "tech");
+        if (techStep.isEmpty() || !techStep.get().isValidated()) {
+            techStep = planStepRepository.findByRoomIdAndStepKey(roomId, "stack-arch");
+        }
         String techAnswer = techStep.filter(PlanStep::isValidated).map(PlanStep::getAnswer).orElse("");
-        seedCodeDefenseFromTech(roomId, techAnswer);
+        seedCodeDefenseFromTech(roomId, techAnswer, warnConsumer);
     }
 
-    private List<PitchQa> parseQaPairs(String text, UUID roomId) {
+    private List<PitchQa> parseQaPairs(String text, UUID roomId, java.util.function.Consumer<com.hackathonos.backend.plan.dto.ValidationIssueDto> warnConsumer) {
         List<PitchQa> list = new ArrayList<>();
         if (text == null || text.isBlank()) return list;
 
@@ -120,7 +134,9 @@ public class QaSeedService {
             String trimmed = line.trim();
             if (trimmed.startsWith("#") && !trimmed.contains("Q&A")) {
                 if (currentQ != null) {
-                    list.add(new PitchQa(roomId, 0, currentQ, currentA.toString().trim(), guessCategory(currentQ), "GENERATED", false, null));
+                    String finalQ = com.hackathonos.backend.plan.DefensiveParserUtils.defensivelyTrim(currentQ, 500, "QNA.md", warnConsumer);
+                    String finalA = com.hackathonos.backend.plan.DefensiveParserUtils.defensivelyTrim(currentA.toString().trim(), 2000, "QNA.md", warnConsumer);
+                    list.add(new PitchQa(roomId, 0, finalQ, finalA, guessCategory(finalQ), "GENERATED", false, null));
                     currentQ = null;
                     currentA.setLength(0);
                 }
@@ -130,7 +146,9 @@ public class QaSeedService {
             Matcher qMatcher = Pattern.compile("^(?:[-*]\\s*)?(?:\\*\\*)?[Qq](?:uestion)?[\\s*:]+(.*)$").matcher(trimmed);
             if (qMatcher.find()) {
                 if (currentQ != null) {
-                    list.add(new PitchQa(roomId, 0, currentQ, currentA.toString().trim(), guessCategory(currentQ), "GENERATED", false, null));
+                    String finalQ = com.hackathonos.backend.plan.DefensiveParserUtils.defensivelyTrim(currentQ, 500, "QNA.md", warnConsumer);
+                    String finalA = com.hackathonos.backend.plan.DefensiveParserUtils.defensivelyTrim(currentA.toString().trim(), 2000, "QNA.md", warnConsumer);
+                    list.add(new PitchQa(roomId, 0, finalQ, finalA, guessCategory(finalQ), "GENERATED", false, null));
                     currentA.setLength(0);
                 }
                 currentQ = qMatcher.group(1).replaceAll("[*]+", "").trim();
@@ -146,7 +164,9 @@ public class QaSeedService {
         }
 
         if (currentQ != null) {
-            list.add(new PitchQa(roomId, 0, currentQ, currentA.toString().trim(), guessCategory(currentQ), "GENERATED", false, null));
+            String finalQ = com.hackathonos.backend.plan.DefensiveParserUtils.defensivelyTrim(currentQ, 500, "QNA.md", warnConsumer);
+            String finalA = com.hackathonos.backend.plan.DefensiveParserUtils.defensivelyTrim(currentA.toString().trim(), 2000, "QNA.md", warnConsumer);
+            list.add(new PitchQa(roomId, 0, finalQ, finalA, guessCategory(finalQ), "GENERATED", false, null));
         }
 
         return list;
@@ -171,7 +191,7 @@ public class QaSeedService {
         return "PRODUCT";
     }
 
-    private void seedCodeDefenseFromTech(UUID roomId, String techAnswer) {
+    private void seedCodeDefenseFromTech(UUID roomId, String techAnswer, java.util.function.Consumer<com.hackathonos.backend.plan.dto.ValidationIssueDto> warnConsumer) {
         if (techAnswer == null || techAnswer.isBlank()) return;
 
         List<RoomMember> members = memberRepository.findByRoomId(roomId);
@@ -191,8 +211,8 @@ public class QaSeedService {
                     String layer = parts[1].trim();
                     String choice = parts[2].trim();
                     if (!layer.isBlank() && !choice.isBlank() && !layer.equalsIgnoreCase("Layer")) {
-                        String moduleName = choice;
-                        String question = "Explain how " + choice + " is used for " + layer + ".";
+                        String moduleName = com.hackathonos.backend.plan.DefensiveParserUtils.defensivelyTrim(choice, 500, "TECH_STACK.md", warnConsumer);
+                        String question = com.hackathonos.backend.plan.DefensiveParserUtils.defensivelyTrim("Explain how " + choice + " is used for " + layer + ".", 500, "TECH_STACK.md", warnConsumer);
 
                         UUID ownerId = null;
                         String layerLower = layer.toLowerCase(Locale.ROOT);

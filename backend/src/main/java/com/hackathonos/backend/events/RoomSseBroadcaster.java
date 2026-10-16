@@ -86,6 +86,8 @@ public class RoomSseBroadcaster {
             for (EmitterEntry e : list) {
                 try {
                     e.emitter().send(SseEmitter.event()
+                            .name("heartbeat")
+                            .data("{\"type\":\"heartbeat\",\"time\":" + System.currentTimeMillis() + "}")
                             .comment("heartbeat:" + System.currentTimeMillis()));
                 } catch (Exception ex) {
                     removeEmitter(roomId, e);

@@ -279,11 +279,7 @@ export function LiveHackathonsSection() {
 
       {/* Featured Card */}
       <div
-        className="w-full rounded-[14px] p-6 text-[#F4F1EA] flex flex-col justify-between gap-5 relative overflow-hidden"
-        style={{
-          backgroundColor: '#0F0F11',
-          border: '1px solid rgba(255, 255, 255, 0.06)',
-        }}
+        className="featured-hackathon-card w-full rounded-[14px] p-6 text-[#F4F1EA] dark:text-[#ECE9E2] flex flex-col justify-between gap-5 relative overflow-hidden bg-[#0F0F11] dark:bg-[var(--raised-surface)] border border-white/[0.06] dark:border-[rgba(236,233,226,0.10)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
       >
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
           {/* Main content */}

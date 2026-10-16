@@ -30,6 +30,7 @@ public class DeadlineReminderJob {
     private final ReminderLogRepository reminderLogRepository;
     private final NotificationService notificationService;
     private final Clock clock;
+    private final com.hackathonos.backend.common.lock.DbAdvisoryLockService advisoryLockService;
 
     public DeadlineReminderJob(
             RoomRepository roomRepository,
@@ -38,7 +39,8 @@ public class DeadlineReminderJob {
             RoomMemberRepository memberRepository,
             ReminderLogRepository reminderLogRepository,
             NotificationService notificationService,
-            Clock clock
+            Clock clock,
+            com.hackathonos.backend.common.lock.DbAdvisoryLockService advisoryLockService
     ) {
         this.roomRepository = roomRepository;
         this.taskRepository = taskRepository;
@@ -47,13 +49,18 @@ public class DeadlineReminderJob {
         this.reminderLogRepository = reminderLogRepository;
         this.notificationService = notificationService;
         this.clock = clock;
+        this.advisoryLockService = advisoryLockService;
     }
 
     /**
      * Executes deadline reminder evaluations every 5 minutes.
-     * Can also be invoked directly in automated unit tests.
+     * Guarded by database advisory lock across cluster.
      */
     @Scheduled(fixedRate = 300000)
+    public void scheduledRun() {
+        advisoryLockService.tryLockAndRun(1005L, this::runReminders);
+    }
+
     @Transactional
     public int runReminders() {
         int sentCount = 0;
@@ -69,6 +76,7 @@ public class DeadlineReminderJob {
             // 1. Task deadlines
             List<Task> openTasks = taskRepository.findByRoomIdAndStatusNot(room.getId(), "DONE");
             for (Task t : openTasks) {
+                if (t.isDropped()) continue;
                 if (t.getDueAt() != null && t.getDueAt().isAfter(now) && !t.getDueAt().isAfter(window)) {
                     if (t.getAssigneeId() != null) {
                         UUID userId = t.getAssigneeId();

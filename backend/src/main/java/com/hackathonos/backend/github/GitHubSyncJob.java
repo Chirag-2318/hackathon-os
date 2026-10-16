@@ -26,20 +26,24 @@ public class GitHubSyncJob {
     @Value("${app.jobs.github-sync.enabled:true}")
     private boolean enabled;
 
+    private final com.hackathonos.backend.common.lock.DbAdvisoryLockService advisoryLockService;
+
     public GitHubSyncJob(GithubRepoRepository repoRepository,
                          RoomRepository roomRepository,
                          GitHubSyncService syncService,
-                         Clock clock) {
+                         Clock clock,
+                         com.hackathonos.backend.common.lock.DbAdvisoryLockService advisoryLockService) {
         this.repoRepository = repoRepository;
         this.roomRepository = roomRepository;
         this.syncService = syncService;
         this.clock = clock;
+        this.advisoryLockService = advisoryLockService;
     }
 
     @Scheduled(cron = "${app.jobs.github-sync.cron:0 */10 * * * *}")
     public void schedule() {
         if (!enabled) return;
-        runSyncJob();
+        advisoryLockService.tryLockAndRun(1007L, this::runSyncJob);
     }
 
     /**

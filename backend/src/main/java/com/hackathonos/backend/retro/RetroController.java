@@ -15,9 +15,13 @@ import java.util.UUID;
 public class RetroController {
 
     private final RetroService retroService;
+    private final com.hackathonos.backend.billing.BillingService billingService;
 
-    public RetroController(RetroService retroService) {
+    public RetroController(RetroService retroService,
+                           @org.springframework.beans.factory.annotation.Autowired(required = false)
+                           com.hackathonos.backend.billing.BillingService billingService) {
         this.retroService = retroService;
+        this.billingService = billingService;
     }
 
     @GetMapping
@@ -25,6 +29,9 @@ public class RetroController {
             @PathVariable UUID roomId,
             @AuthenticationPrincipal User user
     ) {
+        if (billingService != null && user != null) {
+            billingService.checkCanAccessReviewPages(user);
+        }
         return retroService.getRetro(roomId, user);
     }
 

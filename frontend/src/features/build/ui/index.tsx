@@ -137,7 +137,7 @@ export function StatusLozenge({ status, onClick, showChevron = false, className 
       onClick={onClick}
       style={{ backgroundColor: meta.bg, color: meta.text }}
       className={cn(
-        'h-5 px-2 rounded-[6px] text-[11px] font-bold tracking-[0.03em] uppercase inline-flex items-center gap-1 select-none whitespace-nowrap transition-transform duration-100',
+        'h-5 px-2 rounded-[6px] text-[11px] font-mono font-bold tracking-[0.03em] uppercase inline-flex items-center gap-1 select-none whitespace-nowrap transition-transform duration-100',
         onClick && 'hover:scale-[1.02] cursor-pointer active:scale-95',
         className
       )}
@@ -196,7 +196,7 @@ export function DueChip({ dueAt, className }: { dueAt?: string; className?: stri
   return (
     <span
       className={cn(
-        'h-5 px-1.5 rounded-full text-[10px] font-semibold inline-flex items-center gap-1 shrink-0',
+        'h-5 px-1.5 rounded-full text-[10px] font-mono font-semibold inline-flex items-center gap-1 shrink-0',
         isOverdue
           ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
           : isSoon

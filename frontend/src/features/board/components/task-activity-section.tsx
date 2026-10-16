@@ -46,12 +46,7 @@ export function TaskActivitySection({
 
       {/* Comment Input */}
       <div className="flex items-start gap-3">
-        <div
-          className="size-7 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5"
-          style={{ backgroundColor: currentMember?.avatarColor || '#3b82f6' }}
-        >
-          {currentMember?.initials || 'ME'}
-        </div>
+        <UserAvatar user={currentMember} size={28} className="mt-0.5" />
         <div className="flex-1 flex flex-col gap-2">
           <textarea
             rows={isFocused || commentText.length > 0 ? 3 : 1}
@@ -96,10 +91,7 @@ export function TaskActivitySection({
               <div key={c.id} className="flex items-start gap-2.5 text-xs">
                 <div className="size-6 rounded-full overflow-hidden shrink-0 mt-0.5">
                   <UserAvatar
-                    user={{
-                      ...author,
-                      avatarUrl: (author as any)?.avatarUrl || (author as any)?.avatar,
-                    }}
+                    user={author}
                     size={24}
                   />
                 </div>

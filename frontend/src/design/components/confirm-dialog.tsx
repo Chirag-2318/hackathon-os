@@ -63,6 +63,7 @@ export function ConfirmDialog({
             variant={variant === 'danger' ? 'danger' : 'primary'}
             size="sm"
             isLoading={isLoading}
+            data-sound={variant === 'danger' ? 'destructive' : undefined}
             onClick={onConfirm}
           >
             {confirmLabel}

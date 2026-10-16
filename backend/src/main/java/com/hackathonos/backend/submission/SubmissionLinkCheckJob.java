@@ -27,22 +27,29 @@ public class SubmissionLinkCheckJob {
     private final SubmissionRepository submissionRepository;
     private final RoomRepository roomRepository;
     private final SafeHttpClient safeHttpClient;
+    private final com.hackathonos.backend.common.lock.DbAdvisoryLockService advisoryLockService;
 
     public SubmissionLinkCheckJob(
             SubmissionLinkRepository linkRepository,
             SubmissionRepository submissionRepository,
             RoomRepository roomRepository,
-            SafeHttpClient safeHttpClient
+            SafeHttpClient safeHttpClient,
+            com.hackathonos.backend.common.lock.DbAdvisoryLockService advisoryLockService
     ) {
         this.linkRepository = linkRepository;
         this.submissionRepository = submissionRepository;
         this.roomRepository = roomRepository;
         this.safeHttpClient = safeHttpClient;
+        this.advisoryLockService = advisoryLockService;
     }
 
     @Scheduled(fixedDelayString = "${app.jobs.submission-link-check.fixed-delay-ms:1800000}")
-    @Transactional
     public void run() {
+        advisoryLockService.tryLockAndRun(1006L, this::doCheckStaleLinks);
+    }
+
+    @Transactional
+    public void doCheckStaleLinks() {
         checkStaleLinks();
     }
 

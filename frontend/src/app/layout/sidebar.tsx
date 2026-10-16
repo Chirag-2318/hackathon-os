@@ -25,9 +25,10 @@ import { RoomNav } from './room-nav';
 import { useCurrentUser } from '@/features/auth/useCurrentUser';
 import { useOverlay } from '@/app/providers/overlay-store';
 import { useHome } from '@/features/home/hooks/use-home';
-import { formatClock } from '@/shared/lib/clock';
+import { formatClock, useClock } from '@/shared/lib/clock';
 import { Copy, Plus } from 'lucide-react';
 import { UserName } from '@/components/ui/user-name';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import goproImg from '../../../images/gopro.png';
 
 // ── Nav configuration ──────────────────────────────────────────────
@@ -79,18 +80,6 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-// ── Live clock ──────────────────────────────────────────────────────
-function useClock() {
-  const [time, setTime] = React.useState(() => formatClock(new Date()));
-
-  React.useEffect(() => {
-    const id = setInterval(() => setTime(formatClock(new Date())), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  return time;
-}
-
 // ── Nav row ─────────────────────────────────────────────────────────
 function NavRow({
   item,
@@ -110,20 +99,25 @@ function NavRow({
       aria-current={isActive ? 'page' : undefined}
       className={({ isActive: a }) =>
         cn(
-          'nav-row group flex items-center h-8 rounded-[var(--r-control)] px-2.5 gap-2.5 w-full outline-none',
+          'nav-row group relative flex items-center h-8 rounded-[var(--r-control)] px-2.5 gap-2.5 w-full outline-none',
           'transition-colors duration-[150ms] cursor-pointer text-[14px] leading-[20px] font-medium',
           'focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2',
           a
-            ? 'bg-active text-ink'
+            ? 'bg-hover-surface text-ink'
             : 'bg-transparent text-ink hover:bg-hover active:scale-[0.99]',
         )
       }
       style={({ isActive: a }) => ({
-        ['--nav-icon-bg' as string]: a ? 'var(--active)' : 'var(--shell)',
+        ['--nav-icon-bg' as string]: a ? 'var(--hover-surface)' : 'var(--sidebar)',
       })}
       data-testid={`nav-row-${item.key}`}
       data-tour={`nav-${item.key === 'my-rooms' ? 'rooms' : item.key}`}
     >
+      {/* 2px active accent bar */}
+      {isActive && (
+        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-accent" />
+      )}
+
       {/* Icon */}
       <span className="shrink-0 flex items-center justify-center size-5" data-testid={`nav-icon-${item.key}`}>
         {item.icon({ size: 18 })}
@@ -155,7 +149,7 @@ function NavRow({
 
       {/* Badge */}
       {!isCollapsed && item.badge != null && item.badge > 0 && (
-        <span className="ml-auto inline-flex items-center justify-center h-5 px-2 rounded-full bg-success-bg text-[12px] leading-[16px] font-semibold text-success-fg tabular-nums" data-testid={`nav-badge-${item.key}`}>
+        <span className="ml-auto inline-flex items-center justify-center h-5 px-2 rounded-full bg-success-bg text-[12px] leading-[16px] font-mono font-semibold text-success-fg tabular-nums" data-testid={`nav-badge-${item.key}`}>
           {item.badge}
         </span>
       )}
@@ -187,10 +181,10 @@ function LogoMark({ size = 18 }: { size?: number }) {
       aria-hidden="true"
       data-testid="brand-glyph"
     >
-      <rect width="18" height="18" rx="4" fill="var(--ink)" />
+      <rect width="18" height="18" rx="4" fill="var(--logo-bg)" />
       <path
         d="M5 4v10M13 4v10M5 9h8"
-        stroke="white"
+        stroke="var(--logo-fg)"
         strokeWidth="2"
         strokeLinecap="round"
       />
@@ -229,7 +223,7 @@ export function AppSidebar() {
   return (
     <aside
       className={cn(
-        'flex flex-col bg-shell h-dvh shrink-0',
+        'flex flex-col bg-[var(--sidebar)] h-dvh shrink-0',
         'transition-[width] duration-200',
         'overflow-hidden',
         isCollapsed ? 'px-[12px] pt-10 pb-8' : 'px-5 pt-10 pb-8'
@@ -384,8 +378,8 @@ export function AppSidebar() {
                     aria-label="Copy email"
                     title={copyFeedback ? 'Copied!' : 'Copy email'}
                   >
-                    <div className="shrink-0 flex items-center justify-center size-5" data-testid="footer-copy-box">
-                      <Copy size={16} strokeWidth={1.75} className="opacity-60 group-hover:opacity-100" />
+                    <div className="shrink-0 flex items-center justify-center size-5 rounded-full overflow-hidden" data-testid="footer-copy-box">
+                      <UserAvatar user={user} size={20} />
                     </div>
                     <span className="text-[14px] font-normal leading-[20px] text-ink truncate" data-testid="footer-email">
                       <UserName user={user} showDisplayName={true} />
@@ -396,7 +390,7 @@ export function AppSidebar() {
             </AnimatePresence>
 
             <p
-              className="text-[13px] text-ink-3 tabular-nums leading-[16px] ml-10 mt-1 shrink-0"
+              className="text-[13px] text-ink-3 font-mono tabular-nums leading-[16px] ml-10 mt-1 shrink-0"
               aria-live="polite"
               aria-atomic="true"
               data-testid="footer-clock"

@@ -147,7 +147,7 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
       label: 'Plan',
       path: `/app/room/${roomId}/plan`,
       isDone: stageDone.plan,
-      helper: `${validatedSteps.length} of 5 steps`,
+      helper: `${validatedSteps.length} of 4 steps`,
     },
     {
       id: 'build',
@@ -219,7 +219,7 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
       {/* ── Page Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-3xl sm:text-4xl font-display font-normal tracking-tight text-foreground">
             {room?.name || 'Hackathon Command Room'}
           </h1>
           <p className="text-xs text-muted-foreground mt-1">
@@ -239,7 +239,7 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
             Your path to build
           </h2>
-          <span className="px-2.5 py-1 rounded-full bg-muted text-[11px] font-semibold text-muted-foreground">
+          <span className="px-2.5 py-1 rounded-full bg-muted text-[11px] font-mono font-semibold text-muted-foreground">
             Step {Math.min(currentStageIndex + 1, 4)} of 4
           </span>
         </div>
@@ -273,7 +273,7 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
                     className={cn(
                       'size-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-200',
                       isDone
-                        ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 shadow-sm'
+                        ? 'bg-inverse text-on-inverse shadow-sm'
                         : isCurrent
                         ? 'bg-card border-2 border-blue-600 text-blue-600 ring-4 ring-blue-500/20'
                         : 'bg-card border-2 border-muted-foreground/30 text-muted-foreground'
@@ -321,7 +321,7 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
 
           <Button
             onClick={() => navigate(currentCta.link)}
-            className="h-9 px-5 rounded-[12px] bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 font-semibold text-xs shadow-xs"
+            className="h-9 px-5 rounded-[12px] bg-inverse text-on-inverse hover:opacity-90 font-semibold text-xs shadow-xs cursor-pointer"
           >
             {currentCta.button} &rarr;
           </Button>
@@ -337,15 +337,15 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
             <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-border/60">
               <h3 className="text-sm font-semibold text-foreground">Hackathon Brief</h3>
               {brief?.confirmed ? (
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 text-[11px] font-bold">
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 text-[11px] font-mono font-bold uppercase tracking-wider">
                   CONFIRMED
                 </span>
               ) : hasBrief ? (
-                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-[11px] font-bold">
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-[11px] font-mono font-bold uppercase tracking-wider">
                   NEEDS CONFIRMATION
                 </span>
               ) : (
-                <span className="px-2.5 py-0.5 rounded-full bg-muted text-muted-foreground text-[11px] font-semibold">
+                <span className="px-2.5 py-0.5 rounded-full bg-muted text-muted-foreground text-[11px] font-mono font-semibold uppercase tracking-wider">
                   NOT ADDED
                 </span>
               )}
@@ -363,7 +363,7 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
                   </p>
                   <Button
                     onClick={() => navigate(`/app/room/${roomId}/brief`)}
-                    className="h-8 px-4 rounded-xl bg-neutral-900 text-white text-xs font-semibold"
+                    className="h-8 px-4 rounded-xl bg-inverse text-on-inverse hover:opacity-90 text-xs font-semibold cursor-pointer"
                   >
                     Add brief &rarr;
                   </Button>
@@ -467,10 +467,9 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
                         key={m.id}
                         title={`${m.displayName}: ${hasSubmitted ? 'Submitted' : 'Pending'}`}
                         className={cn(
-                          'size-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white relative',
+                          'size-6 rounded-full flex items-center justify-center text-[10px] font-bold bg-inverse text-on-inverse relative',
                           !hasSubmitted && 'ring-2 ring-muted-foreground/30 opacity-70'
                         )}
-                        style={{ backgroundColor: m.avatarColor }}
                       >
                         {m.initials}
                         {hasSubmitted && (
@@ -551,8 +550,7 @@ export function PlanningOverview({ roomId }: PlanningOverviewProps) {
                     >
                       <div className="flex items-center gap-2.5">
                         <div
-                          className="size-7 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0"
-                          style={{ backgroundColor: m.avatarColor }}
+                          className="size-7 rounded-full bg-inverse text-on-inverse text-[10px] font-bold flex items-center justify-center shrink-0"
                         >
                           {m.initials}
                         </div>

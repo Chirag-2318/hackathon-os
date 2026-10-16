@@ -86,6 +86,8 @@ export interface UserProfile {
   displayName: string;
   email: string;
   githubHandle: string;
+  username?: string;
+  avatarUrl?: string;
   roleTags: RoleTag[];
   availability: string;
   skills: string;

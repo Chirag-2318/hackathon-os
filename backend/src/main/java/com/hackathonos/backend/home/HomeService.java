@@ -113,9 +113,7 @@ public class HomeService {
                 ? user.getName().trim().split("\\s+")[0]
                 : "Builder";
         HomeUserDto userDto = new HomeUserDto(firstName, "Asia/Kolkata");
-        com.hackathonos.backend.users.dto.UserSummaryDto userSummary = new com.hackathonos.backend.users.dto.UserSummaryDto(
-                user.getId(), user.getName(), user.getAvatarUrl(), user.getLogin()
-        );
+        com.hackathonos.backend.users.dto.UserSummaryDto userSummary = com.hackathonos.backend.users.dto.UserSummaryDto.from(user);
         long unreadNotificationCount = notificationRepository.countByUserIdAndReadAtIsNull(user.getId());
 
         if (rooms.isEmpty()) {
@@ -167,7 +165,9 @@ public class HomeService {
                 }
             }
 
-            long myOpenTasks = taskRepository.countByRoomIdAndAssigneeIdAndStatusNot(r.getId(), user.getId(), "done");
+            long myOpenTasks = taskRepository.findByRoomIdAndAssigneeId(r.getId(), user.getId()).stream()
+                    .filter(t -> !t.isDropped() && !"done".equalsIgnoreCase(t.getStatus()))
+                    .count();
             CheckpointDtos.CheckpointsResponseDto cps = checkpointService.getCheckpoints(r.getId(), user);
 
             NextDeadlineDto nextDeadline = null;
@@ -214,7 +214,7 @@ public class HomeService {
 
         List<Task> allUserTasks = taskRepository.findByAssigneeId(user.getId());
         List<TaskDto> myOpenTasks = allUserTasks.stream()
-                .filter(t -> !"done".equalsIgnoreCase(t.getStatus()))
+                .filter(t -> !t.isDropped() && !"done".equalsIgnoreCase(t.getStatus()))
                 .sorted((a, b) -> {
                     boolean aInProg = "inprogress".equalsIgnoreCase(a.getStatus());
                     boolean bInProg = "inprogress".equalsIgnoreCase(b.getStatus());
@@ -228,7 +228,7 @@ public class HomeService {
                 .map(taskDtoMapper::toSimpleDto)
                 .toList();
 
-        long totalOpen = allUserTasks.stream().filter(t -> !"done".equalsIgnoreCase(t.getStatus())).count();
+        long totalOpen = allUserTasks.stream().filter(t -> !t.isDropped() && !"done".equalsIgnoreCase(t.getStatus())).count();
         String teamPulse = rooms.size() + " active rooms · " + totalOpen + " open tasks assigned to you";
 
         SelectedRoomDto selectedDto = buildSelectedRoom(selectedRoom, user);
@@ -287,6 +287,7 @@ public class HomeService {
         List<Task> allTasks = taskRepository.findByRoomId(room.getId());
         List<Task> myOpen = new ArrayList<>();
         for (Task t : allTasks) {
+            if (t.isDropped()) continue;
             if (user.getId().equals(t.getAssigneeId()) && !"done".equalsIgnoreCase(t.getStatus())) {
                 myOpen.add(t);
             }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { X, Flag, Copy, Trash2, Check, Plus, AlertTriangle, MessageSquare, Send } from 'lucide-react';
+import { X, Flag, Copy, Trash2, Check, Plus, AlertTriangle, MessageSquare, Send, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useParams } from 'react-router-dom';
@@ -23,6 +23,8 @@ export interface TaskDetailModalProps {
   onClose: () => void;
   onUpdateTask: (updated: Task) => void;
   onDeleteTask: (taskId: string) => void;
+  onDeferTask?: (taskId: string) => void;
+  onDropTask?: (taskId: string) => void;
   onOpenTaskByKey?: (key: string) => void;
 }
 
@@ -34,6 +36,8 @@ export function TaskDetailModal({
   onClose,
   onUpdateTask,
   onDeleteTask,
+  onDeferTask,
+  onDropTask,
 }: TaskDetailModalProps) {
   const { data: currentUser } = useCurrentUser();
   const currentUserId = currentUser?.id ? String(currentUser.id) : '';
@@ -363,6 +367,30 @@ export function TaskDetailModal({
             >
               <Trash2 className="size-3.5" />
             </Button>
+            {isLeader && onDeferTask && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onDeferTask(task.id)}
+                className="h-8 px-2 text-xs gap-1"
+                title="Defer task to next phase"
+              >
+                <ArrowRight className="size-3.5" />
+                <span>Defer</span>
+              </Button>
+            )}
+            {isLeader && onDropTask && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onDropTask(task.id)}
+                className="h-8 px-2 text-xs gap-1 text-muted-foreground hover:text-destructive"
+                title="Drop task"
+              >
+                <Trash2 className="size-3.5" />
+                <span>Drop</span>
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"

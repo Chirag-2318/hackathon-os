@@ -18,14 +18,10 @@ public class IdeasMapper {
 
     public IdeaDto toDto(Idea idea, List<IdeaLink> links, List<IdeaNote> notes, User author, UUID currentUserId) {
         String name = author != null ? (author.getName() != null ? author.getName() : (author.getEmail() != null ? author.getEmail() : "Unknown")) : "Unknown";
-        String avatarUrl = author != null ? author.getAvatarUrl() : null;
-        String initials = computeInitials(name);
-        AuthorDto authorDto = new AuthorDto(
-                idea.getAuthorId().toString(),
-                name,
-                initials,
-                avatarUrl
-        );
+        AuthorDto authorDto = AuthorDto.from(author, name);
+        if (authorDto.userId() == null && idea.getAuthorId() != null) {
+            authorDto = new AuthorDto(idea.getAuthorId().toString(), authorDto.name(), authorDto.initials(), authorDto.avatarUrl(), authorDto.avatarType(), authorDto.avatarPreset(), authorDto.username(), authorDto.user());
+        }
 
         List<IdeaLinkDto> linkDtos = new ArrayList<>();
         if (links != null) {
@@ -41,7 +37,7 @@ public class IdeasMapper {
             }
         }
 
-        boolean isMine = currentUserId != null && currentUserId.equals(idea.getAuthorId());
+        boolean isMine = currentUserId != null && idea.getAuthorId() != null && currentUserId.equals(idea.getAuthorId());
 
         return new IdeaDto(
                 idea.getId().toString(),
@@ -53,7 +49,7 @@ public class IdeasMapper {
                 idea.getRejectReason(),
                 idea.isPrimary(),
                 authorDto,
-                idea.getAuthorId().toString(),
+                idea.getAuthorId() != null ? idea.getAuthorId().toString() : null,
                 isMine,
                 idea.getCreatedAt() != null ? idea.getCreatedAt().toString() : null,
                 idea.getDecidedAt() != null ? idea.getDecidedAt().toString() : null

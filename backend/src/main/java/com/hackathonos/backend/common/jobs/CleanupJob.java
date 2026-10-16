@@ -1,5 +1,6 @@
 package com.hackathonos.backend.common.jobs;
 
+import com.hackathonos.backend.common.lock.DbAdvisoryLockService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -15,27 +16,34 @@ public class CleanupJob {
 
     private static final Logger log = LoggerFactory.getLogger(CleanupJob.class);
     private final JdbcClient jdbcClient;
+    private final DbAdvisoryLockService advisoryLockService;
 
-    public CleanupJob(JdbcClient jdbcClient) {
+    public CleanupJob(JdbcClient jdbcClient, DbAdvisoryLockService advisoryLockService) {
         this.jdbcClient = jdbcClient;
+        this.advisoryLockService = advisoryLockService;
     }
 
     /**
-     * Nightly maintenance cleanup running at 03:00 UTC.
+     * Nightly maintenance cleanup running at 03:00 UTC, guarded by DB advisory lock.
      */
     @Scheduled(cron = "0 0 3 * * *", zone = "UTC")
+    public void runCleanup() {
+        advisoryLockService.tryLockAndRun(1002L, this::doCleanup);
+    }
+
     @Transactional
-    public CleanupResult runCleanup() {
+    public CleanupResult doCleanup() {
         log.info("Starting nightly database cleanup job...");
 
         int expiredInvites = purgeExpiredInvites();
         int oldNotifications = purgeOldNotifications();
         int expiredExports = purgeExpiredDataExports();
+        int oldClientErrors = purgeOldClientErrors();
 
-        log.info("Nightly cleanup complete: purged {} expired invites, {} old notifications, {} expired exports",
-                expiredInvites, oldNotifications, expiredExports);
+        log.info("Nightly cleanup complete: purged {} expired invites, {} old notifications, {} expired exports, {} client errors",
+                expiredInvites, oldNotifications, expiredExports, oldClientErrors);
 
-        return new CleanupResult(expiredInvites, oldNotifications, expiredExports);
+        return new CleanupResult(expiredInvites, oldNotifications, expiredExports, oldClientErrors);
     }
 
     private int purgeExpiredInvites() {
@@ -57,5 +65,12 @@ public class CleanupJob {
                 .update();
     }
 
-    public record CleanupResult(int purgedInvites, int purgedNotifications, int purgedExports) {}
+    private int purgeOldClientErrors() {
+        Instant thirtyDaysAgo = Instant.now().minus(30, ChronoUnit.DAYS);
+        return jdbcClient.sql("DELETE FROM client_errors WHERE created_at < :cutoff")
+                .param("cutoff", thirtyDaysAgo)
+                .update();
+    }
+
+    public record CleanupResult(int purgedInvites, int purgedNotifications, int purgedExports, int purgedClientErrors) {}
 }

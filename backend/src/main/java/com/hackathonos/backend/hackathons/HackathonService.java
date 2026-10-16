@@ -28,17 +28,20 @@ public class HackathonService {
     private final HackathonSuggestionRepository suggestionRepository;
     private final HackathonSource hackathonSource;
     private final ObjectMapper objectMapper;
+    private final com.hackathonos.backend.common.lock.DbAdvisoryLockService advisoryLockService;
 
     public HackathonService(
             HackathonRepository hackathonRepository,
             HackathonSuggestionRepository suggestionRepository,
             HackathonSource hackathonSource,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            com.hackathonos.backend.common.lock.DbAdvisoryLockService advisoryLockService
     ) {
         this.hackathonRepository = hackathonRepository;
         this.suggestionRepository = suggestionRepository;
         this.hackathonSource = hackathonSource;
         this.objectMapper = objectMapper;
+        this.advisoryLockService = advisoryLockService;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -52,11 +55,13 @@ public class HackathonService {
 
     @Scheduled(cron = "0 0 */6 * * *")
     public void scheduledSync() {
-        try {
-            syncHackathons();
-        } catch (Exception e) {
-            log.error("Failed scheduled hackathons sync: {}", e.getMessage(), e);
-        }
+        advisoryLockService.tryLockAndRun(1003L, () -> {
+            try {
+                syncHackathons();
+            } catch (Exception e) {
+                log.error("Failed scheduled hackathons sync: {}", e.getMessage(), e);
+            }
+        });
     }
 
     @Transactional

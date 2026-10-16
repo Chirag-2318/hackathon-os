@@ -44,7 +44,7 @@ export function PlanLockedView({
         </div>
 
         {/* Real specs breakdown */}
-        <div className="grid grid-cols-3 gap-3 py-2 border-y border-border/60">
+        <div className="grid grid-cols-2 gap-3 py-2 border-y border-border/60">
           <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-muted/30">
             <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
               <FileText className="size-3.5" />
@@ -59,14 +59,6 @@ export function PlanLockedView({
               <span>Phases</span>
             </div>
             <span className="font-mono text-xl font-bold text-foreground">{phasesCount}</span>
-          </div>
-
-          <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-muted/30">
-            <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
-              <CheckSquare className="size-3.5" />
-              <span>Tasks</span>
-            </div>
-            <span className="font-mono text-xl font-bold text-foreground">{tasksCount}</span>
           </div>
         </div>
 

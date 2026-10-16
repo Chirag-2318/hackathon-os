@@ -20,8 +20,16 @@ public interface IdeaRepository extends JpaRepository<Idea, UUID> {
     long countByRoomId(UUID roomId);
     long countByRoomIdAndStatus(UUID roomId, String status);
     long countByAuthorIdAndStatus(UUID authorId, String status);
+    long countByAuthorId(UUID authorId);
+    List<Idea> findByAuthorId(UUID authorId);
 
     @Modifying
     @Query("UPDATE Idea i SET i.primary = false WHERE i.roomId = :roomId")
     void clearPrimaryForRoom(@Param("roomId") UUID roomId);
+
+    @Modifying
+    @Query("UPDATE Idea i SET i.authorId = null WHERE i.authorId = :authorId")
+    void anonymizeByAuthorId(@Param("authorId") UUID authorId);
+
+    void deleteByRoomId(UUID roomId);
 }

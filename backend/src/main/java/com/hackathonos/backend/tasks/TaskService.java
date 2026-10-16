@@ -114,6 +114,13 @@ public class TaskService {
             throw new ConflictException("BUILD_NOT_STARTED", "Tasks can only be created once the build phase has started");
         }
 
+        if (taskRepository.countByRoomId(roomId) >= 500) {
+            throw new com.hackathonos.backend.common.error.LimitReachedException(
+                    com.hackathonos.backend.common.error.ErrorCode.LIMIT_REACHED,
+                    "This room has reached the limit of 500 tasks."
+            );
+        }
+
         TaskKeyService.TaskKeyResult keyResult = taskKeyService.nextKeyResult(room);
         String internalStatus = toInternalStatus(request.status());
         int nextPosition = computeNextPosition(roomId, internalStatus);
@@ -440,6 +447,13 @@ public class TaskService {
         Task task = taskRepository.findByIdAndRoomId(taskId, roomId)
                 .orElseThrow(() -> new NotFoundException("TASK_NOT_FOUND", "Task not found"));
 
+        if (commentRepository.countByTaskId(taskId) >= 50) {
+            throw new com.hackathonos.backend.common.error.LimitReachedException(
+                    com.hackathonos.backend.common.error.ErrorCode.LIMIT_REACHED,
+                    "This task has reached the limit of 50 comments."
+            );
+        }
+
         TaskComment comment = new TaskComment(taskId, user.getId(), request.text().trim());
         TaskComment savedComment = commentRepository.save(comment);
 
@@ -571,6 +585,30 @@ public class TaskService {
         historyRepository.save(new TaskHistory(task.getId(), user.getId(), user.getName() + " confirmed task as done"));
         activityLogger.log(room, user, "TASK_CONFIRMED", "confirmed done for " + task.getTaskKey());
         roomEventService.recordEvent(roomId, "task.confirmed", "task", saved.getId().toString(), user.getId());
+
+        if (saved.getPhaseKey() != null) {
+            phaseRepository.findByRoomIdAndPlanKey(roomId, saved.getPhaseKey()).ifPresent(phase -> {
+                if ("ACTIVE".equalsIgnoreCase(phase.getStatus()) && phase.getTasksGeneratedAt() != null && phase.getReadyNotifiedAt() == null) {
+                    List<Task> pTasks = taskRepository.findByRoomIdAndPhaseKey(roomId, phase.getPhaseKey());
+                    boolean allDone = !pTasks.isEmpty() && pTasks.stream().allMatch(t -> t.isConfirmedDone() || t.isDropped());
+                    if (allDone) {
+                        phase.setReadyNotifiedAt(clock.instant());
+                        phaseRepository.save(phase);
+                        roomEventService.recordEvent(roomId, "PHASE_READY", "phase", phase.getPhaseKey(), null);
+                        memberRepository.findByRoomIdAndRole(roomId, "LEADER").ifPresent(leaderMember -> {
+                            notificationService.create(
+                                    leaderMember.getUserId(),
+                                    roomId,
+                                    NotificationType.PHASE_READY,
+                                    "Phase " + phase.getPhaseKey() + " complete",
+                                    "All tasks in " + phase.getPhaseKey() + " (" + phase.getName() + ") are finished. Ready to advance!",
+                                    "/app/room/" + roomId + "/board"
+                            );
+                        });
+                    }
+                }
+            });
+        }
 
         return buildTaskDetail(saved, user);
     }
@@ -787,7 +825,7 @@ public class TaskService {
         List<String> blockers = new ArrayList<>();
         for (TaskDependency dep : deps) {
             taskRepository.findById(dep.getDependsOnTaskId()).ifPresent(prereq -> {
-                if (!prereq.isConfirmedDone()) {
+                if (!prereq.isSatisfiedForDependency()) {
                     blockers.add(prereq.getTaskKey() + " (" + prereq.getSummary() + ")");
                 }
             });
@@ -810,10 +848,12 @@ public class TaskService {
         List<Task> tasks = taskRepository.findByRoomId(roomId);
         Instant now = clock.instant();
         Instant in24h = now.plus(Duration.ofHours(24));
-        long total = tasks.size(), open = 0, todo = 0, inProg = 0, done = 0;
+        long total = 0, open = 0, todo = 0, inProg = 0, done = 0;
         long blocked = 0, unassigned = 0, dueToday = 0;
 
         for (Task t : tasks) {
+            if (t.isDropped()) continue;
+            total++;
             String norm = taskDtoMapper.normalizeStatus(t.getStatus());
             if (t.isConfirmedDone()) {
                 done++;
@@ -844,14 +884,17 @@ public class TaskService {
         List<TaskDependencyItemDto> dependsOn = new ArrayList<>();
         for (TaskDependency d : deps) {
             taskRepository.findById(d.getDependsOnTaskId()).ifPresent(t ->
-                    dependsOn.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()), t.isConfirmedDone())));
+                    dependsOn.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()), t.isSatisfiedForDependency())));
         }
 
         List<TaskDependency> blockerDeps = dependencyRepository.findByDependsOnTaskId(task.getId());
         List<TaskDependencyItemDto> blocks = new ArrayList<>();
         for (TaskDependency d : blockerDeps) {
-            taskRepository.findById(d.getTaskId()).ifPresent(t ->
-                    blocks.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()), t.isConfirmedDone())));
+            taskRepository.findById(d.getTaskId()).ifPresent(t -> {
+                if (!t.isDropped()) {
+                    blocks.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()), t.isSatisfiedForDependency()));
+                }
+            });
         }
 
         return taskDtoMapper.toDto(task, phase, assignee, reporter, labels, subtasks, acceptance, dependsOn, blocks, 0, hasBranch);
@@ -869,22 +912,25 @@ public class TaskService {
         List<TaskDependencyItemDto> dependsOn = new ArrayList<>();
         for (TaskDependency d : deps) {
             taskRepository.findById(d.getDependsOnTaskId()).ifPresent(t ->
-                    dependsOn.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()), t.isConfirmedDone())));
+                    dependsOn.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()), t.isSatisfiedForDependency())));
         }
 
         List<TaskDependency> blockerDeps = dependencyRepository.findByDependsOnTaskId(task.getId());
         List<TaskDependencyItemDto> blocks = new ArrayList<>();
         for (TaskDependency d : blockerDeps) {
-            taskRepository.findById(d.getTaskId()).ifPresent(t ->
-                    blocks.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()), t.isConfirmedDone())));
+            taskRepository.findById(d.getTaskId()).ifPresent(t -> {
+                if (!t.isDropped()) {
+                    blocks.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()), t.isSatisfiedForDependency()));
+                }
+            });
         }
 
         List<TaskComment> comments = commentRepository.findByTaskIdOrderByCreatedAtAsc(task.getId());
         List<TaskCommentDto> commentDtos = new ArrayList<>();
         for (TaskComment c : comments) {
-            User author = userRepository.findById(c.getAuthorId()).orElse(null);
-            boolean isMine = viewer != null && c.getAuthorId().equals(viewer.getId());
-            commentDtos.add(new TaskCommentDto(c.getId(), taskDtoMapper.toUserDto(author), c.getText(), c.getCreatedAt(), c.getEditedAt(), isMine));
+            User author = c.getAuthorId() != null ? userRepository.findById(c.getAuthorId()).orElse(null) : null;
+            boolean isMine = viewer != null && c.getAuthorId() != null && c.getAuthorId().equals(viewer.getId());
+            commentDtos.add(new TaskCommentDto(c.getId(), taskDtoMapper.toCommentAuthorDto(author), c.getText(), c.getCreatedAt(), c.getEditedAt(), isMine));
         }
 
         List<TaskHistory> history = historyRepository.findByTaskIdOrderByCreatedAtDesc(task.getId());

@@ -18,7 +18,15 @@ public class TaskDtoMapper {
         String initials = computeInitials(name);
         String username = user.getUsername();
         com.hackathonos.backend.users.dto.UserSummaryDto userSummary = com.hackathonos.backend.users.dto.UserSummaryDto.from(user, name);
-        return new TaskUserDto(user.getId(), name, initials, user.getAvatarUrl(), username, userSummary);
+        return new TaskUserDto(user.getId(), name, initials, userSummary.avatarUrl(), username, userSummary.avatarType(), userSummary.avatarPreset(), userSummary);
+    }
+
+    public TaskUserDto toCommentAuthorDto(User user) {
+        if (user == null) {
+            com.hackathonos.backend.users.dto.UserSummaryDto summary = com.hackathonos.backend.users.dto.UserSummaryDto.from(null);
+            return new TaskUserDto(null, summary.displayName(), "DU", null, summary.username(), summary.avatarType(), summary.avatarPreset(), summary);
+        }
+        return toUserDto(user);
     }
 
     public String computeInitials(String name) {

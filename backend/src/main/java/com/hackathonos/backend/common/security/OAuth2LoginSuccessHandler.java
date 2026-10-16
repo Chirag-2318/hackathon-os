@@ -56,6 +56,15 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         final User user;
         try {
             user = userService.findOrCreateFromPrincipal(oauth2User, registrationId);
+        } catch (com.hackathonos.backend.common.error.SignupClosedException ex) {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+            jakarta.servlet.http.HttpSession session = request.getSession(false);
+            if (session != null) {
+                session.invalidate();
+            }
+            String targetUrl = appProperties.getPublicUrl() + "/full?reason=" + ex.getReason();
+            response.sendRedirect(targetUrl);
+            return;
         } catch (com.hackathonos.backend.common.error.AccountDeletedException ex) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json");
@@ -86,7 +95,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             } catch (Exception ignored) {}
         }
 
-        String targetUrl = appProperties.getFrontendUrl() + "/app";
+        String targetUrl = appProperties.getPublicUrl() + "/app";
         response.sendRedirect(targetUrl);
     }
 

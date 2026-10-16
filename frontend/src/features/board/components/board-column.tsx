@@ -13,10 +13,13 @@ export interface BoardColumnProps {
   isDropTarget?: boolean;
   dropIndex?: number | null;
   draggingTaskId?: string | null;
+  isLeader?: boolean;
   onOpenTask: (task: Task) => void;
   onStatusChange: (taskId: string, newStatus: TaskStatus) => void;
   onAssignToMe: (taskId: string) => void;
   onToggleBlock: (taskId: string) => void;
+  onDeferTask?: (taskId: string) => void;
+  onDropTaskLeader?: (taskId: string) => void;
   onInlineCreate: (status: TaskStatus, summary: string) => Promise<void>;
   onPointerDownDrag?: (e: React.PointerEvent, task: Task) => void;
   onDropTask?: (taskId: string, targetStatus: TaskStatus) => void;
@@ -34,10 +37,13 @@ export function BoardColumn({
   isDropTarget = false,
   dropIndex = null,
   draggingTaskId = null,
+  isLeader = false,
   onOpenTask,
   onStatusChange,
   onAssignToMe,
   onToggleBlock,
+  onDeferTask,
+  onDropTaskLeader,
   onInlineCreate,
   onPointerDownDrag,
   onDropTask,
@@ -126,10 +132,13 @@ export function BoardColumn({
                 members={members}
                 phases={phases}
                 isDragging={isDragging}
+                isLeader={isLeader}
                 onOpen={onOpenTask}
                 onStatusChange={onStatusChange}
                 onAssignToMe={onAssignToMe}
                 onToggleBlock={onToggleBlock}
+                onDeferTask={onDeferTask}
+                onDropTask={onDropTaskLeader}
                 onPointerDownDrag={onPointerDownDrag}
                 onDragStartTask={onDragStartTask}
                 onDragEndTask={onDragEndTask}

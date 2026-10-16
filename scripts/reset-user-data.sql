@@ -9,6 +9,8 @@ TRUNCATE TABLE
     room_member_skills,
     room_members,
     room_invitations,
+    room_invites,
+    email_outbox,
     invites,
     notifications,
     activity_events,

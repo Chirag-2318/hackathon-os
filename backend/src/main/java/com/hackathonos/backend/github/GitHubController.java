@@ -185,7 +185,10 @@ public class GitHubController {
     ) throws IOException {
         HttpSession session = request.getSession(false);
         String roomId = session != null ? (String) session.getAttribute("gh_link_room_id") : null;
-        String fallbackRedirect = appProperties.getFrontendUrl() + (roomId != null && !roomId.isBlank() ? "/app/room/" + roomId + "/github" : "");
+        String returnPath = session != null ? (String) session.getAttribute("gh_link_return_path") : null;
+        String fallbackRedirect = appProperties.getFrontendUrl() + (returnPath != null && !returnPath.isBlank()
+                ? returnPath
+                : (roomId != null && !roomId.isBlank() ? "/app/room/" + roomId + "/github" : "/app/settings/integrations"));
 
         try {
             if (session == null || state == null || !state.equals(session.getAttribute("gh_link_state"))) {
@@ -275,6 +278,7 @@ public class GitHubController {
             session.removeAttribute("gh_link_room_id");
             session.removeAttribute("gh_link_user_id");
             session.removeAttribute("gh_link_private_repos");
+            session.removeAttribute("gh_link_return_path");
 
             response.sendRedirect(fallbackRedirect + "?github=connected");
         } catch (Exception e) {

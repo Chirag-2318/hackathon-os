@@ -53,7 +53,7 @@ export function PlaybookBrowsePage() {
 
       <main className="flex-1 w-full max-w-[1200px] mx-auto px-6 py-12 md:py-16">
         <div className="mb-12">
-          <h1 className="text-h1 text-ink-strong mb-2">Playbook Templates</h1>
+          <h1 className="text-3xl sm:text-4xl font-display font-normal tracking-tight text-ink mb-2 leading-none">Playbook Templates</h1>
           <p className="text-body text-ink-muted">
             Battle-tested blueprints for your next hackathon.
           </p>

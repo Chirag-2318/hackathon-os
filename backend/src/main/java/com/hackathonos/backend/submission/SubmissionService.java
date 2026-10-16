@@ -56,6 +56,10 @@ public class SubmissionService {
     private final SafeHttpClient safeHttpClient;
     private final ObjectMapper objectMapper;
     private final com.hackathonos.backend.events.RoomEventService roomEventService;
+    private final com.hackathonos.backend.activity.ActivityLogger activityLogger;
+    private final com.hackathonos.backend.email.MailService mailService;
+    private final com.hackathonos.backend.common.config.AppProperties appProperties;
+    private final com.hackathonos.backend.users.UserRepository userRepository;
 
     public SubmissionService(
             SubmissionRepository submissionRepository,
@@ -74,7 +78,15 @@ public class SubmissionService {
             AiService aiService,
             SafeHttpClient safeHttpClient,
             ObjectMapper objectMapper,
-            com.hackathonos.backend.events.RoomEventService roomEventService
+            com.hackathonos.backend.events.RoomEventService roomEventService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            com.hackathonos.backend.activity.ActivityLogger activityLogger,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            com.hackathonos.backend.email.MailService mailService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            com.hackathonos.backend.common.config.AppProperties appProperties,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            com.hackathonos.backend.users.UserRepository userRepository
     ) {
         this.submissionRepository = submissionRepository;
         this.checklistRepository = checklistRepository;
@@ -93,6 +105,10 @@ public class SubmissionService {
         this.safeHttpClient = safeHttpClient;
         this.objectMapper = objectMapper;
         this.roomEventService = roomEventService;
+        this.activityLogger = activityLogger;
+        this.mailService = mailService;
+        this.appProperties = appProperties;
+        this.userRepository = userRepository;
     }
 
     /**
@@ -201,8 +217,29 @@ public class SubmissionService {
                 .map(SubmissionLink::getUrl)
                 .findFirst().orElse(null);
 
+        Instant submittedAt = room.getSubmittedAt() != null ? room.getSubmittedAt() : sub.getSubmittedAt();
+        String effectiveStatus = submittedAt != null ? "submitted" : sub.getStatus().toLowerCase(Locale.ROOT);
+
+        SubmissionDtos.LeaderInfoDto leaderInfo = null;
+        try {
+            RoomMember leaderMember = memberRepository.findByRoomId(roomId).stream()
+                    .filter(m -> "leader".equalsIgnoreCase(m.getRole()))
+                    .findFirst().orElse(null);
+            if (leaderMember != null && userRepository != null) {
+                User leaderUser = userRepository.findById(leaderMember.getUserId()).orElse(null);
+                if (leaderUser != null) {
+                    leaderInfo = new SubmissionDtos.LeaderInfoDto(
+                            leaderUser.getId(),
+                            leaderUser.getUsername(),
+                            leaderUser.getName(),
+                            leaderUser.getAvatarUrl()
+                    );
+                }
+            }
+        } catch (Exception ignored) {}
+
         return new SubmissionDtos.SubmissionResponse(
-                sub.getStatus().toLowerCase(Locale.ROOT),
+                effectiveStatus,
                 deadlineDto,
                 requirements,
                 formFields,
@@ -220,7 +257,9 @@ public class SubmissionService {
                 null,
                 demoUrl,
                 liveUrl,
-                repoUrl
+                repoUrl,
+                submittedAt,
+                leaderInfo
         );
     }
 
@@ -443,26 +482,55 @@ public class SubmissionService {
 
     /**
      * Marks submission as SUBMITTED; room leader only.
+     * Idempotent; clears preconditions; updates clockStatus to SUBMITTED via room.submittedAt.
      */
     @Transactional
     public SubmissionDtos.SubmissionResponse markSubmitted(UUID roomId, User user) {
-        RoomMember member = roomAccess.requireMember(roomId, user);
-        if (!"leader".equalsIgnoreCase(member.getRole())) {
-            throw new ForbiddenException("LEADER_ONLY", "Only the room leader can mark the submission as submitted");
-        }
+        roomAccess.requireLeader(roomId, user);
+
+        Room room = roomRepository.findById(roomId)
+                .orElseThrow(() -> new NotFoundException("ROOM_NOT_FOUND", "Room not found"));
 
         Submission sub = submissionRepository.findByRoomId(roomId)
-                .orElseThrow(() -> new NotFoundException("SUBMISSION_NOT_FOUND", "Submission not found"));
+                .orElseGet(() -> {
+                    Submission newSub = new Submission(roomId, "DRAFT", "{}", "[]", Instant.now());
+                    return submissionRepository.save(newSub);
+                });
 
-        if (!"VERIFIED".equalsIgnoreCase(sub.getStatus())) {
-            throw new BadRequestException("NOT_VERIFIED", "Submission must be verified before marking as submitted");
+        // Idempotent: submitting twice returns the same submittedAt
+        if (room.getSubmittedAt() != null) {
+            return getSubmission(roomId, user);
         }
 
+        Instant now = Instant.now();
+        room.setSubmittedAt(now);
+        room.setWorkflowStage("REVIEW");
+        roomRepository.save(room);
+
         sub.setStatus("SUBMITTED");
-        sub.setSubmittedAt(Instant.now());
+        sub.setSubmittedAt(now);
         sub.setSubmittedBy(user.getId());
         submissionRepository.save(sub);
+
+        roomEventService.recordEvent(roomId, "SUBMITTED", "room", roomId.toString(), user.getId());
         roomEventService.recordEvent(roomId, "submission.changed", "submission", sub.getId().toString(), user.getId());
+        if (activityLogger != null) {
+            activityLogger.log(room, user, "SUBMITTED", "Project marked as submitted");
+        }
+
+        checkpointService.evaluate(room);
+
+        // Notify every member in-app with a deepLink to the page, and send email under CHECKPOINTS category
+        String roomName = room.getName() != null && !room.getName().isBlank() ? room.getName() : "Project";
+        String subject = roomName + " is submitted";
+        String deepLink = "/app/room/" + roomId + "/submission";
+        List<RoomMember> members = memberRepository.findByRoomId(roomId);
+        for (RoomMember m : members) {
+            try {
+                notificationService.notifyUser(m.getUserId(), roomId, NotificationType.PROJECT_SUBMITTED,
+                        subject, "Project marked as submitted.", deepLink);
+            } catch (Exception ignored) {}
+        }
 
         return getSubmission(roomId, user);
     }
@@ -472,13 +540,22 @@ public class SubmissionService {
      */
     @Transactional
     public SubmissionDtos.SubmissionResponse reopen(UUID roomId, User user) {
-        RoomMember member = roomAccess.requireMember(roomId, user);
-        if (!"leader".equalsIgnoreCase(member.getRole())) {
-            throw new ForbiddenException("LEADER_ONLY", "Only the room leader can reopen the submission");
-        }
+        roomAccess.requireLeader(roomId, user);
+
+        Room room = roomRepository.findById(roomId)
+                .orElseThrow(() -> new NotFoundException("ROOM_NOT_FOUND", "Room not found"));
 
         Submission sub = submissionRepository.findByRoomId(roomId)
-                .orElseThrow(() -> new NotFoundException("SUBMISSION_NOT_FOUND", "Submission not found"));
+                .orElseGet(() -> {
+                    Submission newSub = new Submission(roomId, "DRAFT", "{}", "[]", Instant.now());
+                    return submissionRepository.save(newSub);
+                });
+
+        room.setSubmittedAt(null);
+        if ("REVIEW".equalsIgnoreCase(room.getWorkflowStage())) {
+            room.setWorkflowStage("PRESENT");
+        }
+        roomRepository.save(room);
 
         sub.setStatus("DRAFT");
         sub.setVerifiedAt(null);
@@ -486,10 +563,13 @@ public class SubmissionService {
         sub.setSubmittedBy(null);
         submissionRepository.save(sub);
 
-        Room room = roomRepository.findById(roomId).orElse(null);
-        if (room != null) {
-            checkpointService.evaluate(room);
+        roomEventService.recordEvent(roomId, "REOPENED", "room", roomId.toString(), user.getId());
+        roomEventService.recordEvent(roomId, "submission.changed", "submission", sub.getId().toString(), user.getId());
+        if (activityLogger != null) {
+            activityLogger.log(room, user, "REOPENED", "Project submission reopened");
         }
+
+        checkpointService.evaluate(room);
 
         return getSubmission(roomId, user);
     }

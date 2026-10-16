@@ -15,10 +15,10 @@ public class Room {
     @Column(nullable = false, length = 60)
     private String name;
 
-    @Column(length = 200)
+    @Column(columnDefinition = "text")
     private String description;
 
-    @Column(name = "project_description", length = 500)
+    @Column(name = "project_description", columnDefinition = "text")
     private String projectDescription;
 
     @Column(name = "template_id", length = 50)

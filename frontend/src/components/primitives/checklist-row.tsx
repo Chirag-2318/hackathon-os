@@ -67,7 +67,7 @@ export function ChecklistRow({
         onCheckedChange={onCheckedChange}
         className={cn(
           "h-6 w-6 border-2 shrink-0 rounded-md",
-          checked && "bg-success-solid border-success-solid text-white"
+          checked && "bg-selected border-selected text-on-selected"
         )}
       />
     </div>

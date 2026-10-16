@@ -18,8 +18,10 @@ import {
   Settings,
   FolderOpen,
   Copy,
+  Shield,
 } from 'lucide-react';
 import { toast } from './toast';
+import { useCurrentUser } from '@/features/auth/useCurrentUser';
 
 export interface CommandPaletteProps {
   open?: boolean;
@@ -40,6 +42,7 @@ export function CommandPalette({
 }: CommandPaletteProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const navigate = useNavigate();
+  const { data: user } = useCurrentUser();
 
   const isControlled = typeof externalOpen === 'boolean';
   const open = isControlled ? externalOpen : internalOpen;
@@ -95,6 +98,16 @@ export function CommandPalette({
             <Hash className="w-4 h-4 text-emerald-600" />
             <span>Join room with code</span>
           </CommandItem>
+
+          {user?.isAdmin && (
+            <CommandItem
+              onSelect={() => runCommand(() => navigate('/app/admin'))}
+              className="flex items-center gap-2 px-2.5 py-2 rounded-[6px] cursor-pointer"
+            >
+              <Shield className="w-4 h-4 text-purple-600" />
+              <span>Admin Overview</span>
+            </CommandItem>
+          )}
 
           {activeRoomCode && (
             <CommandItem

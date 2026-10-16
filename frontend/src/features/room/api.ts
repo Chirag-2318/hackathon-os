@@ -40,8 +40,44 @@ export interface RoomMemberResponse {
   role: string;
 }
 
+export interface InviteEmailResponse {
+  token: string;
+  link: string;
+  email: string;
+  role: string;
+  status: string;
+}
+
 export const roomApi = {
-  getInvite: (token: string) => apiFetch<InviteView>(`/api/v1/invites/${token}`),
+  getInvite: async (token: string): Promise<InviteView> => {
+    const raw = await apiFetch<any>(`/api/v1/invites/${token}`);
+    const isValid = Boolean(raw?.valid ?? (raw?.status === 'valid'));
+    return {
+      status: isValid ? 'valid' : 'expired_or_invalid',
+      token,
+      room: isValid
+        ? {
+            name: raw.roomName || raw.room?.name || 'Hackathon Room',
+            eventName: raw.eventName || raw.room?.eventName || 'Hackathon OS Team',
+            leader: raw.room?.leader || {
+              name: raw.hostName || 'Team Leader',
+              avatarUrl: raw.hostAvatarUrl || '',
+            },
+            rolesNeeded: (raw.skillsNeeded || raw.room?.rolesNeeded || ['Builder', 'Designer']).map(
+              (s: any) => (typeof s === 'string' ? { label: s, color: 'blue' } : s)
+            ),
+            members: raw.room?.members || [],
+            joinableRoles: raw.room?.joinableRoles || [
+              { label: 'Builder', color: 'blue' },
+              { label: 'Designer', color: 'purple' },
+              { label: 'Presenter', color: 'emerald' },
+              { label: 'Domain Expert', color: 'amber' },
+              { label: 'QA', color: 'rose' },
+            ],
+          }
+        : undefined,
+    };
+  },
   createRoom: (data: { name: string; repoUrl?: string; description?: string }) =>
     apiFetch<RoomDto>('/api/v1/rooms', {
       method: 'POST',
@@ -54,6 +90,11 @@ export const roomApi = {
     apiFetch<InviteResponse>(`/api/v1/rooms/${roomId}/invites`, {
       method: 'POST',
       body: JSON.stringify({ role: 'MEMBER' }),
+    }),
+  inviteByEmail: (roomId: string, email: string, role = 'BUILDER') =>
+    apiFetch<InviteEmailResponse>(`/api/v1/rooms/${roomId}/invites/email`, {
+      method: 'POST',
+      body: JSON.stringify({ email, role }),
     }),
   changeRole: (roomId: string, userId: string | number, role: string) =>
     apiFetch<RoomMemberResponse>(`/api/v1/rooms/${roomId}/members/${userId}/role`, {

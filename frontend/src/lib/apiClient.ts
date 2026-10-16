@@ -25,7 +25,9 @@ function getCookie(name: string): string | null {
 
 import { isSampleRoomTarget, handleSampleRoomRequest } from '@/tour/guided/sample-room-adapter';
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL !== undefined
+  ? import.meta.env.VITE_API_BASE_URL
+  : (import.meta.env.DEV ? 'http://localhost:8080' : '');
 const BASE_URL = API_BASE_URL;
 
 export async function apiClient<T>(path: string, options: RequestInit = {}): Promise<T> {

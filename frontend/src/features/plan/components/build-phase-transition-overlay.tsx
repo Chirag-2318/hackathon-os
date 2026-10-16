@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 export interface BuildPhaseTransitionOverlayProps {
   roomId: string;
   docsCount?: number | null;
+  phasesCount?: number | null;
   tasksCount?: number | null;
   onNavigate: () => void;
   onComplete: () => void;
@@ -13,6 +14,7 @@ export interface BuildPhaseTransitionOverlayProps {
 export function BuildPhaseTransitionOverlay({
   roomId,
   docsCount,
+  phasesCount,
   tasksCount,
   onNavigate,
   onComplete,
@@ -48,7 +50,7 @@ export function BuildPhaseTransitionOverlay({
           </h1>
 
           <div className="flex flex-col gap-3 py-2">
-            {['Plan locked', `${docsCount ? `${docsCount} ` : ''}docs created`, `${tasksCount ? `${tasksCount} ` : ''}tasks created`, 'Board ready'].map((label, idx) => (
+            {['Plan locked', `${docsCount ? `${docsCount} ` : ''}documents created`, `${phasesCount ? `${phasesCount} ` : '5 '}phases ready`, 'Board ready'].map((label, idx) => (
               <div key={idx} className="flex items-center gap-3 text-sm">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="shrink-0">
                   <circle cx="12" cy="12" r="10" stroke="#F4F1EA" strokeWidth="1.5" strokeOpacity="0.4" />
@@ -76,6 +78,7 @@ export function BuildPhaseTransitionOverlay({
   return (
     <AnimatedTransition
       docsCount={docsCount}
+      phasesCount={phasesCount}
       tasksCount={tasksCount}
       onNavigate={onNavigate}
       onComplete={onComplete}
@@ -85,11 +88,13 @@ export function BuildPhaseTransitionOverlay({
 
 function AnimatedTransition({
   docsCount,
+  phasesCount,
   tasksCount,
   onNavigate,
   onComplete,
 }: {
   docsCount?: number | null;
+  phasesCount?: number | null;
   tasksCount?: number | null;
   onNavigate: () => void;
   onComplete: () => void;
@@ -164,8 +169,8 @@ function AnimatedTransition({
 
   const rows = [
     { label: 'Plan locked', count: null },
-    { label: docsCount ? 'docs created' : 'docs created', count: docsCount },
-    { label: tasksCount ? 'tasks created' : 'tasks created', count: tasksCount },
+    { label: 'documents created', count: docsCount ?? 8 },
+    { label: 'phases ready', count: phasesCount ?? 5 },
     { label: 'Board ready', count: null },
   ];
 

@@ -19,7 +19,12 @@ public record ErrorResponse(
         String timestamp,
         Integer status
 ) {
+    public ErrorResponse {
+        message = com.hackathonos.backend.common.logging.MaskingUtils.mask(message);
+    }
+
     public ErrorResponse(String code, String message, Object details, String requestId) {
+
         this(code, message, details, requestId, Instant.now().toString(), null);
     }
 

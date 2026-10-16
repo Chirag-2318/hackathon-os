@@ -15,7 +15,10 @@ import { KbdChip } from '@/shared/ui/primitives/KbdChip';
 import { SearchIcon } from '@/components/icons';
 import { NotificationsPopover } from './notifications-popover';
 import { AvatarMenuPopover } from './avatar-menu-popover';
+import { SoundToggle } from '@/shared/sound/sound-effects';
 import { useLiveContext, LiveIndicator } from '@/design';
+
+import { useRoomOverview } from '@/features/room-overview/hooks/use-room-overview';
 
 interface PanelHeaderProps {
   inRoom?: boolean;
@@ -25,7 +28,6 @@ interface PanelHeaderProps {
 const SECTION_MAP: Record<string, { group?: string; label: string }> = {
   overview: { label: 'Overview' },
   team: { label: 'Team' },
-  'speed-mode': { label: 'Speed mode' },
   prep: { group: 'Plan', label: 'Prep' },
   brief: { group: 'Plan', label: 'Brief' },
   ideate: { group: 'Plan', label: 'Ideate' },
@@ -65,8 +67,16 @@ export function PanelHeader({ inRoom: inRoomProp = false, pageName = 'Home' }: P
   const roomId = roomMatch ? roomMatch[1] : '';
   const subSection = roomMatch && roomMatch[2] ? roomMatch[2] : 'overview';
 
+  const { data: overviewData } = useRoomOverview(roomId);
   const currentRoom = homeData?.roomList?.find((r: any) => r.id === roomId);
-  const roomTitle = (roomId === 'sample-room' ? 'Team Orbit' : undefined) ?? currentRoom?.title ?? currentRoom?.name ?? 'Hackathon Workspace';
+  const rawRoomTitle =
+    (roomId === 'sample-room' ? 'Team Orbit' : undefined) ??
+    overviewData?.room?.name ??
+    overviewData?.room?.title ??
+    currentRoom?.title ??
+    currentRoom?.name ??
+    'Hackathon Workspace';
+  const roomTitle = rawRoomTitle.length > 24 ? rawRoomTitle.slice(0, 24) + '…' : rawRoomTitle;
 
   const sectionMeta = SECTION_MAP[subSection] || { label: subSection || 'Overview' };
 
@@ -104,7 +114,11 @@ export function PanelHeader({ inRoom: inRoomProp = false, pageName = 'Home' }: P
             </Link>
             <ChevronRight size={12} className="text-ink-3 shrink-0" />
             <div className="flex items-center gap-1.5 min-w-0">
-              <Link to={`/app/room/${roomId}/overview`} className="text-ink-2 hover:text-ink transition-colors truncate max-w-[180px]">
+              <Link
+                to={`/app/room/${roomId}/overview`}
+                className="text-ink-2 hover:text-ink transition-colors truncate max-w-[200px]"
+                title={rawRoomTitle}
+              >
                 {roomTitle}
               </Link>
               <LiveIndicator isReconnecting={isReconnecting} />
@@ -155,8 +169,11 @@ export function PanelHeader({ inRoom: inRoomProp = false, pageName = 'Home' }: P
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Right: bell + avatar */}
-      <div className="flex items-center gap-3">
+      {/* Right: sound toggle + bell + avatar */}
+      <div className="flex items-center gap-2">
+        {/* Sound FX Toggle */}
+        <SoundToggle />
+
         {/* Bell Popover */}
         <NotificationsPopover currentRoomId={roomId} roomList={homeData?.roomList} />
 

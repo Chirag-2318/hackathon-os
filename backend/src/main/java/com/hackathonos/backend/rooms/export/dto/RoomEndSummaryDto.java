@@ -31,14 +31,33 @@ public record RoomEndSummaryDto(
             String avatarUrl
     ) {}
 
+    public record PhaseMilestoneDto(
+            String name,
+            Instant completedAt
+    ) {}
+
     public record TimelineMilestonesDto(
             Instant roomCreated,
             Instant firstTaskCompleted,
             Instant planValidated,
             Instant firstDemoRecorded,
             Instant submissionStarted,
-            Instant submittedAt
-    ) {}
+            Instant submittedAt,
+            Instant briefConfirmed,
+            Instant buildStarted,
+            List<PhaseMilestoneDto> phases
+    ) {
+        public TimelineMilestonesDto(
+                Instant roomCreated,
+                Instant firstTaskCompleted,
+                Instant planValidated,
+                Instant firstDemoRecorded,
+                Instant submissionStarted,
+                Instant submittedAt
+        ) {
+            this(roomCreated, firstTaskCompleted, planValidated, firstDemoRecorded, submissionStarted, submittedAt, null, null, null);
+        }
+    }
 
     public record EventStatsDto(
             int tasksCompleted,

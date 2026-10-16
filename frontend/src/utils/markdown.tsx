@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { Copy, Check, Hash, ExternalLink } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Copy, Check, Hash, ExternalLink, Workflow } from 'lucide-react';
+import { useDraftStore } from '@/app/layout/use-draft-store';
 import { cn } from '@/lib/utils';
+import { MermaidView } from '@/features/diagrams/components/mermaid-view';
 
 function slugify(text: string): string {
   return text
@@ -19,8 +22,20 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
-function CodeBlock({ code, lang }: { code: string; lang?: string }) {
+interface CodeBlockProps {
+  code: string;
+  lang?: string;
+  docId?: string;
+  docName?: string;
+  blockIndex?: number;
+  headingSlug?: string;
+  viewMode?: string;
+}
+
+function CodeBlock({ code, lang, docId, docName, blockIndex = 0, headingSlug, viewMode }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
+  const navigate = useNavigate();
+  const params = useParams<{ roomId?: string }>();
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -30,10 +45,97 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
 
   const isMermaid = lang?.toLowerCase() === 'mermaid';
 
+  const handleOpenInDiagrams = () => {
+    let targetRoomId = params.roomId;
+    if (!targetRoomId) {
+      const match = window.location.pathname.match(/\/app\/room\/([^\/]+)/);
+      targetRoomId = match ? match[1] : '';
+    }
+    if (targetRoomId) {
+      const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
+      const handoffState = {
+        source: 'docs',
+        roomId: targetRoomId,
+        docId: docId || '',
+        docName: docName || 'ARCHITECTURE.md',
+        blockIndex,
+        headingSlug: headingSlug || '',
+        scrollTop,
+        viewMode: viewMode || 'preview',
+        mermaidCode: code,
+        originalCode: code,
+      };
+
+      try {
+        sessionStorage.setItem(`docs_diagram_return_${targetRoomId}`, JSON.stringify(handoffState));
+      } catch (e) {}
+
+      useDraftStore.getState().setDiagramCode(targetRoomId, code);
+      navigate(`/app/room/${targetRoomId}/diagrams`, {
+        state: handoffState,
+      });
+    }
+  };
+
+  if (isMermaid) {
+    let targetRoomId = params.roomId;
+    if (!targetRoomId) {
+      const match = window.location.pathname.match(/\/app\/room\/([^\/]+)/);
+      targetRoomId = match ? match[1] : '';
+    }
+
+    return (
+      <div
+        id={`diagram-block-${blockIndex}`}
+        data-heading-slug={headingSlug}
+        className="relative my-6 rounded-[14px] bg-surface border border-border overflow-hidden transition-all duration-300"
+      >
+        <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-surface-sunken text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Workflow className="size-3.5 text-primary" />
+            <span className="font-medium text-foreground">
+              Architecture Diagram {blockIndex > 0 ? `#${blockIndex + 1}` : ''}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleOpenInDiagrams}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 text-xs font-medium transition-colors cursor-pointer"
+              title="Open and edit this Mermaid diagram in Diagram Studio"
+            >
+              <ExternalLink className="size-3" />
+              <span>Open in Diagram Studio</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md hover:bg-muted text-xs transition-colors cursor-pointer text-muted-foreground hover:text-foreground"
+            >
+              {copied ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
+              <span>{copied ? 'Copied' : 'Copy code'}</span>
+            </button>
+          </div>
+        </div>
+        <div className="p-4 bg-page">
+          <MermaidView
+            code={code}
+            mode="inline"
+            roomId={targetRoomId}
+            docId={docId}
+            docName={docName}
+            blockIndex={blockIndex}
+            headingSlug={headingSlug}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="relative my-4 rounded-[12px] bg-[#F6F6F7] dark:bg-muted/80 border border-border/80 overflow-hidden font-mono text-xs">
-      <div className="flex items-center justify-between px-3.5 py-1.5 border-b border-border/60 bg-muted/40 text-[11px] text-muted-foreground">
-        <span>{isMermaid ? 'Diagram source (Mermaid)' : lang || 'code'}</span>
+    <div className="relative my-4 rounded-[12px] bg-surface-sunken dark:bg-surface border border-border overflow-hidden font-mono text-xs">
+      <div className="flex items-center justify-between px-3.5 py-1.5 border-b border-border bg-surface text-[11px] text-muted-foreground">
+        <span>{lang || 'code'}</span>
         <button
           type="button"
           onClick={handleCopy}
@@ -63,7 +165,7 @@ function renderInline(text: string): React.ReactNode[] {
       parts.push(
         <code
           key={keyIdx++}
-          className="px-1.5 py-0.5 rounded-[5px] bg-[#F3F3F4] dark:bg-muted font-mono text-[13px] text-foreground border border-border/40"
+          className="px-1.5 py-0.5 rounded-[5px] bg-surface-sunken dark:bg-surface font-mono text-[13px] text-foreground border border-border"
         >
           {codeMatch[1]}
         </code>
@@ -137,12 +239,26 @@ function renderInline(text: string): React.ReactNode[] {
   return parts;
 }
 
-export function MarkdownRenderer({ content, className }: { content: string; className?: string }) {
+export function MarkdownRenderer({
+  content,
+  className,
+  docId,
+  docName,
+  viewMode = 'preview'
+}: {
+  content: string;
+  className?: string;
+  docId?: string;
+  docName?: string;
+  viewMode?: string;
+}) {
   if (!content) return null;
 
   const lines = content.split('\n');
   const elements: React.ReactNode[] = [];
   let lineIdx = 0;
+  let currentHeadingSlug = '';
+  let mermaidBlockIndex = 0;
 
   while (lineIdx < lines.length) {
     const line = lines[lineIdx];
@@ -156,8 +272,19 @@ export function MarkdownRenderer({ content, className }: { content: string; clas
         codeLines.push(lines[lineIdx]);
         lineIdx++;
       }
+      const isM = lang.toLowerCase() === 'mermaid';
+      const bIdx = isM ? mermaidBlockIndex++ : 0;
       elements.push(
-        <CodeBlock key={`code-${lineIdx}`} code={codeLines.join('\n')} lang={lang} />
+        <CodeBlock
+          key={`code-${lineIdx}`}
+          code={codeLines.join('\n')}
+          lang={lang}
+          docId={docId}
+          docName={docName}
+          blockIndex={bIdx}
+          headingSlug={currentHeadingSlug}
+          viewMode={viewMode}
+        />
       );
       lineIdx++;
       continue;
@@ -218,6 +345,7 @@ export function MarkdownRenderer({ content, className }: { content: string; clas
     if (line.startsWith('# ')) {
       const text = line.slice(2).trim();
       const id = slugify(text);
+      currentHeadingSlug = id;
       elements.push(
         <h1
           key={`h1-${lineIdx}`}
@@ -237,6 +365,7 @@ export function MarkdownRenderer({ content, className }: { content: string; clas
     if (line.startsWith('## ')) {
       const text = line.slice(3).trim();
       const id = slugify(text);
+      currentHeadingSlug = id;
       elements.push(
         <h2
           key={`h2-${lineIdx}`}
@@ -256,6 +385,7 @@ export function MarkdownRenderer({ content, className }: { content: string; clas
     if (line.startsWith('### ')) {
       const text = line.slice(4).trim();
       const id = slugify(text);
+      currentHeadingSlug = id;
       elements.push(
         <h3
           key={`h3-${lineIdx}`}

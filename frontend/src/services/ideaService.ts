@@ -2,6 +2,7 @@
  * ideaService.ts — Ideas CRUD and Ideation flow service calling backend API directly.
  */
 import { apiFetch } from '@/api/client';
+import { API_BASE_URL } from '@/lib/apiClient';
 import type { Idea, IdeaLink, IdeateResponse } from './types';
 
 export const ideaService = {
@@ -16,7 +17,7 @@ export const ideaService = {
 
   async createIdea(
     roomId: string,
-    draft: { text: string; links?: IdeaLink[]; notes?: string[] }
+    draft: { text: string; links?: IdeaLink[]; notes?: string[]; anonymous?: boolean }
   ): Promise<Idea> {
     return apiFetch<Idea>(`/api/v1/rooms/${roomId}/ideas`, {
       method: 'POST',
@@ -71,7 +72,7 @@ export const ideaService = {
   },
 
   async exportIdeasMarkdown(roomId: string): Promise<void> {
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+    const baseUrl = API_BASE_URL;
     const res = await fetch(`${baseUrl}/api/v1/rooms/${roomId}/ideas/export.md`, {
       credentials: 'include',
     });

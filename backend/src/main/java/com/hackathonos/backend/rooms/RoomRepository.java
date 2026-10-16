@@ -29,6 +29,14 @@ public interface RoomRepository extends JpaRepository<Room, UUID> {
     // Finds rooms owned by the given user
     List<Room> findByOwnerId(UUID ownerId);
 
+    long countByOwnerId(UUID ownerId);
+
+    long countByDeletedAtIsNull();
+
+    long countByOwnerIdAndCreatedAtGreaterThanEqual(UUID ownerId, java.time.Instant since);
+
+    List<Room> findByDeletedAtBefore(java.time.Instant before);
+
     @Query("""
         SELECT COUNT(r) FROM Room r
         JOIN RoomMember rm ON rm.roomId = r.id

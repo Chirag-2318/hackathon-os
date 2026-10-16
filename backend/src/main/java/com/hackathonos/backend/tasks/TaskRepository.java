@@ -25,6 +25,7 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
     List<Task> findByRoomIdAndFlaggedTrueAndStatusNot(UUID roomId, String status);
     List<Task> findByRoomIdAndStatusNot(UUID roomId, String status);
     List<Task> findByRoomIdAndPhaseId(UUID roomId, UUID phaseId);
+    List<Task> findByRoomIdAndPhaseKey(UUID roomId, String phaseKey);
 
     List<Task> findByStatusNotAndDueAtBetween(String status, Instant start, Instant end);
 
@@ -39,6 +40,13 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
     @Modifying
     @Query("DELETE FROM Task t WHERE t.roomId = :roomId AND t.source = 'PLAN'")
     void deletePlanTasksForRoom(@Param("roomId") UUID roomId);
+
+    long countByReporterIdOrAssigneeId(UUID reporterId, UUID assigneeId);
+    List<Task> findByReporterIdOrAssigneeId(UUID reporterId, UUID assigneeId);
+
+    @Modifying
+    @Query("UPDATE Task t SET t.assigneeId = null WHERE t.assigneeId = :userId")
+    void unassignUser(@Param("userId") UUID userId);
 
     void deleteByRoomId(UUID roomId);
 }

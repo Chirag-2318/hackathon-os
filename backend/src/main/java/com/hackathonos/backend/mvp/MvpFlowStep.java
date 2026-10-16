@@ -17,7 +17,7 @@ public class MvpFlowStep {
     @Column(nullable = false)
     private int position = 0;
 
-    @Column(nullable = false, length = 120)
+    @Column(nullable = false, columnDefinition = "text")
     private String title;
 
     @Column(nullable = false, length = 20)

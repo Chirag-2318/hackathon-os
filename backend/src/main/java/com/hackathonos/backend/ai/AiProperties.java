@@ -13,7 +13,9 @@ import java.util.Map;
 public class AiProperties {
 
     private final String baseUrl;
-    private final String apiKey;
+    private final String platformKey;
+    private final boolean platformFallback;
+    private final org.springframework.core.env.Environment environment;
     private final String modelDefault;
     private final String modelFast;
     private final String modelSmart;
@@ -24,12 +26,13 @@ public class AiProperties {
     private final int userRatePerMinute;
     private final boolean enabled;
     private final String sttBaseUrl;
-    private final String sttApiKey;
     private final String sttModel;
 
     public AiProperties(
             @Value("${AI_BASE_URL:${app.ai.base-url:https://api.groq.com/openai/v1}}") String baseUrl,
-            @Value("${AI_API_KEY:${GROQ_API_KEY:${XAI_API_KEY:${app.ai.api-key:}}}}") String apiKey,
+            @Value("${AI_PLATFORM_KEY:${AI_API_KEY:${GROQ_API_KEY:${app.ai.platform-key:}}}}") String platformKey,
+            @Value("${AI_PLATFORM_FALLBACK:${app.ai.platform-fallback:false}}") boolean platformFallback,
+            org.springframework.core.env.Environment environment,
             @Value("${AI_MODEL_DEFAULT:${GROQ_MODEL:${XAI_MODEL:${app.ai.model-default:llama-3.3-70b-versatile}}}}") String modelDefault,
             @Value("${AI_MODEL_FAST:${app.ai.model-fast:}}") String modelFast,
             @Value("${AI_MODEL_SMART:${app.ai.model-smart:}}") String modelSmart,
@@ -40,11 +43,12 @@ public class AiProperties {
             @Value("${AI_USER_RATE_PER_MINUTE:${app.ai.user-rate-per-minute:10}}") int userRatePerMinute,
             @Value("${AI_ENABLED:${app.ai.enabled:true}}") boolean enabled,
             @Value("${STT_BASE_URL:${app.ai.stt.base-url:https://api.groq.com/openai/v1}}") String sttBaseUrl,
-            @Value("${STT_API_KEY:${AI_API_KEY:${GROQ_API_KEY:${app.ai.stt.api-key:}}}}") String sttApiKey,
             @Value("${STT_MODEL:${app.ai.stt.model:whisper-large-v3}}") String sttModel
     ) {
         this.baseUrl = baseUrl != null && !baseUrl.isBlank() ? baseUrl.trim() : "https://api.groq.com/openai/v1";
-        this.apiKey = apiKey != null ? apiKey.trim() : "";
+        this.platformKey = platformKey != null ? platformKey.trim() : "";
+        this.platformFallback = platformFallback;
+        this.environment = environment;
         this.modelDefault = modelDefault != null && !modelDefault.isBlank() ? modelDefault.trim() : "llama-3.3-70b-versatile";
         this.modelFast = modelFast != null && !modelFast.isBlank() ? modelFast.trim() : this.modelDefault;
         this.modelSmart = modelSmart != null && !modelSmart.isBlank() ? modelSmart.trim() : this.modelDefault;
@@ -55,12 +59,23 @@ public class AiProperties {
         this.userRatePerMinute = userRatePerMinute > 0 ? userRatePerMinute : 10;
         this.enabled = enabled;
         this.sttBaseUrl = sttBaseUrl != null && !sttBaseUrl.isBlank() ? sttBaseUrl.trim() : this.baseUrl;
-        this.sttApiKey = sttApiKey != null ? sttApiKey.trim() : this.apiKey;
         this.sttModel = sttModel != null && !sttModel.isBlank() ? sttModel.trim() : "whisper-large-v3";
     }
 
+    public boolean isDevPlatformFallbackAllowed() {
+        if (environment == null) return false;
+        boolean isDev = java.util.Arrays.asList(environment.getActiveProfiles()).contains("dev");
+        return isDev && platformFallback && platformKey != null && !platformKey.isBlank();
+    }
+
+    public String getPlatformFallbackKey() {
+        return isDevPlatformFallbackAllowed() ? platformKey : "";
+    }
+
     public String getBaseUrl() { return baseUrl; }
-    public String getApiKey() { return apiKey; }
+    public String getApiKey() { return getPlatformFallbackKey(); }
+    public boolean isPlatformFallback() { return platformFallback; }
+
     public String getModelDefault() { return modelDefault; }
     public String getModelFast() { return modelFast; }
     public String getModelSmart() { return modelSmart; }
@@ -71,7 +86,7 @@ public class AiProperties {
     public int getUserRatePerMinute() { return userRatePerMinute; }
     public boolean isEnabled() { return enabled; }
     public String getSttBaseUrl() { return sttBaseUrl; }
-    public String getSttApiKey() { return sttApiKey; }
+    public String getSttApiKey() { return getPlatformFallbackKey(); }
     public String getSttModel() { return sttModel; }
 
     public double resolveTemperature(String featureTag) {

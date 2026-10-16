@@ -4,7 +4,30 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#F5F5F5" id="theme-color-meta" />
+    <title>Hackathon OS</title>
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("theme") || localStorage.getItem("hackathon-os-theme") || "system";
+          var resolved = stored;
+          if (stored === "system") {
+            resolved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          }
+          var root = document.documentElement;
+          root.setAttribute("data-theme", resolved);
+          root.classList.remove("light", "dark");
+          root.classList.add(resolved);
+          var textSize = localStorage.getItem("text_size") || "default";
+          root.setAttribute("data-text-size", textSize);
+          var meta = document.getElementById("theme-color-meta");
+          if (meta) {
+            meta.setAttribute("content", resolved === "dark" ? "#0E0E10" : "#F5F5F5");
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

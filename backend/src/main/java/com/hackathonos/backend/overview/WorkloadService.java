@@ -27,6 +27,8 @@ public class WorkloadService {
             int done,
             int expected,
             String username,
+            String avatarType,
+            Integer avatarPreset,
             com.hackathonos.backend.users.dto.UserSummaryDto user
     ) {
         public MemberWorkloadDto(
@@ -38,7 +40,24 @@ public class WorkloadService {
                 int expected
         ) {
             this(userId, name, avatarUrl, status, done, expected, null,
+                    avatarUrl != null ? "CUSTOM" : "NONE", null,
                     userId != null ? new com.hackathonos.backend.users.dto.UserSummaryDto(userId, null, name, avatarUrl) : null);
+        }
+
+        public MemberWorkloadDto(
+                UUID userId,
+                String name,
+                String avatarUrl,
+                String status,
+                int done,
+                int expected,
+                String username,
+                com.hackathonos.backend.users.dto.UserSummaryDto user
+        ) {
+            this(userId, name, avatarUrl, status, done, expected, username,
+                    user != null ? user.avatarType() : (avatarUrl != null ? "CUSTOM" : "NONE"),
+                    user != null ? user.avatarPreset() : null,
+                    user);
         }
     }
 
@@ -81,16 +100,44 @@ public class WorkloadService {
         Instant now = clock.instant();
 
         UUID targetPhaseId = null;
+        String targetPhaseKey = null;
+        List<PlanPhase> phases = phaseRepository.findByRoomIdOrderByPositionAsc(room.getId());
+        Set<String> validPhaseKeys = phases.stream()
+                .filter(p -> "COMPLETED".equalsIgnoreCase(p.getStatus()) || "ACTIVE".equalsIgnoreCase(p.getStatus()))
+                .map(p -> p.getPhaseKey() != null ? p.getPhaseKey().toUpperCase() : "")
+                .collect(java.util.stream.Collectors.toSet());
+
         if ("phase".equalsIgnoreCase(scope)) {
-            List<PlanPhase> phases = phaseRepository.findByRoomIdOrderByPositionAsc(room.getId());
             ClockService.ClockCalculation clockCalc = clockService.calculate(room, phases);
             if (clockCalc.currentPhase() != null) {
                 targetPhaseId = clockCalc.currentPhase().id();
+                if (clockCalc.currentPhase().id() != null) {
+                    phases.stream()
+                            .filter(p -> clockCalc.currentPhase().id().equals(p.getId()))
+                            .findFirst()
+                            .ifPresent(p -> {
+                                if (p.getPhaseKey() != null) {
+                                    // target phase key
+                                }
+                            });
+                }
+            }
+            // Also find ACTIVE phase key
+            phases.stream().filter(p -> "ACTIVE".equalsIgnoreCase(p.getStatus())).findFirst().ifPresent(p -> {
+                if (p.getPhaseKey() != null) {
+                    // active phase key
+                }
+            });
+            Optional<PlanPhase> activeP = phases.stream().filter(p -> "ACTIVE".equalsIgnoreCase(p.getStatus())).findFirst();
+            if (activeP.isPresent()) {
+                targetPhaseKey = activeP.get().getPhaseKey();
+                if (targetPhaseId == null) targetPhaseId = activeP.get().getId();
             }
         }
 
         Map<UUID, List<Task>> tasksByUser = new HashMap<>();
         for (Task t : allTasks) {
+            if (t.isDropped()) continue;
             if (t.getAssigneeId() != null) {
                 tasksByUser.computeIfAbsent(t.getAssigneeId(), k -> new ArrayList<>()).add(t);
             }
@@ -117,10 +164,10 @@ public class WorkloadService {
             String name = u != null && u.getName() != null && !u.getName().isBlank()
                     ? u.getName()
                     : (username != null ? "@" + username : "Member");
-            String avatarUrl = u != null ? u.getAvatarUrl() : null;
             com.hackathonos.backend.users.dto.UserSummaryDto userSummary = u != null
                     ? com.hackathonos.backend.users.dto.UserSummaryDto.from(u, name)
                     : null;
+            String avatarUrl = userSummary != null ? userSummary.avatarUrl() : null;
 
             List<Task> userTasks = tasksByUser.getOrDefault(m.getUserId(), Collections.emptyList());
             MemberStatusCalculator.MemberStatusResult statusResult =
@@ -130,8 +177,17 @@ public class WorkloadService {
             int expected = 0;
 
             for (Task t : userTasks) {
-                if (targetPhaseId != null && !targetPhaseId.equals(t.getPhaseId())) {
-                    continue;
+                if ("phase".equalsIgnoreCase(scope)) {
+                    boolean matches = false;
+                    if (targetPhaseId != null && targetPhaseId.equals(t.getPhaseId())) matches = true;
+                    if (targetPhaseKey != null && t.getPhaseKey() != null && targetPhaseKey.equalsIgnoreCase(t.getPhaseKey())) matches = true;
+                    if (!matches && (targetPhaseId != null || targetPhaseKey != null)) {
+                        continue;
+                    }
+                } else {
+                    if (t.getPhaseKey() != null && !validPhaseKeys.isEmpty() && !validPhaseKeys.contains(t.getPhaseKey().toUpperCase())) {
+                        continue;
+                    }
                 }
                 boolean isDone = t.isConfirmedDone();
                 if (isDone) done++;

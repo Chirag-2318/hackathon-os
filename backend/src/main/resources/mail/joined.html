@@ -1,0 +1,37 @@
+<!-- Joined Notification Content -->
+<div style="font-family:'SFMono-Regular', Menlo, Consolas, monospace;font-size:11px;font-weight:700;letter-spacing:1px;color:#8E8980;text-transform:uppercase;margin-bottom:6px;">
+  {{HEADER_BADGE}}
+</div>
+
+<h1 style="margin:0 0 16px 0;font-family:Georgia, 'Times New Roman', serif;font-size:24px;font-weight:700;color:#0B0B0C;line-height:30px;word-break:break-word;">
+  {{HEADLINE}}
+</h1>
+
+{{DETAIL_BLOCK}}
+
+<!-- Next Step Box / Summary Box -->
+<div style="background-color:#EFECE3;border-left:3px solid #E8A33D;padding:14px 16px;border-radius:0 8px 8px 0;margin:24px 0;">
+  <div style="font-family:'SFMono-Regular', Menlo, Consolas, monospace;font-size:11px;font-weight:700;color:#8E8980;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">
+    {{BOX_TITLE}}
+  </div>
+  <div style="font-size:14px;color:#2C2A26;line-height:20px;">
+    {{BOX_CONTENT}}
+  </div>
+</div>
+
+<!-- Primary Action Button -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:28px;">
+  <tr>
+    <td align="center">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td align="center" bgcolor="#0B0B0C" style="border-radius:8px;">
+            <a href="{{ACTION_URL}}" target="_blank" style="display:inline-block;padding:14px 32px;font-family:-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;font-size:15px;font-weight:600;color:#F6F3EC;text-decoration:none;border-radius:8px;">
+              {{ACTION_TEXT}}
+            </a>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>

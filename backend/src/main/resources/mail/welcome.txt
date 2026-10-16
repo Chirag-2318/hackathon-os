@@ -1,0 +1,19 @@
+HACKATHON OS - PARTICIPANT BADGE
+
+PARTICIPANT: @{{HANDLE}}
+NAME: {{DISPLAY_NAME}}
+TIER: {{LEVEL}}
+ROLES: {{ROLE_TAGS}}
+
+Your badge is printed.
+
+Your first ten minutes:
+1. Create a room or join one with a code
+2. Paste the event brief once
+3. Post one idea
+
+Open Hackathon OS:
+{{APP_URL}}
+
+--
+Hackathon OS - Collaborative command center for intense hackathons

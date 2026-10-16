@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { Plus, LayoutGrid, List } from 'lucide-react';
+import { Plus, LayoutGrid, List, SlidersHorizontal, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SegmentedControl, SegmentedControlItem } from '@/components/primitives/segmented-control';
 import type { Task, BoardPhase } from '@/services/types';
@@ -15,6 +15,9 @@ export interface BoardHeaderProps {
   tasks: Task[];
   activeFilter?: string | null;
   onSelectSummaryFilter: (filter: 'open' | 'blocked' | 'unassigned' | 'duetoday' | null) => void;
+  showControls?: boolean;
+  isControlsCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export function BoardHeader({
@@ -26,6 +29,9 @@ export function BoardHeader({
   tasks,
   activeFilter,
   onSelectSummaryFilter,
+  showControls = true,
+  isControlsCollapsed = false,
+  onToggleCollapse,
 }: BoardHeaderProps) {
   // Compute summary numbers
   const openCount = tasks.filter(t => t.status !== 'done').length;
@@ -42,10 +48,10 @@ export function BoardHeader({
       {/* Header row (56px) */}
       <div className="flex items-center justify-between h-14">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          <h1 className="text-3xl sm:text-4xl font-display font-normal tracking-tight text-foreground leading-none">
             Board
           </h1>
-          <span className="h-7 px-3 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border/50 inline-flex items-center">
+          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono uppercase tracking-wider font-semibold border shrink-0 bg-muted/80 text-muted-foreground border-border/60">
             {timeLeftText ? `${currentPhaseName} · ${timeLeftText}` : currentPhaseName}
           </span>
         </div>
@@ -71,78 +77,96 @@ export function BoardHeader({
             </SegmentedControlItem>
           </SegmentedControl>
 
-          {/* Dark Create button */}
+          {/* Collapse/Expand Toggle Button */}
+          {showControls && onToggleCollapse && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onToggleCollapse}
+              className="h-9 px-3 rounded-full text-xs font-medium border-border hover:bg-muted text-muted-foreground hover:text-foreground flex items-center gap-1.5 cursor-pointer shadow-xs"
+              title={isControlsCollapsed ? 'Show filters & stats' : 'Collapse filters & stats'}
+              aria-label={isControlsCollapsed ? 'Show filters & stats' : 'Collapse filters & stats'}
+            >
+              <SlidersHorizontal className="size-3.5" />
+              <span className="hidden sm:inline">{isControlsCollapsed ? 'Filters' : 'Collapse'}</span>
+              <ChevronDown className={cn("size-3.5 transition-transform duration-200", !isControlsCollapsed && "rotate-180")} />
+            </Button>
+          )}
+
+          {/* Dark/Cream Create button via primary token */}
           <Button
             onClick={onCreateClick}
-            className="group h-9 px-4 rounded-full bg-[#18181B] text-white hover:bg-black dark:bg-white dark:text-black dark:hover:bg-neutral-200 text-xs font-semibold shadow-xs flex items-center gap-1.5"
+            className="group h-9 px-4 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold shadow-xs flex items-center gap-1.5 cursor-pointer"
           >
             <Plus className="size-3.5 transition-transform duration-200 group-hover:rotate-90" />
             <span>Create</span>
-            <kbd className="ml-1 text-[10px] font-mono opacity-60 bg-white/20 dark:bg-black/20 px-1 rounded">
+            <kbd className="ml-1 text-[10px] font-mono opacity-60 bg-current/20 px-1 rounded">
               C
             </kbd>
           </Button>
         </div>
       </div>
 
-      {/* Summary chips line (12px text, edge aligned) */}
-      <div className="flex items-center gap-2 text-xs flex-wrap pb-1">
-        {openCount > 0 && (
-          <button
-            onClick={() => onSelectSummaryFilter(activeFilter === 'open' ? null : 'open')}
-            className={cn(
-              'h-6 px-2.5 rounded-full text-xs font-medium border transition-colors inline-flex items-center gap-1.5',
-              activeFilter === 'open'
-                ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-black'
-                : 'bg-muted text-muted-foreground border-border/60 hover:bg-muted/80'
-            )}
-          >
-            <span className="font-semibold">{openCount}</span> open
-          </button>
-        )}
+      {/* Summary chips line - only shown when showControls && !isControlsCollapsed */}
+      {showControls && !isControlsCollapsed && (
+        <div className="flex items-center gap-2 text-xs flex-wrap pb-1">
+          {openCount > 0 && (
+            <button
+              onClick={() => onSelectSummaryFilter(activeFilter === 'open' ? null : 'open')}
+              className={cn(
+                'h-6 px-2.5 rounded-full text-xs font-medium border transition-colors inline-flex items-center gap-1.5 cursor-pointer',
+                activeFilter === 'open'
+                  ? 'bg-inverse text-on-inverse border-inverse'
+                  : 'bg-muted text-muted-foreground border-border/60 hover:bg-muted/80'
+              )}
+            >
+              <span className="font-mono font-semibold">{openCount}</span> open
+            </button>
+          )}
 
-        {blockedCount > 0 && (
-          <button
-            onClick={() => onSelectSummaryFilter(activeFilter === 'blocked' ? null : 'blocked')}
-            className={cn(
-              'h-6 px-2.5 rounded-full text-xs font-medium border transition-colors inline-flex items-center gap-1.5',
-              activeFilter === 'blocked'
-                ? 'bg-rose-600 text-white border-rose-600'
-                : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/50 hover:bg-rose-100'
-            )}
-          >
-            <span className="font-semibold">{blockedCount}</span> blocked
-          </button>
-        )}
+          {blockedCount > 0 && (
+            <button
+              onClick={() => onSelectSummaryFilter(activeFilter === 'blocked' ? null : 'blocked')}
+              className={cn(
+                'h-6 px-2.5 rounded-full text-xs font-medium border transition-colors inline-flex items-center gap-1.5 cursor-pointer',
+                activeFilter === 'blocked'
+                  ? 'bg-danger text-on-danger border-danger'
+                  : 'bg-semantic-danger-bg text-semantic-danger-fg border-semantic-danger-border hover:opacity-80'
+              )}
+            >
+              <span className="font-mono font-semibold">{blockedCount}</span> blocked
+            </button>
+          )}
 
-        {unassignedCount > 0 && (
-          <button
-            onClick={() => onSelectSummaryFilter(activeFilter === 'unassigned' ? null : 'unassigned')}
-            className={cn(
-              'h-6 px-2.5 rounded-full text-xs font-medium border transition-colors inline-flex items-center gap-1.5',
-              activeFilter === 'unassigned'
-                ? 'bg-amber-600 text-white border-amber-600'
-                : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/50 hover:bg-amber-100'
-            )}
-          >
-            <span className="font-semibold">{unassignedCount}</span> unassigned
-          </button>
-        )}
+          {unassignedCount > 0 && (
+            <button
+              onClick={() => onSelectSummaryFilter(activeFilter === 'unassigned' ? null : 'unassigned')}
+              className={cn(
+                'h-6 px-2.5 rounded-full text-xs font-medium border transition-colors inline-flex items-center gap-1.5 cursor-pointer',
+                activeFilter === 'unassigned'
+                  ? 'bg-accent text-on-accent border-accent'
+                  : 'bg-semantic-warning-bg text-semantic-warning-fg border-semantic-warning-border hover:opacity-80'
+              )}
+            >
+              <span className="font-mono font-semibold">{unassignedCount}</span> unassigned
+            </button>
+          )}
 
-        {dueTodayCount > 0 && (
-          <button
-            onClick={() => onSelectSummaryFilter(activeFilter === 'duetoday' ? null : 'duetoday')}
-            className={cn(
-              'h-6 px-2.5 rounded-full text-xs font-medium border transition-colors inline-flex items-center gap-1.5',
-              activeFilter === 'duetoday'
-                ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-black'
-                : 'bg-muted text-muted-foreground border-border/60 hover:bg-muted/80'
-            )}
-          >
-            <span className="font-semibold">{dueTodayCount}</span> due today
-          </button>
-        )}
-      </div>
+          {dueTodayCount > 0 && (
+            <button
+              onClick={() => onSelectSummaryFilter(activeFilter === 'duetoday' ? null : 'duetoday')}
+              className={cn(
+                'h-6 px-2.5 rounded-full text-xs font-medium border transition-colors inline-flex items-center gap-1.5 cursor-pointer',
+                activeFilter === 'duetoday'
+                  ? 'bg-inverse text-on-inverse border-inverse'
+                  : 'bg-muted text-muted-foreground border-border/60 hover:bg-muted/80'
+              )}
+            >
+              <span className="font-mono font-semibold">{dueTodayCount}</span> due today
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

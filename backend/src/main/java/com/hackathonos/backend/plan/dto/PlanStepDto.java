@@ -17,8 +17,29 @@ public record PlanStepDto(
         List<ContextFileDto> contextFiles,
         String mode,
         String ideaVerdict,
-        boolean stale
+        boolean stale,
+        boolean validatedWithOverrides
 ) {
+    public PlanStepDto(
+            String key,
+            int index,
+            String title,
+            String status,
+            String answer,
+            boolean validated,
+            List<String> errors,
+            List<String> warnings,
+            String promptText,
+            String expectedFormat,
+            int charCount,
+            List<ContextFileDto> contextFiles,
+            String mode,
+            String ideaVerdict,
+            boolean stale
+    ) {
+        this(key, index, title, status, answer, validated, errors, warnings, promptText, expectedFormat, charCount, contextFiles, mode, ideaVerdict, stale, false);
+    }
+
     public PlanStepDto(
             String key,
             int index,
@@ -33,6 +54,6 @@ public record PlanStepDto(
             int charCount,
             List<ContextFileDto> contextFiles
     ) {
-        this(key, index, title, status, answer, validated, errors, warnings, promptText, expectedFormat, charCount, contextFiles, "BALANCED", null, false);
+        this(key, index, title, status, answer, validated, errors, warnings, promptText, expectedFormat, charCount, contextFiles, "BALANCED", null, false, false);
     }
 }

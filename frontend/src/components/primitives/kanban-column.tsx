@@ -27,7 +27,7 @@ const KanbanColumn = React.forwardRef<HTMLDivElement, KanbanColumnProps>(
       >
         <div className="flex items-center gap-3 mb-4 px-1 select-none">
           <h2 className="text-h2 text-ink">{title}</h2>
-          <div className="flex size-6 items-center justify-center rounded-pill bg-ink text-white text-caption tabular-nums shadow-sm">
+          <div className="flex size-6 items-center justify-center rounded-pill bg-inverse text-on-inverse text-caption tabular-nums shadow-sm">
             {count}
           </div>
         </div>

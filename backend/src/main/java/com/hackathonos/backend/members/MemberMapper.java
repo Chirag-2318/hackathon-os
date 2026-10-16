@@ -23,6 +23,9 @@ public class MemberMapper {
         com.hackathonos.backend.users.dto.UserSummaryDto userSummary = user != null
                 ? com.hackathonos.backend.users.dto.UserSummaryDto.from(user, name)
                 : null;
+        avatarUrl = userSummary != null ? userSummary.avatarUrl() : null;
+        String avatarType = userSummary != null ? userSummary.avatarType() : "NONE";
+        Integer avatarPreset = userSummary != null ? userSummary.avatarPreset() : null;
 
         return new MemberItemDto(
                 member != null ? member.getUserId() : null,
@@ -39,6 +42,8 @@ public class MemberMapper {
                 isMe,
                 null,
                 username,
+                avatarType,
+                avatarPreset,
                 userSummary
         );
     }

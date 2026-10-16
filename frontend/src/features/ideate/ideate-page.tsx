@@ -77,18 +77,66 @@ export function IdeatePage() {
 
   // Mutations with optimistic updates
   const createMutation = useMutation({
-    mutationFn: (draft: { text: string; links: IdeaLink[]; notes: string[] }) =>
+    mutationFn: (draft: { text: string; links: IdeaLink[]; notes: string[]; anonymous?: boolean }) =>
       ideaService.createIdea(activeRoomId, draft),
+    onMutate: async (draft: { text: string; links: IdeaLink[]; notes: string[]; anonymous?: boolean }) => {
+      await queryClient.cancelQueries({ queryKey: ['ideate', activeRoomId] });
+      const previous = queryClient.getQueryData(['ideate', activeRoomId]);
+      const optimisticIdea: any = {
+        id: 'temp-' + Date.now(),
+        roomId: activeRoomId,
+        text: draft.text,
+        author: draft.anonymous ? {
+          name: 'Anonymous',
+          displayName: 'Anonymous',
+          initials: '??',
+          avatarUrl: null,
+          username: 'anonymous',
+        } : (user ? {
+          id: user.id,
+          name: user.displayName || user.name || 'You',
+          displayName: user.displayName || user.name || 'You',
+          username: user.username,
+          avatarType: user.avatarType,
+          avatarPreset: user.avatarPreset,
+          avatarUrl: user.avatarUrl,
+        } : undefined),
+        authorId: draft.anonymous ? undefined : (user?.id ? String(user.id) : undefined),
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        links: draft.links,
+        notes: draft.notes,
+      };
+      queryClient.setQueryData(['ideate', activeRoomId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          ideas: [optimisticIdea, ...(old.ideas || [])],
+          counts: {
+            ...old.counts,
+            total: (old.counts?.total || 0) + 1,
+            pending: (old.counts?.pending || 0) + 1,
+          },
+        };
+      });
+      return { previous };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ideate', activeRoomId] });
       toast.success('Idea posted');
     },
-    onError: (err: any) => {
+    onError: (err: any, _vars, context: any) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['ideate', activeRoomId], context.previous);
+      }
       if (err instanceof ApiError && err.code === 'IDEATION_LOCKED') {
         toast.error('Ideation is locked. Reopen ideation to post more ideas.');
       } else {
         toast.error(err.message || 'Failed to post idea');
       }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['ideate', activeRoomId] });
     },
   });
 
@@ -182,9 +230,8 @@ export function IdeatePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ideate', activeRoomId] });
       queryClient.invalidateQueries({ queryKey: ['room', activeRoomId] });
-      toast.success('Ideation complete! Ready to Plan.', {
-        action: { label: 'Go to Plan', onClick: () => navigate(`/app/room/${activeRoomId}/plan`) },
-      });
+      toast.success('Ideation complete! Moving to Plan.');
+      navigate(`/app/room/${activeRoomId}/plan`);
     },
     onError: (err: any) => {
       if (err instanceof ApiError && err.code === 'NEED_APPROVED_IDEA') {
@@ -331,7 +378,8 @@ export function IdeatePage() {
                 <IdeateCard
                   key={idea.id}
                   idea={idea}
-                  isMine={user?.id ? idea.authorId === String(user.id) : true}
+                  currentUser={user}
+                  isMine={user?.id ? (idea.authorId === String(user.id) || (idea as any).author?.id === String(user.id)) : true}
                   canDecide={canDecide}
                   isLocked={isLocked}
                   viewMode={viewMode}

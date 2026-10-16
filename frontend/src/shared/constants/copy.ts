@@ -134,27 +134,7 @@ export const COPY = {
     offlineBanner: 'Offline — showing cached data.',
   },
 
-  // ── S31 Speed Mode ──
-  speedMode: {
-    clockLabel1: 'time to next checkpoint',
-    clockLabel2: 'time to submission',
-    clockRollsOrSnaps: TODO('OQ-9: S31 clock numerals roll (M11 style) or instant swap?'),
-    nowEmptyTitle: TODO('OQ-10: S31 Now-card empty state title'),
-    nowEmptyBody: TODO('OQ-10: S31 Now-card empty state guidance'),
-    nowSwapAutoOrConfirm: TODO('OQ-10: Now-card swap after Mark done — auto or leader confirm?'),
-    nextUpEmptySlot: TODO('OQ-11: behavior when fewer than 2 Next-up tasks queued'),
-    compactRowAnatomy: TODO('OQ-11: compact task row anatomy reference'),
-    quickCapturePlaceholder: 'Add a task or note',
-    quickCaptureDestination: TODO('OQ-12: quick-capture submission destination list'),
-    eventCardDetailsDestination: TODO('OQ-13: yellow event card Details button destination'),
-    eventCardDismissBehavior: TODO('OQ-13: yellow event card Dismiss button — persisted?'),
-    eventCardLightThemeYellow: TODO('OQ-13: yellow event card light-theme color value'),
-    categoryFilterTargetList: TODO('OQ-8: which list does the category filter filter?'),
-    columnOrder: TODO('OQ-8: vertical ordering of event card and category list in column'),
-    lockedFreezeState: TODO('OQ-9: locked/freeze banner state on S31'),
-    errorMessage: 'Could not load Speed Mode data.',
-    offlineBanner: 'Offline — showing cached data. Quick capture and Mark done are disabled.',
-  },
+
 
   // ── S32 System pages ──
   system: {

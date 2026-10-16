@@ -1,0 +1,10 @@
+{{HEADLINE}}
+Recent team updates in {{ROOM_NAME}}
+
+{{LEDGER_TEXT}}
+
+Open {{ROOM_NAME}}:
+{{ROOM_URL}}
+
+Manage your email preferences in Settings > Notifications:
+{{NOTIFICATIONS_SETTINGS_URL}}

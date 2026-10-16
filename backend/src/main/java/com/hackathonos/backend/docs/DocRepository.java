@@ -12,5 +12,6 @@ public interface DocRepository extends JpaRepository<Doc, UUID> {
     List<Doc> findByRoomId(UUID roomId);
     List<Doc> findByRoomIdOrderByFileNameAsc(UUID roomId);
     Optional<Doc> findByRoomIdAndFileName(UUID roomId, String fileName);
+    long countByRoomId(UUID roomId);
     void deleteByRoomId(UUID roomId);
 }

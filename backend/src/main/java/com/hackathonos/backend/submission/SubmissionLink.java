@@ -15,10 +15,10 @@ public class SubmissionLink {
     @Column(name = "room_id", nullable = false)
     private UUID roomId;
 
-    @Column(name = "label", nullable = false, length = 120)
+    @Column(name = "label", nullable = false, columnDefinition = "text")
     private String label;
 
-    @Column(name = "url", nullable = false, length = 1000)
+    @Column(name = "url", nullable = false, length = 2048)
     private String url;
 
     @Column(name = "ok")

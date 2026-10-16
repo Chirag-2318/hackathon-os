@@ -44,6 +44,29 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectAttempts = useRef(0);
   const fallbackPollRef = useRef<number | null>(null);
+  const reconnectDelayTimerRef = useRef<number | null>(null);
+
+  const clearReconnectTimer = () => {
+    if (reconnectDelayTimerRef.current !== null) {
+      window.clearTimeout(reconnectDelayTimerRef.current);
+      reconnectDelayTimerRef.current = null;
+    }
+  };
+
+  const scheduleReconnectingChip = () => {
+    if (reconnectDelayTimerRef.current === null) {
+      reconnectDelayTimerRef.current = window.setTimeout(() => {
+        setIsReconnecting(true);
+      }, 8000);
+    }
+  };
+
+  const markConnected = () => {
+    clearReconnectTimer();
+    setIsConnected(true);
+    setIsReconnecting(false);
+    reconnectAttempts.current = 0;
+  };
 
   const registerChange = (entityId: string, actorHandle: string, type: string) => {
     setRecentChanges((prev) => {
@@ -104,31 +127,42 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
       }
 
       try {
-        const url = `${API_BASE_URL}/api/v1/rooms/${roomId}/stream`;
+        const baseUrl = typeof window !== 'undefined' && window.location.port === '5173'
+          ? ''
+          : (API_BASE_URL || '');
+        const url = `${baseUrl}/api/v1/rooms/${roomId}/stream`;
         const es = new EventSource(url, { withCredentials: true });
         eventSourceRef.current = es;
 
         es.onopen = () => {
           if (isUnmounted) return;
-          setIsConnected(true);
-          setIsReconnecting(false);
-          reconnectAttempts.current = 0;
-          if (fallbackPollRef.current) clearInterval(fallbackPollRef.current);
+          markConnected();
         };
 
-        es.onmessage = (e) => {
+        const onEventMessage = (e: MessageEvent) => {
+          if (isUnmounted) return;
+          markConnected();
           try {
-            const data = JSON.parse(e.data);
+            const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
             handleEvent(data);
           } catch {}
         };
+
+        es.onmessage = onEventMessage;
+        es.addEventListener('room-event', onEventMessage);
+        es.addEventListener('connected', () => {
+          if (!isUnmounted) markConnected();
+        });
+        es.addEventListener('heartbeat', () => {
+          if (!isUnmounted) markConnected();
+        });
 
         es.onerror = () => {
           if (isUnmounted) return;
           es.close();
           eventSourceRef.current = null;
           setIsConnected(false);
-          setIsReconnecting(true);
+          scheduleReconnectingChip();
 
           // Exponential backoff reconnect
           reconnectAttempts.current += 1;
@@ -140,6 +174,7 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
           startPolling();
         };
       } catch {
+        scheduleReconnectingChip();
         startPolling();
       }
     }
@@ -149,12 +184,17 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
       fallbackPollRef.current = window.setInterval(async () => {
         if (document.visibilityState !== 'visible') return;
         try {
-          const res = await apiFetch<any[]>(`/api/v1/rooms/${roomId}/events/latest`);
-          if (Array.isArray(res)) {
-            res.forEach(handleEvent);
+          const res = await apiFetch<any>(`/api/v1/rooms/${roomId}/events/latest`);
+          if (res) {
+            markConnected();
+            if (Array.isArray(res)) {
+              res.forEach(handleEvent);
+            }
           }
-        } catch {}
-      }, 20_000);
+        } catch {
+          scheduleReconnectingChip();
+        }
+      }, 10_000);
     }
 
     connectSSE();
@@ -167,12 +207,14 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
 
     return () => {
       isUnmounted = true;
+      clearReconnectTimer();
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
       if (fallbackPollRef.current) {
         clearInterval(fallbackPollRef.current);
+        fallbackPollRef.current = null;
       }
       window.removeEventListener('focus', onFocus);
     };

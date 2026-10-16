@@ -21,10 +21,11 @@
    CSS Custom Properties — Light Theme (default)
    ──────────────────────────────────────────────────────── */
 :root {
-  /* Typography Variables (Scoped to Onboarding & new surfaces) */
+  /* Typography Variables */
   --font-display: 'Instrument Serif', Georgia, serif;
   --font-ui: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', monospace;
+  --font-sans: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, Consolas, monospace;
 
   /* §5.1 Palette */
   --shell:          #F5F5F5;
@@ -172,6 +173,16 @@
   --avatar-ring-width:  2px;
   --presence-dot-size:  0.571rem;
 
+  /* Paired Inverted & State Tokens */
+  --bg-inverse: #0A0A0A;
+  --fg-on-inverse: #ECE9E2;
+  --bg-selected: #0A0A0A;
+  --fg-selected: #ECE9E2;
+  --bg-accent: #F0B04A;
+  --fg-on-accent: #0A0A0A;
+  --bg-danger: #E5484D;
+  --fg-on-danger: #FFFFFF;
+
   /* shadcn/ui integration — mapped to new tokens */
   --background:             var(--shell);
   --foreground:             var(--ink);
@@ -179,16 +190,16 @@
   --card-foreground:        var(--ink);
   --popover:                var(--card);
   --popover-foreground:     var(--ink);
-  --primary:                var(--ink);
-  --primary-foreground:     #FFFFFF;
+  --primary:                var(--bg-inverse);
+  --primary-foreground:     var(--fg-on-inverse);
   --secondary:              var(--active);
   --secondary-foreground:   var(--ink);
   --muted:                  var(--active);
   --muted-foreground:       var(--ink-2);
   --accent:                 var(--hover);
   --accent-foreground:      var(--ink);
-  --destructive:            var(--danger);
-  --destructive-foreground: #FFFFFF;
+  --destructive:            var(--bg-danger);
+  --destructive-foreground: var(--fg-on-danger);
   --border-shadcn:          var(--border);
   --input:                  var(--border-strong);
   --ring:                   var(--ink);
@@ -227,8 +238,17 @@
   --callout: #2A2D32;
   --sidebar-text: #E8E8EA;
   --sidebar-muted: #9A9AA3;
-  --primary: #A9A9F4;
-  --primary-foreground: #14151A;
+  /* Paired Inverted & State Tokens */
+  --bg-inverse: #ECE9E2;
+  --fg-on-inverse: #0E0E10;
+  --bg-selected: #ECE9E2;
+  --fg-selected: #0E0E10;
+  --bg-accent: #F0B04A;
+  --fg-on-accent: #0E0E10;
+  --bg-danger: #E5736B;
+  --fg-on-danger: #0E0E10;
+  --primary: var(--bg-inverse);
+  --primary-foreground: var(--fg-on-inverse);
   --focus-ring: var(--lav-400);
   --ring: var(--lav-400);
   --background: var(--shell);
@@ -243,8 +263,8 @@
   --muted-foreground: var(--ink-2);
   --accent: rgba(169, 169, 244, 0.12);
   --accent-foreground: var(--ink);
-  --destructive: var(--danger);
-  --destructive-foreground: #14151A;
+  --destructive: var(--bg-danger);
+  --destructive-foreground: var(--fg-on-danger);
   --border-shadcn: var(--border);
   --input: var(--border-input);
 }
@@ -372,6 +392,19 @@
   --color-input:              var(--input);
   --color-ring:               var(--ring);
 
+  /* Paired Inverted & State Tokens */
+  --color-bg-inverse:         var(--bg-inverse);
+  --color-fg-on-inverse:      var(--fg-on-inverse);
+  --color-bg-selected:        var(--bg-selected);
+  --color-fg-selected:        var(--fg-selected);
+  --color-bg-accent:          var(--bg-accent);
+  --color-fg-on-accent:       var(--fg-on-accent);
+  --color-bg-danger:          var(--bg-danger);
+  --color-fg-on-danger:       var(--fg-on-danger);
+  --color-on-inverse:         var(--fg-on-inverse);
+  --color-on-accent:          var(--fg-on-accent);
+  --color-on-danger:          var(--fg-on-danger);
+
   /* Radii */
   --radius-control: var(--r-control);
   --radius-card:    var(--r-card);
@@ -389,8 +422,9 @@
   --shadow-e3: none;
 
   /* Typography */
-  --font-sans: "DM Sans Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --font-display: "Instrument Serif", Georgia, serif;
+  --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, Consolas, monospace;
 
   /* Spacing helpers */
   --spacing-row-height: var(--row-height);
@@ -399,6 +433,16 @@
   --spacing-icon-md: 1.286rem;
   --spacing-icon-lg: 1.571rem;
 }
+
+/* Paired Inverted & State Utility Classes */
+.bg-inverse { background-color: var(--bg-inverse); color: var(--fg-on-inverse); }
+.text-on-inverse { color: var(--fg-on-inverse); }
+.bg-selected { background-color: var(--bg-selected); color: var(--fg-selected); }
+.text-selected { color: var(--fg-selected); }
+.bg-accent-token, .bg-accent { background-color: var(--bg-accent); color: var(--fg-on-accent); }
+.text-on-accent { color: var(--fg-on-accent); }
+.bg-danger-token, .bg-danger { background-color: var(--bg-danger); color: var(--fg-on-danger); }
+.text-on-danger { color: var(--fg-on-danger); }
 
 /* ────────────────────────────────────────────────────────
    Base layer
@@ -427,6 +471,20 @@
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-sans {
+    font-family: var(--font-sans);
+  }
+
+  .font-mono {
+    font-family: var(--font-mono);
+    font-feature-settings: "zero" 1;
+    font-variant-numeric: tabular-nums;
   }
 
   /* ── §5.2 Typography scale ── */
@@ -841,14 +899,26 @@
   overflow: hidden;
 }
 .stage-card-dark {
-  background: var(--st-dark-card);
-  border: 1px solid var(--st-dark-border);
-  color: var(--st-dark-text);
+  background: var(--st-dark-card, #1B1B1E);
+  border: 1px solid var(--st-dark-border, rgba(255, 255, 255, 0.12));
+  color: var(--st-dark-text, #ECE9E2);
+}
+:root[data-theme="dark"] .stage-card-dark,
+.dark .stage-card-dark {
+  background: var(--raised-surface, #1B1B1E);
+  border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.14));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 .stage-card-light {
-  background: #fff;
+  background: var(--surface, #fff);
   border: 1px solid var(--border);
-  color: var(--st-ink);
+  color: var(--text, var(--st-ink));
+}
+:root[data-theme="dark"] .stage-card-light,
+.dark .stage-card-light {
+  background: var(--surface, #151517);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  color: var(--text, #ECE9E2);
 }
 .stage-card-warm {
   background: linear-gradient(135deg, var(--st-sun) 0%, var(--st-orange) 100%);
@@ -1040,5 +1110,21 @@
   color: inherit;
 }
 
-
+/* Sound toggle SVG animation */
+.sound-slash {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 0.18s ease-out;
+}
+svg[data-muted="true"] .sound-slash {
+  stroke-dashoffset: 0;
+}
+.sound-wave {
+  transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+  transform-origin: 11px 12px;
+}
+svg[data-muted="true"] .sound-wave {
+  opacity: 0;
+  transform: scale(0.8);
+}
 

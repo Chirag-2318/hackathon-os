@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from './button';
+import { playSound } from '@/shared/sound/sound-effects';
 
 export interface CopyButtonProps {
   /** Value to copy into the clipboard */
@@ -31,6 +32,7 @@ export function CopyButton({
     e.stopPropagation();
     try {
       await navigator.clipboard.writeText(value);
+      playSound('copy');
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {

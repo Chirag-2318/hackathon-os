@@ -154,8 +154,8 @@ export function OnboardingBadge({
                   className="w-full h-full rounded-full object-cover"
                 />
               ) : (
-                <div className="w-full h-full rounded-full border-2 border-dashed border-neutral-300 flex items-center justify-center text-neutral-400 text-xs font-mono">
-                  No face
+                <div className="w-full h-full rounded-full border border-neutral-200 bg-neutral-200 flex items-center justify-center text-neutral-700 text-sm font-mono font-bold">
+                  {(displayName || handle || 'U').slice(0, 2).toUpperCase()}
                 </div>
               )}
             </div>

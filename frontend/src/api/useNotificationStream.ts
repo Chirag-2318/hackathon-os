@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { API_BASE_URL } from '@/lib/apiClient';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const BASE_URL = API_BASE_URL;
 
 export function useNotificationStream() {
   const queryClient = useQueryClient();

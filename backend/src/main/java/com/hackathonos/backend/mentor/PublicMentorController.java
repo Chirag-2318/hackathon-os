@@ -12,9 +12,11 @@ import org.springframework.web.bind.annotation.*;
 public class PublicMentorController {
 
     private final MentorService mentorService;
+    private final com.hackathonos.backend.common.security.ClientIpResolver clientIpResolver;
 
-    public PublicMentorController(MentorService mentorService) {
+    public PublicMentorController(MentorService mentorService, com.hackathonos.backend.common.security.ClientIpResolver clientIpResolver) {
         this.mentorService = mentorService;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @GetMapping("/{token}/context")
@@ -31,12 +33,7 @@ public class PublicMentorController {
             @RequestBody MentorDtos.PublicAskRequest req,
             HttpServletRequest request
     ) {
-        String clientIp = request.getHeader("X-Forwarded-For");
-        if (clientIp == null || clientIp.isBlank()) {
-            clientIp = request.getRemoteAddr();
-        } else {
-            clientIp = clientIp.split(",")[0].trim();
-        }
+        String clientIp = clientIpResolver.resolveClientIp(request);
         mentorService.submitPublicQuestion(token, clientIp, req);
     }
 }

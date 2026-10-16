@@ -77,7 +77,7 @@ function EventBlock({
       <div className="flex justify-between items-start mb-1">
         <h4 className="text-body-strong text-ink line-clamp-2">{title}</h4>
         {isConflict && (
-          <span className="shrink-0 rounded-chip bg-danger-solid px-1.5 py-0.5 text-[10px] font-bold text-white uppercase ml-2">
+          <span className="shrink-0 rounded-chip bg-danger text-on-danger px-1.5 py-0.5 text-[10px] font-bold uppercase ml-2">
             Conflict
           </span>
         )}

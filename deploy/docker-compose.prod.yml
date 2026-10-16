@@ -1,0 +1,87 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hackathon-os-postgres
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hackathon_os}
+      POSTGRES_USER: ${POSTGRES_USER:-hackathon}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Database password required}
+      TZ: UTC
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  backend:
+    image: hackathon-os-backend:latest
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    container_name: hackathon-os-backend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+    env_file:
+      - ./backend.env
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-hackathon_os}?options=-c%20TimeZone=UTC
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-hackathon}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_UPLOAD_DIR: /app/uploads
+      APP_HACKATHONS_FILE: /app/config/hackathons.json
+      TZ: UTC
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/app/uploads
+      - ../config/hackathons.json:/app/config/hackathons.json:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: hackathon-os-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_HOST: ${API_HOST:?API_HOST required, e.g. api.example.com}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-admin@example.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+    networks:
+      - internal
+
+volumes:
+  postgres_data:
+  uploads_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
+    driver: bridge

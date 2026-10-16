@@ -75,7 +75,7 @@ export function TaskCard({ task, onClick, overlay }: TaskCardProps) {
               className={cn(
                 'r-chip px-2 py-0.5 text-xs font-semibold',
                 getTagColor(tag),
-                isBlocked && tag.toLowerCase() === 'blocked' && 'bg-coral-600 text-white'
+                isBlocked && tag.toLowerCase() === 'blocked' && 'bg-danger text-on-danger'
               )}
             >
               {tag}

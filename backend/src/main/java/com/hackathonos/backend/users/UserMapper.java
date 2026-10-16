@@ -3,7 +3,9 @@ package com.hackathonos.backend.users;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hackathonos.backend.users.dto.ApiKeyDto;
+import com.hackathonos.backend.users.dto.UserAiKeySummaryDto;
 import com.hackathonos.backend.users.dto.UserDetailDto;
+import com.hackathonos.backend.users.dto.UserPreferenceDto;
 import com.hackathonos.backend.users.dto.UserSettingsDto;
 import org.springframework.stereotype.Component;
 
@@ -31,16 +33,50 @@ public class UserMapper {
         }
     }
 
+    public UserPreferenceDto toPreferenceDto(UserPreference pref) {
+        if (pref == null) {
+            return new UserPreferenceDto("system", "default", "system", "expanded", "12h", null, java.time.Instant.now());
+        }
+        return new UserPreferenceDto(
+                pref.getTheme(),
+                pref.getTextSize(),
+                pref.getMotion(),
+                pref.getSidebarDefault(),
+                pref.getTimeFormat(),
+                pref.getTimezone(),
+                pref.getUpdatedAt()
+        );
+    }
+
     public UserDetailDto toDetailDto(User user, UserSettings settings, long unreadCount) {
+        return toDetailDto(user, settings, null, unreadCount, null);
+    }
+
+    public UserDetailDto toDetailDto(User user, UserSettings settings, UserPreference preference, long unreadCount) {
+        return toDetailDto(user, settings, preference, unreadCount, null);
+    }
+
+    public UserDetailDto toDetailDto(User user, UserSettings settings, UserPreference preference, long unreadCount, UserAiKeySummaryDto aiKey) {
+        return toDetailDto(user, settings, preference, unreadCount, aiKey, false);
+    }
+
+    public UserDetailDto toDetailDto(User user, UserSettings settings, UserPreference preference, long unreadCount, UserAiKeySummaryDto aiKey, boolean isAdmin) {
         String effectiveName = (settings != null && settings.getDisplayName() != null && !settings.getDisplayName().isBlank())
                 ? settings.getDisplayName()
                 : user.getName();
 
         String firstName = computeFirstName(effectiveName);
         String initials = computeInitials(effectiveName);
-        String timezone = settings != null ? settings.getTimezone() : "UTC";
-        String theme = settings != null ? settings.getTheme() : "system";
+        String timezone = (preference != null && preference.getTimezone() != null)
+                ? preference.getTimezone()
+                : (settings != null ? settings.getTimezone() : "UTC");
+        String theme = (preference != null && preference.getTheme() != null)
+                ? preference.getTheme()
+                : (settings != null ? settings.getTheme() : "system");
         String plan = settings != null ? settings.getPlan() : "FREE";
+        com.hackathonos.backend.users.dto.UserSummaryDto.ResolvedAvatar resolved = com.hackathonos.backend.users.dto.UserSummaryDto.resolveAvatar(user);
+
+        UserAiKeySummaryDto effectiveAiKey = aiKey != null ? aiKey : new UserAiKeySummaryDto(false, null, null);
 
         return new UserDetailDto(
                 user.getId(),
@@ -49,7 +85,7 @@ public class UserMapper {
                 firstName,
                 initials,
                 user.getEmail(),
-                user.getAvatarUrl(),
+                resolved.avatarUrl(),
                 user.getProvider(),
                 timezone,
                 theme,
@@ -57,8 +93,8 @@ public class UserMapper {
                 user.getCreatedAt(),
                 unreadCount,
                 user.getUsername(),
-                user.getAvatarType(),
-                user.getAvatarPreset(),
+                resolved.avatarType(),
+                resolved.avatarPreset(),
                 parseJsonList(user.getRoleTags()),
                 user.getExperienceLevel(),
                 user.getGoal(),
@@ -69,9 +105,13 @@ public class UserMapper {
                 user.getTourPath(),
                 user.getTourVersion(),
                 user.getTourCompletedAt(),
-                parseJsonList(user.getHotspotsSeen())
+                parseJsonList(user.getHotspotsSeen()),
+                toPreferenceDto(preference),
+                effectiveAiKey,
+                isAdmin
         );
     }
+
 
     public UserSettingsDto toSettingsDto(User user, UserSettings settings, List<UserApiKey> apiKeys) {
         String displayName = (settings != null && settings.getDisplayName() != null) ? settings.getDisplayName() : user.getName();
@@ -84,15 +124,22 @@ public class UserMapper {
         boolean blocked = settings == null || settings.isNotifyBlocked();
         boolean email = settings != null && settings.isNotifyEmail();
 
+        List<String> userRoles = parseJsonList(user.getRoleTags());
+        List<String> userStack = parseJsonList(user.getTechStack());
+        String skillsStr = String.join(", ", userStack);
+        String handle = user.getUsername() != null && !user.getUsername().isBlank()
+                ? user.getUsername()
+                : (user.getLogin() != null ? user.getLogin() : "");
+
         UserSettingsDto.ProfileDto profile = new UserSettingsDto.ProfileDto(
                 displayName,
                 user.getEmail(),
                 user.getAvatarUrl(),
                 user.getProvider(),
-                user.getLogin() != null ? user.getLogin() : "",
-                List.of("Frontend", "Backend"),
-                "Full time",
-                "TypeScript, Java, React"
+                handle,
+                userRoles.isEmpty() ? List.of("Builder") : userRoles,
+                user.getExperienceLevel() != null ? user.getExperienceLevel() : "Explorer",
+                skillsStr.isEmpty() ? "Full-stack development" : skillsStr
         );
 
         UserSettingsDto.AppearanceDto appearance = new UserSettingsDto.AppearanceDto(

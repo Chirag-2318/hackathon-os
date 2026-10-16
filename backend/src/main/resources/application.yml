@@ -1,5 +1,15 @@
 server:
   port: 8080
+  forward-headers-strategy: framework
+  shutdown: graceful
+  compression:
+    enabled: true
+    mime-types: application/json,text/html,text/xml,text/plain,application/javascript,text/css
+    min-response-size: 1024
+  tomcat:
+    threads:
+      max: 200
+    max-connections: 8192
   servlet:
     session:
       cookie:
@@ -11,6 +21,7 @@ spring:
   config:
     import:
       - "optional:file:.env[.properties]"
+      - "optional:file:backend/.env[.properties]"
       - "optional:file:../.env[.properties]"
   application:
     name: hackathon-os-backend
@@ -20,11 +31,48 @@ spring:
     virtual:
       enabled: true
 
+  servlet:
+    multipart:
+      max-file-size: 12MB
+      max-request-size: 14MB
+
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_APP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          ssl:
+            protocols: TLSv1.2
+            trust: smtp.gmail.com
+          connectiontimeout: 10000
+          timeout: 10000
+          writetimeout: 10000
+
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  task:
+    scheduling:
+      pool:
+        size: 4
+
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/hackathon_os?options=-c%20TimeZone=UTC}
     username: ${SPRING_DATASOURCE_USERNAME:hackathon}
     password: ${SPRING_DATASOURCE_PASSWORD:hackathon}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 10000
+      idle-timeout: 600000
+      max-lifetime: 1800000
 
   jpa:
     hibernate:
@@ -74,12 +122,33 @@ springdoc:
     path: /v3/api-docs
 
 app:
+  public-url: ${APP_PUBLIC_URL:${APP_FRONTEND_URL:http://localhost:5173}}
+  api-public-url: ${API_PUBLIC_URL:${APP_BASE_URL:http://localhost:8080}}
+  cookie-domain: ${COOKIE_DOMAIN:}
+  support-email: ${SUPPORT_EMAIL:}
+  client-ip-header: ${CLIENT_IP_HEADER:x-vercel-forwarded-for}
   frontend-url: ${APP_FRONTEND_URL:http://localhost:5173}
   base-url: ${APP_BASE_URL:http://localhost:8080}
   upload-dir: ${APP_UPLOAD_DIR:./uploads}
   encryption-key: ${APP_ENCRYPTION_KEY:}
+  user-cap: ${APP_USER_CAP:1000}
+  admin-emails: ${ADMIN_EMAILS:}
+  max-rooms-per-user: ${APP_MAX_ROOMS_PER_USER:10}
+  max-upload-mb-per-user: ${APP_MAX_UPLOAD_MB_PER_USER:50}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  mail:
+    enabled: ${MAIL_ENABLED:false}
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    app-password: ${MAIL_APP_PASSWORD:}
+    from-address: ${MAIL_FROM_ADDRESS:${MAIL_USERNAME:}}
+    from-name: ${MAIL_FROM_NAME:Hackathon OS}
+    reply-to: ${MAIL_REPLY_TO:}
+    daily-limit: ${MAIL_DAILY_LIMIT:400}
+    dry-run: ${MAIL_DRY_RUN:false}
+    test-endpoint-enabled: ${APP_MAIL_TEST_ENDPOINT_ENABLED:false}
   github:
     token: ${APP_GITHUB_TOKEN:}
     use-fake: ${APP_GITHUB_USE_FAKE:false}
@@ -111,13 +180,3 @@ app:
       model: ${AI_MODEL_DEFAULT:${GROQ_MODEL:openai/gpt-oss-120b}}
       vision-model: ${AI_MODEL_DEFAULT:${GROQ_MODEL:openai/gpt-oss-120b}}
       max-tokens: 6000
-
----
-spring:
-  config:
-    activate:
-      on-profile: prod
-server:
-  error:
-    include-stacktrace: never
-    include-message: always

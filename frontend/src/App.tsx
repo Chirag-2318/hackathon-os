@@ -1,9 +1,14 @@
 import { QueryClient, QueryClientProvider, QueryCache } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { MotionConfig } from 'framer-motion';
 import { ThemeProvider } from '@/components/theme-provider';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppRouter } from '@/app/routes/router';
-import { useMotionModeSync } from '@/shared/motion/use-motion-mode';
+import { useMotionModeSync, useIsMotionReduced } from '@/shared/motion/use-motion-mode';
+import { Toaster } from '@/components/ui/sonner';
+import { OfflineBanner } from '@/components/OfflineBanner';
+import { SessionExpiryDialog } from '@/components/SessionExpiryDialog';
+import { SoundEffects } from '@/shared/sound/sound-effects';
 
 const lastErrorToastTimes = new Map<string, number>();
 
@@ -46,25 +51,33 @@ const queryClient = new QueryClient({
   },
 });
 
-function MotionSync() {
+function MotionTreeWrapper({ children }: { children: React.ReactNode }) {
   useMotionModeSync();
-  return null;
+  const isReduced = useIsMotionReduced();
+  return (
+    <MotionConfig reducedMotion={isReduced ? "always" : "never"}>
+      {children}
+    </MotionConfig>
+  );
 }
 
-import { Toaster } from '@/components/ui/sonner';
-import { OfflineBanner } from '@/components/OfflineBanner';
-import { SessionExpiryDialog } from '@/components/SessionExpiryDialog';
+if (import.meta.env.DEV) {
+  import('@/utils/contrast-checker').then((m) => m.initContrastChecker());
+}
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider delayDuration={300}>
-          <OfflineBanner />
-          <MotionSync />
-          <AppRouter />
-          <SessionExpiryDialog />
-          <Toaster position="bottom-right" />
+          <SoundEffects>
+            <MotionTreeWrapper>
+              <OfflineBanner />
+              <AppRouter />
+              <SessionExpiryDialog />
+              <Toaster position="bottom-right" />
+            </MotionTreeWrapper>
+          </SoundEffects>
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

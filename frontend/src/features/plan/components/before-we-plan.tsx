@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { FileText, Lightbulb, Sparkles, Upload, Loader2, ArrowRight, Edit3 } from 'lucide-react';
 import { toast } from 'sonner';
+import { BriefFileUpload } from '@/features/brief/components/brief-file-upload';
 
 interface BeforeWePlanProps {
   roomId: string;
@@ -32,6 +33,10 @@ export function BeforeWePlan({ roomId, contextSummary, initialNotes = '', onPlan
   useEffect(() => {
     setNotes(initialNotes || '');
   }, [initialNotes]);
+
+  useEffect(() => {
+    planService.prepareStep(roomId, 1).catch(() => {});
+  }, [roomId]);
 
   const handleNotesChange = (val: string) => {
     setNotes(val);
@@ -118,7 +123,7 @@ export function BeforeWePlan({ roomId, contextSummary, initialNotes = '', onPlan
           <Sparkles className="size-3.5" />
           <span>Plan Gate</span>
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Before we plan</h1>
+        <h1 className="text-3xl sm:text-4xl font-display font-normal tracking-tight text-foreground leading-none">Before we plan</h1>
         <p className="text-sm text-muted-foreground">
           Confirm the project context and feed the AI planner any constraints before unlocking the 5-step blueprint.
         </p>
@@ -135,7 +140,7 @@ export function BeforeWePlan({ roomId, contextSummary, initialNotes = '', onPlan
                   <FileText className="size-4 text-primary" /> Brief Statement
                 </span>
                 {!contextSummary?.briefConfirmed && (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono uppercase tracking-wider font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
                     unconfirmed
                   </span>
                 )}
@@ -285,20 +290,31 @@ export function BeforeWePlan({ roomId, contextSummary, initialNotes = '', onPlan
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-xl cursor-pointer hover:bg-muted/30">
-                <input
-                  type="file"
-                  accept=".pdf,.md,.txt,image/png,image/jpeg,image/webp"
-                  multiple
-                  onChange={handleUpdateFiles}
-                  disabled={isUpdatingBrief}
-                  className="hidden"
-                />
-                <Upload className="size-6 text-muted-foreground mb-2" />
-                <span className="text-xs font-semibold text-foreground">Select .md, .txt, .pdf or images</span>
-                <span className="text-[11px] text-muted-foreground mt-0.5">Max 10MB per file</span>
-              </label>
-              {updateError && <span className="text-xs text-red-500">{updateError}</span>}
+              <BriefFileUpload
+                roomId={roomId}
+                isLeader={true}
+                onSuccess={() => {
+                  toast.success('Brief file updated');
+                  queryClient.invalidateQueries({ queryKey: ['plan', roomId] });
+                  queryClient.invalidateQueries({ queryKey: ['brief', roomId] });
+                  setUpdateDialogOpen(false);
+                }}
+                onExtractWithAi={async (text) => {
+                  setIsUpdatingBrief(true);
+                  try {
+                    await briefService.extractBrief(roomId, text);
+                    toast.success('Brief updated with AI');
+                    queryClient.invalidateQueries({ queryKey: ['plan', roomId] });
+                    queryClient.invalidateQueries({ queryKey: ['brief', roomId] });
+                    setUpdateDialogOpen(false);
+                  } catch (err: any) {
+                    toast.error(err.message || 'AI extraction failed');
+                  } finally {
+                    setIsUpdatingBrief(false);
+                  }
+                }}
+                onPasteTextInstead={() => setUpdateTab('text')}
+              />
             </div>
           )}
         </DialogContent>

@@ -15,7 +15,7 @@ public class TaskComment {
     @Column(name = "task_id", nullable = false)
     private UUID taskId;
 
-    @Column(name = "author_id", nullable = false)
+    @Column(name = "author_id")
     private UUID authorId;
 
     @Column(nullable = false, columnDefinition = "TEXT")

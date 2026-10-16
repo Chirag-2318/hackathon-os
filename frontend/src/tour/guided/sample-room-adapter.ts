@@ -7,6 +7,7 @@ import {
   RULES_CHECKLIST,
   SAMPLE_IDEAS,
   PLAN_STEPS,
+  SAMPLE_ROOM_PHASES,
   SAMPLE_KANBAN_TASKS,
   SAMPLE_TECH_BRANCHES,
   SAMPLE_APIS,
@@ -113,13 +114,14 @@ export function handleSampleRoomRequest<T>(path: string, options: RequestInit = 
         status: t.col === 'in_progress' ? 'inprogress' : t.col,
         assignee: t.assignee,
       })),
-      phases: [
-        { id: 'p1', name: 'Phase 1: Foundation', startPct: 0, endPct: 25 },
-        { id: 'p2', name: 'Phase 2: Core Engine', startPct: 25, endPct: 65 },
-        { id: 'p3', name: 'Phase 3: Polish & Deploy', startPct: 65, endPct: 100 },
-      ],
+      phases: SAMPLE_ROOM_PHASES,
     };
     return Promise.resolve(room as unknown as T);
+  }
+
+  // 1b. Phases endpoint
+  if (p.includes('/phases')) {
+    return Promise.resolve(SAMPLE_ROOM_PHASES as unknown as T);
   }
 
   // 2. Brief

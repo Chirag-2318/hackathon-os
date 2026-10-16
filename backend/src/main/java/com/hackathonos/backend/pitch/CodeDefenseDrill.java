@@ -15,10 +15,10 @@ public class CodeDefenseDrill {
     @Column(name = "room_id", nullable = false)
     private UUID roomId;
 
-    @Column(name = "module", nullable = false, length = 120)
+    @Column(name = "module", nullable = false, columnDefinition = "text")
     private String module;
 
-    @Column(name = "question", nullable = false, length = 500)
+    @Column(name = "question", nullable = false, columnDefinition = "text")
     private String question;
 
     @Column(name = "owner_id")

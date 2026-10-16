@@ -364,8 +364,8 @@ public class MentorService {
     }
 
     private MentorDtos.MentorLinkDto toLinkDto(MentorLink l) {
-        String base = appProperties.getFrontendUrl();
-        if (base == null || base.isBlank()) base = "http://localhost:5173";
+        String base = appProperties.getPublicUrl();
+        if (base == null || base.isBlank()) base = "";
         if (base.endsWith("/")) base = base.substring(0, base.length() - 1);
         String url = base + "/mentor/" + l.getToken();
 

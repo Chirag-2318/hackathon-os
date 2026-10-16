@@ -2,10 +2,58 @@
  * briefService.ts — Brief CRUD, intake parsing, and confirmation.
  */
 import { apiFetch } from '@/api/client';
-import { ApiError } from '@/lib/apiClient';
-import type { Brief, BriefFields, RubricCriterion } from './types';
+import { ApiError, API_BASE_URL } from '@/lib/apiClient';
+import type { Brief, BriefFields, RubricCriterion, FileIntakeResult } from './types';
 
 export const briefService = {
+  async intakeFile(
+    roomId: string,
+    file: File,
+    extract: boolean = false,
+    onProgress?: (pct: number) => void
+  ): Promise<FileIntakeResult> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const baseUrl = API_BASE_URL;
+      xhr.open('POST', `${baseUrl}/api/v1/rooms/${roomId}/brief/intake/file?extract=${extract}`);
+      xhr.withCredentials = true;
+
+      if (onProgress && xhr.upload) {
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            onProgress(percent);
+          }
+        };
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch {
+            reject(new ApiError(xhr.status, 'Invalid server response', 'INVALID_RESPONSE'));
+          }
+        } else {
+          try {
+            const err = JSON.parse(xhr.responseText);
+            reject(new ApiError(xhr.status, err.message || `Upload failed with status ${xhr.status}`, err.code || 'UPLOAD_FAILED'));
+          } catch {
+            reject(new ApiError(xhr.status, `Upload failed with status ${xhr.status}`, 'UPLOAD_FAILED'));
+          }
+        }
+      };
+
+      xhr.onerror = () => {
+        reject(new ApiError(0, 'Network error during upload', 'NETWORK_ERROR'));
+      };
+
+      const formData = new FormData();
+      formData.append('file', file);
+      xhr.send(formData);
+    });
+  },
+
   async getBrief(roomId: string): Promise<Brief | null> {
     return apiFetch<Brief>(`/api/v1/rooms/${roomId}/brief`);
   },
@@ -49,7 +97,7 @@ export const briefService = {
   async setPdfSource(roomId: string, file: File, onProgress?: (pct: number) => void): Promise<Brief> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+      const baseUrl = API_BASE_URL;
       xhr.open('POST', `${baseUrl}/api/v1/rooms/${roomId}/brief/source/pdf`);
       xhr.withCredentials = true;
 
@@ -90,7 +138,7 @@ export const briefService = {
   async setImagesSource(roomId: string, files: File[], onProgress?: (pct: number) => void): Promise<Brief> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+      const baseUrl = API_BASE_URL;
       xhr.open('POST', `${baseUrl}/api/v1/rooms/${roomId}/brief/source/images`);
       xhr.withCredentials = true;
 

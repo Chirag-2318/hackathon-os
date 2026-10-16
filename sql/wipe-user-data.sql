@@ -2,64 +2,97 @@
 -- HACKATHON OS - ADMIN CLEANUP SCRIPT: WIPE USER-CREATED DATA
 -- ==============================================================================
 -- PURPOSE:
--- Safely clears all user-generated runtime data (rooms, team members, ideas,
--- sprint tasks, documents, notifications, live events, submissions, and uploads)
--- while preserving the core schema, Flyway migration history (flyway_schema_history),
--- and catalog seeds (event_templates, etc.).
---
--- USAGE:
--- Execute against PostgreSQL database using psql or Docker:
---   docker exec -i hackathon-os-postgres psql -U hackathon -d hackathon_os < sql/wipe-user-data.sql
+-- Safely clears all user-generated runtime data (users, rooms, team members,
+-- ideas, sprint tasks, documents, notifications, live events, submissions,
+-- GitHub integrations, and uploads) while preserving the core schema,
+-- Flyway migration history (flyway_schema_history), and catalog seeds
+-- (event_templates, playbooks, tools).
 -- ==============================================================================
 
 BEGIN;
 
--- 1. Live sync and telemetry
-TRUNCATE TABLE room_events CASCADE;
-TRUNCATE TABLE activity_logs CASCADE;
-TRUNCATE TABLE notifications CASCADE;
-
--- 2. Tasks and Collaboration
-TRUNCATE TABLE task_dependencies CASCADE;
-TRUNCATE TABLE task_acceptance_criteria CASCADE;
-TRUNCATE TABLE task_subtasks CASCADE;
-TRUNCATE TABLE task_comments CASCADE;
-TRUNCATE TABLE tasks CASCADE;
-
--- 3. Documentation & Comments
-TRUNCATE TABLE doc_comments CASCADE;
-TRUNCATE TABLE doc_versions CASCADE;
-TRUNCATE TABLE docs CASCADE;
-
--- 4. Ideation, MVP, and Planning
-TRUNCATE TABLE ideas CASCADE;
-TRUNCATE TABLE mvp_flow_steps CASCADE;
-TRUNCATE TABLE mvp_ledger_rows CASCADE;
-TRUNCATE TABLE mvp_cut_items CASCADE;
-TRUNCATE TABLE mvp_state CASCADE;
-TRUNCATE TABLE plan_steps CASCADE;
-TRUNCATE TABLE plan_phases CASCADE;
-
--- 5. Presentation, Pitch Kit & Submissions
-TRUNCATE TABLE pitch_qa CASCADE;
-TRUNCATE TABLE pitch_slides CASCADE;
-TRUNCATE TABLE pitch_decks CASCADE;
-TRUNCATE TABLE submissions CASCADE;
-
--- 6. Briefs & Checkpoints
-TRUNCATE TABLE brief_rubric_items CASCADE;
-TRUNCATE TABLE briefs CASCADE;
-TRUNCATE TABLE room_checkpoints CASCADE;
-
--- 7. GitHub & Integrations
-TRUNCATE TABLE github_branches CASCADE;
-TRUNCATE TABLE github_repos CASCADE;
-TRUNCATE TABLE user_oauth_tokens CASCADE;
-TRUNCATE TABLE uploaded_files CASCADE;
-
--- 8. Rooms & Memberships
-TRUNCATE TABLE room_member_skills CASCADE;
-TRUNCATE TABLE room_members CASCADE;
-TRUNCATE TABLE rooms CASCADE;
+TRUNCATE TABLE
+  activity_events,
+  api_endpoints,
+  api_externals,
+  api_mock_settings,
+  brief_rubric_items,
+  briefs,
+  code_defense_drills,
+  crowd_rows,
+  data_exports,
+  demo_insurance_items,
+  demo_media,
+  demo_sections,
+  demo_shots,
+  diagrams,
+  doc_comments,
+  doc_versions,
+  docs,
+  github_attention_dismissals,
+  github_branch_tasks,
+  github_branches,
+  github_commits,
+  github_frozen_demo,
+  github_health_items,
+  github_repos,
+  hackathon_suggestions,
+  hackathons,
+  idea_links,
+  idea_notes,
+  ideas,
+  invites,
+  mentor_links,
+  mentor_questions,
+  mvp_cut_items,
+  mvp_flow_steps,
+  mvp_ledger_rows,
+  mvp_state,
+  notifications,
+  pitch_deck_sources,
+  pitch_decks,
+  pitch_qa,
+  pitch_rehearsals,
+  pitch_roles,
+  pitch_scripts,
+  pitch_slide_coverage,
+  pitch_slides,
+  plan_phases,
+  plan_step_prompts,
+  plan_steps,
+  portfolio_settings,
+  portfolio_visibility,
+  prep_items,
+  readiness_simulations,
+  readiness_snapshots,
+  reminder_log,
+  retro_awards,
+  retro_items,
+  retros,
+  room_checkpoints,
+  room_events,
+  room_invitations,
+  room_member_skills,
+  room_members,
+  rooms,
+  schedule_events,
+  speed_mode_captures,
+  submission_checklist_items,
+  submission_links,
+  submissions,
+  subtasks,
+  task_acceptance_items,
+  task_comments,
+  task_dependencies,
+  task_history,
+  task_labels,
+  tasks,
+  team_charter_responses,
+  uploaded_files,
+  user_api_keys,
+  user_oauth_tokens,
+  user_settings,
+  users
+CASCADE;
 
 COMMIT;

@@ -12,6 +12,7 @@ import { InviteDialogOverlay } from './invite-dialog';
 import { CreateRoomDialogOverlay } from './create-room-dialog';
 import { JoinCodeDialogOverlay } from './join-code-dialog';
 import { KeyboardShortcutsModal } from '@/tour/shortcuts/KeyboardShortcutsModal';
+import { AiKeyDialog, AiKeyFirstRunChecker } from '@/features/ai-gate';
 
 const SpotlightTour = lazy(() =>
   import('@/tour/spotlight').then((m) => ({ default: m.SpotlightTour }))
@@ -40,6 +41,8 @@ export function GlobalOverlays() {
         <SpotlightTour />
       </Suspense>
       <KeyboardShortcutsModal />
+      <AiKeyDialog />
+      <AiKeyFirstRunChecker />
     </>
   );
 }

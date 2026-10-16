@@ -62,6 +62,13 @@ public class SubmissionDtos {
             String preview
     ) {}
 
+    public record LeaderInfoDto(
+            UUID id,
+            String username,
+            String name,
+            String avatarUrl
+    ) {}
+
     public record SubmissionResponse(
             String status, // "draft", "verified", "submitted"
             DeadlineInfoDto deadline,
@@ -81,8 +88,34 @@ public class SubmissionDtos {
             String deckUrl,
             String demoUrl,
             String liveUrl,
-            String repoUrl
+            String repoUrl,
+            Instant submittedAt,
+            LeaderInfoDto leader
     ) {
+        public SubmissionResponse(
+                String status,
+                DeadlineInfoDto deadline,
+                List<String> requirements,
+                List<FormFieldDto> formFields,
+                SubmissionDraftDto draft,
+                List<ChecklistItemDto> checklist,
+                List<ChecklistItemDto> items,
+                List<SubmissionLinkDto> links,
+                List<LinkCheckRowDto> linkCheck,
+                JudgeViewDto judgeView,
+                boolean canVerify,
+                List<String> blockers,
+                boolean lateEdit,
+                Instant serverNow,
+                boolean isLeader,
+                String deckUrl,
+                String demoUrl,
+                String liveUrl,
+                String repoUrl
+        ) {
+            this(status, deadline, requirements, formFields, draft, checklist, items, links, linkCheck, judgeView, canVerify, blockers, lateEdit, serverNow, isLeader, deckUrl, demoUrl, liveUrl, repoUrl, null, null);
+        }
+
         public SubmissionResponse(
                 String status,
                 DeadlineInfoDto deadline,
@@ -99,7 +132,7 @@ public class SubmissionDtos {
                 boolean lateEdit,
                 Instant serverNow
         ) {
-            this(status, deadline, requirements, formFields, draft, checklist, items, links, linkCheck, judgeView, canVerify, blockers, lateEdit, serverNow, true, null, null, null, null);
+            this(status, deadline, requirements, formFields, draft, checklist, items, links, linkCheck, judgeView, canVerify, blockers, lateEdit, serverNow, true, null, null, null, null, null, null);
         }
     }
 

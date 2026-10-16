@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Link2, FileText, X, Globe, Plus, CornerDownLeft } from 'lucide-react';
+import { Link2, FileText, X, Globe, Plus, CornerDownLeft, VenetianMask } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import type { IdeaLink } from '@/services/types';
@@ -13,7 +13,7 @@ export interface IdeateComposerProps {
   isLocked: boolean;
   canPost: boolean;
   isPending: boolean;
-  onPost: (draft: { text: string; links: IdeaLink[]; notes: string[] }) => Promise<void> | void;
+  onPost: (draft: { text: string; links: IdeaLink[]; notes: string[]; anonymous?: boolean }) => Promise<void> | void;
 }
 
 export interface IdeateComposerRef {
@@ -27,6 +27,7 @@ export const IdeateComposer = forwardRef<IdeateComposerRef, IdeateComposerProps>
   const [text, setText] = useState('');
   const [links, setLinks] = useState<IdeaLink[]>([]);
   const [notes, setNotes] = useState<string[]>([]);
+  const [isAnonymous, setIsAnonymous] = useState(false);
 
   // Inline attachment controls
   const [showLinkInput, setShowLinkInput] = useState(false);
@@ -63,10 +64,11 @@ export const IdeateComposer = forwardRef<IdeateComposerRef, IdeateComposerProps>
 
     setJustPosted(true);
     try {
-      await onPost({ text: trimmed, links, notes });
+      await onPost({ text: trimmed, links, notes, anonymous: isAnonymous });
       setText('');
       setLinks([]);
       setNotes([]);
+      setIsAnonymous(false);
       setShowLinkInput(false);
       setShowNoteInput(false);
       if (textareaRef.current) {
@@ -125,7 +127,16 @@ export const IdeateComposer = forwardRef<IdeateComposerRef, IdeateComposerProps>
       <div className="flex gap-3 items-start">
         {/* User avatar on the left */}
         <div className="shrink-0 pt-0.5">
-          <UserAvatar user={currentUser} size={32} />
+          {isAnonymous ? (
+            <div
+              className="size-8 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-600 dark:text-amber-400 flex items-center justify-center shadow-xs"
+              title="Incognito idea: anonymous author"
+            >
+              <VenetianMask className="size-4" />
+            </div>
+          ) : (
+            <UserAvatar user={currentUser} size={32} />
+          )}
         </div>
 
         {/* Main composer body */}
@@ -315,6 +326,24 @@ export const IdeateComposer = forwardRef<IdeateComposerRef, IdeateComposerProps>
               >
                 <FileText className="size-3.5" />
                 <span>Add note</span>
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsAnonymous((prev) => !prev)}
+                disabled={isLocked || !canPost}
+                className={cn(
+                  "h-7 px-2 text-xs gap-1 transition-colors cursor-pointer",
+                  isAnonymous
+                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 font-medium"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                title={isAnonymous ? "Incognito active: Idea will be posted anonymously without tracking" : "Click to post idea anonymously"}
+              >
+                <VenetianMask className="size-3.5" />
+                <span>{isAnonymous ? "Incognito ON" : "Incognito"}</span>
               </Button>
             </div>
 

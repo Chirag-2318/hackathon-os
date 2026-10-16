@@ -36,4 +36,14 @@ public class DiagramDtos {
             String kind,
             String mermaidSource
     ) {}
+
+    public record FixDiagramRequest(
+            String code,
+            String error
+    ) {}
+
+    public record FixDiagramResponse(
+            String fixedCode,
+            boolean diffAvailable
+    ) {}
 }
