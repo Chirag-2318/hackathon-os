@@ -499,9 +499,10 @@ export function LiveIndicator({
             {onlineMembers.slice(0, 3).map((m: any, idx: number) => (
               <span key={m.id || idx} className="relative inline-block ring-2 ring-surface rounded-full">
                 <UserAvatar
-                  displayName={m.name || m.displayName || 'Member'}
-                  avatarUrl={m.avatarUrl}
-                  avatarColor={m.avatarColor}
+                  user={{
+                    displayName: m.name || m.displayName || 'Member',
+                    avatarUrl: m.avatarUrl,
+                  }}
                   className="w-4 h-4 text-[8px]"
                 />
               </span>

@@ -64,6 +64,14 @@ export function useRoomEvents(roomId: string | undefined, currentUserId?: string
           queryClient.invalidateQueries({ queryKey: ['board', roomId] });
           queryClient.invalidateQueries({ queryKey: ['comments', roomId] });
           break;
+        case 'pitchkit':
+          queryClient.invalidateQueries({ queryKey: ['pitchkit-readiness', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['pitchkit-settings', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['demo-assets', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['demo-ladder', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['demo-preflight', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['room-overview', roomId] });
+          break;
         default:
           queryClient.invalidateQueries({ queryKey: ['room-overview', roomId] });
           queryClient.invalidateQueries({ queryKey: ['nav-badges', roomId] });
@@ -114,6 +122,8 @@ export function useRoomEvents(roomId: string | undefined, currentUserId?: string
           scheduleInvalidation('docs');
         } else if (evType.includes('COMMENT')) {
           scheduleInvalidation('comments');
+        } else if (evType.includes('PITCH') || evType.includes('DEMO')) {
+          scheduleInvalidation('pitchkit');
         } else {
           scheduleInvalidation('default');
         }

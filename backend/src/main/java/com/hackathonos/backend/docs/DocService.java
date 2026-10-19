@@ -241,6 +241,7 @@ The following items are intentionally cut from the initial hackathon sprint to p
     private final DocHealthChecker healthChecker;
     private final com.hackathonos.backend.events.RoomEventService roomEventService;
     private final AiService aiService;
+    private final org.springframework.beans.factory.ObjectProvider<com.hackathonos.backend.pitchkit.QnaService> qnaServiceProvider;
 
     public DocService(
             DocRepository docRepository,
@@ -251,7 +252,8 @@ The following items are intentionally cut from the initial hackathon sprint to p
             ActivityLogger activityLogger,
             DocHealthChecker healthChecker,
             com.hackathonos.backend.events.RoomEventService roomEventService,
-            AiService aiService
+            AiService aiService,
+            org.springframework.beans.factory.ObjectProvider<com.hackathonos.backend.pitchkit.QnaService> qnaServiceProvider
     ) {
         this.docRepository = docRepository;
         this.versionRepository = versionRepository;
@@ -262,6 +264,7 @@ The following items are intentionally cut from the initial hackathon sprint to p
         this.healthChecker = healthChecker;
         this.roomEventService = roomEventService;
         this.aiService = aiService;
+        this.qnaServiceProvider = qnaServiceProvider;
     }
 
     /**
@@ -434,6 +437,15 @@ The following items are intentionally cut from the initial hackathon sprint to p
 
         activityLogger.log(room, user, "DOC_EDITED", "edited " + fileName);
         roomEventService.recordEvent(roomId, "doc.edited", "doc", doc.getId().toString(), user.getId());
+
+        if ("QNA.md".equalsIgnoreCase(fileName)) {
+            try {
+                qnaServiceProvider.ifAvailable(qs -> qs.syncFromQnaDoc(roomId, user));
+            } catch (Exception ex) {
+                log.warn("Failed to sync QNA items after doc update: {}", ex.getMessage());
+            }
+        }
+
         return getDocByFileName(roomId, fileName, user);
     }
 
@@ -476,6 +488,15 @@ The following items are intentionally cut from the initial hackathon sprint to p
         docRepository.save(doc);
 
         activityLogger.log(room, user, "DOC_RESTORED", "restored " + fileName + " to v" + version);
+
+        if ("QNA.md".equalsIgnoreCase(fileName)) {
+            try {
+                qnaServiceProvider.ifAvailable(qs -> qs.syncFromQnaDoc(roomId, user));
+            } catch (Exception ex) {
+                log.warn("Failed to sync QNA items after doc restore: {}", ex.getMessage());
+            }
+        }
+
         return getDocByFileName(roomId, fileName, user);
     }
 

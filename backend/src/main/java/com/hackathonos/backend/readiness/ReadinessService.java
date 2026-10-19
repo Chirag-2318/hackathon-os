@@ -67,6 +67,9 @@ public class ReadinessService {
     private final AiService aiService;
     private final ObjectMapper objectMapper;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.pitchkit.PitchKitReadinessService pitchKitReadinessService;
+
     public ReadinessService(
             ReadinessSnapshotRepository snapshotRepository,
             ReadinessSimulationRepository simulationRepository,
@@ -328,17 +331,32 @@ public class ReadinessService {
     }
 
     private List<ReadinessCalculator.ReadinessItem> calculateDemoItems(UUID roomId) {
+        if (pitchKitReadinessService != null) {
+            try {
+                com.hackathonos.backend.pitchkit.PitchSettingsDtos.PitchKitReadinessResponse res =
+                        pitchKitReadinessService.getReadiness(roomId, null);
+                return res.items().stream()
+                        .map(it -> new ReadinessCalculator.ReadinessItem(
+                                it.label(),
+                                "READY".equals(it.status()),
+                                "/pitch-kit" + (it.route() != null && it.route().startsWith("?") ? it.route() : "")
+                        ))
+                        .toList();
+            } catch (Exception ex) {
+                // fallback to legacy calculation below if error
+            }
+        }
         List<ReadinessCalculator.ReadinessItem> list = new ArrayList<>();
         long rehearsalCount = rehearsalRepository.countByRoomId(roomId);
-        list.add(new ReadinessCalculator.ReadinessItem("Rehearsals reach target (3 runs)", rehearsalCount >= 3, "/pitch/rehearse"));
+        list.add(new ReadinessCalculator.ReadinessItem("Rehearsals reach target (3 runs)", rehearsalCount >= 3, "/pitch-kit?tab=pitch"));
 
         Optional<DemoMedia> media = mediaRepository.findByRoomId(roomId);
         boolean hasFallback = media.map(m -> m.getFallbackUrl() != null && !m.getFallbackUrl().isBlank()).orElse(false);
-        list.add(new ReadinessCalculator.ReadinessItem("Fallback video recorded and linked", hasFallback, "/demo"));
+        list.add(new ReadinessCalculator.ReadinessItem("Fallback video recorded and linked", hasFallback, "/pitch-kit?tab=demo"));
 
         List<DemoInsuranceItem> insurance = insuranceRepository.findByRoomIdOrderByLabelAsc(roomId);
         boolean insuranceDone = !insurance.isEmpty() && insurance.stream().allMatch(DemoInsuranceItem::isDone);
-        list.add(new ReadinessCalculator.ReadinessItem("Demo insurance checklist completed", insuranceDone, "/demo"));
+        list.add(new ReadinessCalculator.ReadinessItem("Demo insurance checklist completed", insuranceDone, "/pitch-kit?tab=demo"));
         return list;
     }
 

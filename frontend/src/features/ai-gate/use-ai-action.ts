@@ -4,12 +4,18 @@ import { toast } from 'sonner';
 import { useAuthStore } from '@/features/auth/useAuthStore';
 import { useAiKeyDialogStore } from './use-ai-key-dialog-store';
 
-export function useAiAction() {
+export function useAiAction(roomOrOptions?: { aiAllowed?: boolean } | boolean) {
   const user = useAuthStore((s) => s.user);
   const openDialog = useAiKeyDialogStore((s) => s.openDialog);
   const navigate = useNavigate();
 
+  const aiAllowed =
+    typeof roomOrOptions === 'boolean'
+      ? roomOrOptions
+      : (roomOrOptions?.aiAllowed ?? true);
+
   const hasKey = Boolean(user?.aiKey?.hasKey);
+  const isAvailable = hasKey && aiAllowed;
 
   const handleAiError = useCallback(
     (err: any) => {
@@ -46,6 +52,10 @@ export function useAiAction() {
   const guard = useCallback(
     <T,>(action: () => T | Promise<T>): (() => void) => {
       return () => {
+        if (!aiAllowed) {
+          toast.error("AI use is restricted by this room's event brief policy.");
+          return;
+        }
         if (!hasKey) {
           openDialog('needed', "You haven't added your API key yet.");
           return;
@@ -60,13 +70,20 @@ export function useAiAction() {
         }
       };
     },
-    [hasKey, openDialog, handleAiError]
+    [aiAllowed, hasKey, openDialog, handleAiError]
   );
 
   return {
     hasKey,
+    aiAllowed,
+    isAvailable,
     guard,
     handleAiError,
-    tooltip: !hasKey ? 'Add your Groq API key to use this' : undefined,
+    tooltip: !aiAllowed
+      ? 'AI is restricted by this room policy'
+      : !hasKey
+      ? 'Add your Groq API key to use this'
+      : undefined,
   };
 }
+

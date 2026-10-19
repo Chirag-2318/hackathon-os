@@ -386,12 +386,19 @@ public class AiService {
     }
 
     public String transcribeAudio(UUID userId, String filename, byte[] audioBytes) {
+        return transcribeAudio(userId, filename, audioBytes, null);
+    }
+
+    public String transcribeAudio(UUID userId, String filename, byte[] audioBytes, String promptHint) {
         ResolvedUserKey resolved = resolveUserAndKey(userId);
         String sttUrl = properties.getSttBaseUrl().replaceAll("/+$", "") + "/audio/transcriptions";
 
         RestClient sttClient = RestClient.builder().build();
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("model", properties.getSttModel());
+        if (promptHint != null && !promptHint.isBlank()) {
+            body.add("prompt", promptHint);
+        }
 
         ByteArrayResource resource = new ByteArrayResource(audioBytes) {
             @Override

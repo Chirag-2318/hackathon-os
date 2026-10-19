@@ -19,8 +19,8 @@ export function Reveal({
   className = '',
   children,
 }: RevealProps) {
-  const { ref, inView } = useInViewOnce<HTMLElement>();
-  const Tag: ElementType = as;
+  const { ref, inView } = useInViewOnce<any>();
+  const Tag: any = as;
 
   return (
     <Tag

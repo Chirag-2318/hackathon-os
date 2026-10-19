@@ -6,11 +6,27 @@ import { SegmentedTimeline } from '@/shared/ui';
 import { cn } from '@/lib/utils';
 
 export interface PlaybookCardProps {
-  playbook: PlaybookDetail;
-  onClick: () => void;
+  playbook?: PlaybookDetail;
+  onClick?: () => void;
+  id?: string;
+  slug?: string;
+  title?: string;
+  eventType?: string;
+  teamSize?: number | null;
+  phases?: any;
 }
 
-export function PlaybookCard({ playbook, onClick }: PlaybookCardProps) {
+export function PlaybookCard(props: PlaybookCardProps) {
+  const { onClick } = props;
+  const playbook = props.playbook || ({
+    id: props.id || '',
+    slug: props.slug || '',
+    title: props.title || '',
+    eventType: props.eventType || '',
+    teamSize: props.teamSize ?? null,
+    phases: props.phases || [],
+  } as unknown as PlaybookDetail);
+
   const icon = getPlaybookIcon(playbook.eventType || playbook.title);
   const teamLabel =
     playbook.teamSizeLabel ||

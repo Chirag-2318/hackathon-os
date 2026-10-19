@@ -73,6 +73,9 @@ const PitchPage = lazy(() => import('@/features/pitch/pitch-page').then((m) => (
 const DemoPage = lazy(() => import('@/features/demo/demo-page').then((m) => ({ default: m.DemoPage })));
 const DeckPage = lazy(() => import('@/features/deck/deck-page').then((m) => ({ default: m.DeckPage })));
 const PitchKitPage = lazy(() => import('@/features/pitch-kit/pitch-kit-page').then((m) => ({ default: m.PitchKitPage })));
+const RehearsalResultPage = lazy(() =>
+  import('@/features/pitch-kit/rehearsal-result-page').then((m) => ({ default: m.RehearsalResultPage }))
+);
 const SubmissionPage = lazy(() =>
   import('@/features/submission/submission-page').then((m) => ({ default: m.SubmissionPage }))
 );
@@ -351,6 +354,17 @@ const router = createBrowserRouter([
     ),
   },
 
+  {
+    path: '/present/pitch-kit/rehearsals/:rehearsalId',
+    element: (
+      <ProtectedRoute>
+        <Suspense fallback={<PageSuspenseFallback />}>
+          <RehearsalResultPage />
+        </Suspense>
+      </ProtectedRoute>
+    ),
+  },
+
   // ── Authenticated routes (with shell) ─────────────────────────
   {
     path: '/app',
@@ -428,6 +442,7 @@ const router = createBrowserRouter([
       // ── PRESENT group: new canonical routes ──
       { path: 'deck', element: <DeckPage /> },
       { path: 'pitch-kit', element: <PitchKitPage /> },
+      { path: 'pitch-kit/rehearsals/:rehearsalId', element: <RehearsalResultPage /> },
       { path: 'submission', element: <SubmissionPage /> },
       // ── Legacy redirects (pages kept but unrouted) ──
       { path: 'pitch', element: <Navigate to={`deck`} replace /> },

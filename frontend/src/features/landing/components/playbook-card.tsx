@@ -11,11 +11,24 @@ const RADIUS = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 interface PlaybookCardProps {
-  playbook: Playbook;
+  playbook?: Playbook;
   index?: number;
+  id?: string;
+  slug?: string;
+  title?: string;
+  eventType?: string;
+  teamSize?: any;
+  phases?: any;
 }
 
-export function PlaybookCard({ playbook, index = 0 }: PlaybookCardProps) {
+export function PlaybookCard(props: PlaybookCardProps) {
+  const { index = 0 } = props;
+  const playbook: any = props.playbook || {
+    id: props.id || '',
+    slug: props.slug || '',
+    title: props.title || '',
+    hours: 36,
+  };
   const { ref, inView } = useInViewOnce<HTMLAnchorElement>();
   const fraction = playbook.hours != null ? Math.min(1, playbook.hours / PLAYBOOK_MAX_HOURS) : 0;
   const offset = CIRCUMFERENCE * (1 - fraction);

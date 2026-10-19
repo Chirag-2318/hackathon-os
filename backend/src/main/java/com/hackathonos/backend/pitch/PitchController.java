@@ -16,7 +16,7 @@ import java.util.UUID;
 /**
  * Controller for Pitch Deck, Rehearsals, Q&A defense, Deck Sources, and Pitch Scripts.
  */
-@RestController
+@RestController("legacyPitchController")
 @RequestMapping("/api/v1/rooms/{roomId}/pitch")
 public class PitchController {
 

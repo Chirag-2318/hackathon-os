@@ -294,7 +294,7 @@ export function BoardPage() {
     const updated: Task = {
       ...prevTask,
       status: newStatus,
-      position: targetIndex,
+      order: targetIndex,
       reviewState: willBeConfirmed ? 'CONFIRMED' : (newStatus === 'done' ? 'AWAITING' : 'NONE'),
       confirmedAt: willBeConfirmed ? new Date().toISOString() : prevTask.confirmedAt,
       confirmedBy: willBeConfirmed ? currentUserId : prevTask.confirmedBy,
