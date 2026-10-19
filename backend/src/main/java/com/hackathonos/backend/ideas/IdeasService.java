@@ -277,6 +277,7 @@ public class IdeasService {
      */
     @Transactional
     public IdeaDto approveIdea(UUID roomId, UUID ideaId, User user) {
+        roomRepository.findWithLockById(roomId);
         roomAccess.requireLeader(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
         if (room.isIdeateDone() || room.getBuildStartedAt() != null) {
@@ -285,6 +286,10 @@ public class IdeasService {
 
         Idea idea = ideaRepository.findByIdAndRoomId(ideaId, roomId)
                 .orElseThrow(() -> new NotFoundException("IDEA_NOT_FOUND", "Idea not found"));
+
+        if ("APPROVED".equalsIgnoreCase(idea.getStatus())) {
+            return loadFullIdeaDto(idea, user.getId());
+        }
 
         idea.setStatus("APPROVED");
         idea.setDecidedBy(user.getId());
@@ -307,6 +312,7 @@ public class IdeasService {
      */
     @Transactional
     public IdeaDto rejectIdea(UUID roomId, UUID ideaId, RejectIdeaRequest req, User user) {
+        roomRepository.findWithLockById(roomId);
         roomAccess.requireLeader(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
         if (room.isIdeateDone() || room.getBuildStartedAt() != null) {
@@ -374,12 +380,17 @@ public class IdeasService {
      */
     @Transactional
     public IdeaDto setPrimaryIdea(UUID roomId, UUID ideaId, User user) {
+        roomRepository.findWithLockById(roomId);
         roomAccess.requireLeader(roomId, user);
         Idea idea = ideaRepository.findByIdAndRoomId(ideaId, roomId)
                 .orElseThrow(() -> new NotFoundException("IDEA_NOT_FOUND", "Idea not found"));
 
         if (!"APPROVED".equalsIgnoreCase(idea.getStatus())) {
             throw new BadRequestException("NOT_APPROVED", "Only approved ideas can be set as primary");
+        }
+
+        if (idea.isPrimary()) {
+            return loadFullIdeaDto(idea, user.getId());
         }
 
         ideaRepository.clearPrimaryForRoom(roomId);

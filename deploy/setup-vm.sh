@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-echo "==> Starting Hackathon OS VM provisioning..."
+echo "==> Starting [brackit] VM provisioning..."
 
 # 1. Ensure root execution
 if [[ "${EUID}" -ne 0 ]]; then

@@ -66,6 +66,8 @@ interface JourneyGroupDef {
   items: JourneyItemDef[];
 }
 
+import { useTaskCounts } from '@/features/board/task-selectors';
+
 export function JourneyRail({
   roomId,
   currentSubPath,
@@ -84,6 +86,9 @@ export function JourneyRail({
   const navigate = useNavigate();
   const prefersReducedMotion = useReducedMotion();
   const storageKey = `hackathon_os_journey_expanded_${roomId}`;
+
+  const taskCounts = useTaskCounts(roomId);
+  const derivedOpenTasks = taskCounts.open;
 
   const stage = (roomData?.stage || 'brief').toLowerCase();
   const stageDone = roomData?.stageDone || {};
@@ -174,7 +179,7 @@ export function JourneyRail({
         icon: (p: any) => <BoardIcon {...p} />,
         badge: () => (
           <span className="px-1.5 py-0.2 rounded-full bg-surface border border-border text-[10px] font-mono font-semibold text-ink tabular-nums">
-            {openTasks}
+            {derivedOpenTasks}
           </span>
         ),
       },

@@ -75,7 +75,7 @@ class TaskServiceTest {
                 clockService, clock, branchTaskRepository, branchRepository
         );
 
-        testUser = new User("DEV", "dev@hackathonos.com", "Dev Lead", null, null, null);
+        testUser = new User("DEV", "dev@brackit.com", "Dev Lead", null, null, null);
         testUser.setId(userId);
 
         testRoom = new Room();

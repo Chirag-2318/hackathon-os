@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom';
+import { BRAND_NAME } from '@/shared/constants/copy';
 
 export function GoodbyePage() {
   return (
     <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4">
       <div className="bg-surface text-ink rounded-card p-8 max-w-md w-full text-center border border-border">
-        <div className="font-serif text-xs font-semibold text-ink-muted uppercase tracking-wider mb-2">
-          Hackathon OS
+        <div className="font-serif text-xs font-semibold text-ink-muted tracking-wider mb-2">
+          {BRAND_NAME}
         </div>
         <h1 className="font-serif text-2xl font-bold text-ink mb-3">
           Your account has been deleted.

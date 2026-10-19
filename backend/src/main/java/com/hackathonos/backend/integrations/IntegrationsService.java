@@ -218,7 +218,7 @@ public class IntegrationsService {
                 conn.setConnectTimeout(6000);
                 conn.setReadTimeout(6000);
                 conn.setRequestProperty("Authorization", "Bearer " + token);
-                conn.setRequestProperty("User-Agent", "HackathonOS-Server");
+                conn.setRequestProperty("User-Agent", "brackit-Server");
                 conn.setRequestProperty("Accept", "application/vnd.github+json");
                 if (conn.getResponseCode() == 200) {
                     try (var in = conn.getInputStream()) {
@@ -312,7 +312,7 @@ public class IntegrationsService {
             conn.setConnectTimeout(6000);
             conn.setReadTimeout(6000);
             conn.setRequestProperty("Authorization", "Bearer " + plainToken);
-            conn.setRequestProperty("User-Agent", "HackathonOS-Server");
+            conn.setRequestProperty("User-Agent", "brackit-Server");
             conn.setRequestProperty("Accept", "application/vnd.github+json");
 
             int responseCode = conn.getResponseCode();
@@ -351,7 +351,7 @@ public class IntegrationsService {
             String auth = Base64.getEncoder().encodeToString((clientId + ":" + clientSecret).getBytes(StandardCharsets.UTF_8));
             conn.setRequestProperty("Authorization", "Basic " + auth);
             conn.setRequestProperty("Accept", "application/vnd.github+json");
-            conn.setRequestProperty("User-Agent", "HackathonOS-Server");
+            conn.setRequestProperty("User-Agent", "brackit-Server");
 
             String body = "{\"access_token\":\"" + plainToken + "\"}";
             conn.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));

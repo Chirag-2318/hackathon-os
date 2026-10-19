@@ -3,6 +3,7 @@ package com.hackathonos.backend.mvp;
 import com.hackathonos.backend.activity.ActivityLogger;
 import com.hackathonos.backend.checkpoints.CheckpointService;
 import com.hackathonos.backend.common.error.BadRequestException;
+import com.hackathonos.backend.common.error.EntityConflictException;
 import com.hackathonos.backend.common.security.RoomAccess;
 import com.hackathonos.backend.mvp.dto.MvpDtos.*;
 import com.hackathonos.backend.rooms.Room;
@@ -10,6 +11,7 @@ import com.hackathonos.backend.tasks.Task;
 import com.hackathonos.backend.tasks.TaskRepository;
 import com.hackathonos.backend.users.User;
 import com.hackathonos.backend.users.UserRepository;
+import com.hackathonos.backend.users.dto.UserSummaryDto;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -246,6 +248,18 @@ public class MvpService {
     @Transactional
     public MvpStateResponseDto updateFullMvp(UUID roomId, User user, UpdateFullMvpRequest req) {
         if (req == null) return getMvp(roomId, user);
+        MvpState state = getOrCreateState(roomId);
+        if (req.version() != null && req.version() != state.getVersion()) {
+            UserSummaryDto lastEditor = state.getLastEditedBy() != null
+                    ? userRepository.findById(state.getLastEditedBy()).map(UserSummaryDto::from).orElse(null)
+                    : null;
+            MvpStateResponseDto latestDto = buildResponse(roomId, state);
+            throw new EntityConflictException("CHANGED", "MVP state was updated by another team member", state.getVersion(), lastEditor, state.getUpdatedAt(), latestDto);
+        }
+        state.setLastEditedBy(user.getId());
+        state.setUpdatedAt(clock.instant());
+        mvpStateRepository.save(state);
+
         if (req.identity() != null || req.wow() != null) {
             updatePitch(roomId, user, new UpdatePitchRequest(req.identity(), req.wow()));
         }

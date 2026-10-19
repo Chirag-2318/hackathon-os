@@ -281,43 +281,37 @@ export function BriefPage() {
 
       {/* Sticky Bottom Bar */}
       {brief?.hasSource && !brief.confirmed && (
-        <div className="fixed bottom-0 left-[232px] right-0 h-16 bg-card/95 backdrop-blur-md border-t border-border px-8 flex items-center justify-between z-20">
-          <div className="flex items-center gap-4">
-            <span className="text-xs font-semibold text-foreground">
-              {RULE_KEYS.filter((k) => confirmedChecks[k]).length} of 9 rules confirmed
-              {rubricList.length > 0 && rubricSum !== 100 && (
-                <span className="text-red-500 ml-2 font-normal">(Rubric weights sum to {rubricSum}%, must be 100%)</span>
-              )}
-              {!hasProblemStatement && (
-                <span className="text-amber-500 ml-2 font-normal">(Problem statement required)</span>
-              )}
+        <div className="sticky bottom-4 z-20 self-end w-full sm:w-fit max-w-[640px] mt-4 pb-[env(safe-area-inset-bottom,0px)]">
+          <div className="w-full flex items-center justify-between gap-4 px-4 py-2.5 rounded-[14px] bg-surface border border-border shadow-popover">
+            <span className="text-xs font-mono font-medium text-foreground whitespace-nowrap">
+              <span className="font-semibold">{RULE_KEYS.filter((k) => confirmedChecks[k]).length} of 9</span> confirmed
             </span>
 
             {hasDates && canEdit && (
-              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer ml-4">
+              <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={applyDates}
                   onChange={(e) => setApplyDates(e.target.checked)}
-                  className="rounded border-border"
+                  className="rounded border-border accent-primary size-3.5 cursor-pointer"
                 />
-                Use these dates for the room clock
+                <span className="whitespace-nowrap">Use these dates for the room clock</span>
               </label>
             )}
-          </div>
 
-          <div className="flex items-center gap-3">
-            {!isLeader && (
-              <span className="text-xs text-muted-foreground">Only the leader can confirm the brief</span>
-            )}
-            <Button
-              onClick={() => confirmBriefMutation.mutate()}
-              disabled={!canConfirm || confirmBriefMutation.isPending}
-              className="h-9 px-6 rounded-[12px] text-xs font-semibold"
-            >
-              {confirmBriefMutation.isPending ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : null}
-              Confirm brief
-            </Button>
+            <div className="flex items-center gap-2 shrink-0">
+              {!isLeader && (
+                <span className="text-[11px] text-muted-foreground whitespace-nowrap">Leader only</span>
+              )}
+              <Button
+                onClick={() => confirmBriefMutation.mutate()}
+                disabled={!canConfirm || confirmBriefMutation.isPending}
+                className="h-9 px-5 rounded-[10px] text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer shadow-xs whitespace-nowrap"
+              >
+                {confirmBriefMutation.isPending ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : null}
+                Confirm brief
+              </Button>
+            </div>
           </div>
         </div>
       )}

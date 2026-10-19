@@ -38,6 +38,7 @@ export interface Room {
   memberCount?: number;
   myRole?: string;
   isLeader?: boolean;
+  buildStartedAt?: string | null;
   memberPreview?: Array<{
     id: string;
     username?: string;
@@ -45,6 +46,12 @@ export interface Room {
     avatarUrl?: string;
   }>;
   nextStepLabel?: string | null;
+  nextStep?: {
+    label: string;
+    route: string;
+    reason?: string;
+    leaderOnly?: boolean;
+  } | null;
   attentionCount?: number;
 }
 

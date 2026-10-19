@@ -2,7 +2,7 @@
 
 ## Overview
 
-Hackathon OS relies on PostgreSQL 16+ as its single source of truth, managed via sequential, idempotent Flyway migrations (`V1` through `V9`). The database models multi-tenant hackathon workspaces with real-time planning, execution boards, GitHub synchronization, pitch decks, and submission verification.
+[brackit] relies on PostgreSQL 16+ as its single source of truth, managed via sequential, idempotent Flyway migrations (`V1` through `V9`). The database models multi-tenant hackathon workspaces with real-time planning, execution boards, GitHub synchronization, pitch decks, and submission verification.
 
 ---
 

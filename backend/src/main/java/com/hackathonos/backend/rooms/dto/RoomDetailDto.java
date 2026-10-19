@@ -31,7 +31,8 @@ public record RoomDetailDto(
         RoomProgressSummaryDto progressSummary,
         List<StageUnlockRuleDto> unlockRules,
         String workflowStage,
-        NextStepDto nextStep
+        NextStepDto nextStep,
+        List<com.hackathonos.backend.phases.dto.PhaseSummaryDto> phases
 ) {
     public record StageDone(boolean brief, boolean ideate, boolean plan) {}
 }

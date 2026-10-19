@@ -25,7 +25,6 @@ export interface BoardSwimlanesProps {
   onStatusChange: (taskId: string, newStatus: TaskStatus) => void;
   onAssignToMe: (taskId: string) => void;
   onToggleBlock: (taskId: string) => void;
-  onPointerDownDrag?: (e: React.PointerEvent, task: Task) => void;
 }
 
 export function BoardSwimlanes({
@@ -37,7 +36,6 @@ export function BoardSwimlanes({
   onStatusChange,
   onAssignToMe,
   onToggleBlock,
-  onPointerDownDrag,
 }: BoardSwimlanesProps) {
   const [collapsedLanes, setCollapsedLanes] = useState<Record<string, boolean>>({});
 
@@ -186,7 +184,6 @@ export function BoardSwimlanes({
                           onStatusChange={onStatusChange}
                           onAssignToMe={onAssignToMe}
                           onToggleBlock={onToggleBlock}
-                          onPointerDownDrag={onPointerDownDrag}
                         />
                       ))}
                       {colTasks.length === 0 && (

@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { SegmentedControl, SegmentedControlItem } from '@/components/primitives/segmented-control';
 import type { Task, BoardPhase } from '@/services/types';
 
+import { selectTaskCounts } from '../task-selectors';
+
 export interface BoardHeaderProps {
   currentPhaseName?: string;
   timeLeftText?: string;
@@ -18,6 +20,7 @@ export interface BoardHeaderProps {
   showControls?: boolean;
   isControlsCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  activeFilterCount?: number;
 }
 
 export function BoardHeader({
@@ -32,16 +35,18 @@ export function BoardHeader({
   showControls = true,
   isControlsCollapsed = false,
   onToggleCollapse,
+  activeFilterCount = 0,
 }: BoardHeaderProps) {
-  // Compute summary numbers
-  const openCount = tasks.filter(t => t.status !== 'done').length;
-  const blockedCount = tasks.filter(t => Boolean(t.flagged || (t as any).blockedReason)).length;
-  const unassignedCount = tasks.filter(t => !t.assigneeId).length;
-  const dueTodayCount = tasks.filter(t => {
-    if (!t.dueAt) return false;
-    const diff = new Date(t.dueAt).getTime() - Date.now();
-    return diff >= 0 && diff <= 24 * 3600 * 1000;
-  }).length;
+  // Compute summary numbers via task selector
+  const counts = React.useMemo(() => selectTaskCounts(tasks), [tasks]);
+  const openCount = counts.open;
+  const blockedCount = counts.blocked;
+  const unassignedCount = counts.unassigned;
+  const dueTodayCount = counts.dueToday;
+
+  const buttonText = isControlsCollapsed
+    ? (activeFilterCount > 0 ? `Filters (${activeFilterCount})` : 'Expand')
+    : 'Collapse';
 
   return (
     <div className="flex flex-col gap-2 shrink-0">
@@ -84,12 +89,12 @@ export function BoardHeader({
               size="sm"
               onClick={onToggleCollapse}
               className="h-9 px-3 rounded-full text-xs font-medium border-border hover:bg-muted text-muted-foreground hover:text-foreground flex items-center gap-1.5 cursor-pointer shadow-xs"
-              title={isControlsCollapsed ? 'Show filters & stats' : 'Collapse filters & stats'}
-              aria-label={isControlsCollapsed ? 'Show filters & stats' : 'Collapse filters & stats'}
+              title={buttonText}
+              aria-label={buttonText}
             >
               <SlidersHorizontal className="size-3.5" />
-              <span className="hidden sm:inline">{isControlsCollapsed ? 'Filters' : 'Collapse'}</span>
-              <ChevronDown className={cn("size-3.5 transition-transform duration-200", !isControlsCollapsed && "rotate-180")} />
+              <span>{buttonText}</span>
+              <ChevronDown className={cn("size-3.5 transition-transform duration-[180ms]", !isControlsCollapsed && "rotate-180")} />
             </Button>
           )}
 
@@ -107,9 +112,12 @@ export function BoardHeader({
         </div>
       </div>
 
-      {/* Summary chips line - only shown when showControls && !isControlsCollapsed */}
-      {showControls && !isControlsCollapsed && (
-        <div className="flex items-center gap-2 text-xs flex-wrap pb-1">
+      {/* Summary chips line - animates height over 180ms */}
+      {showControls && (
+        <div className={cn(
+          "transition-all duration-[180ms] ease-in-out overflow-hidden flex items-center gap-2 text-xs flex-wrap",
+          isControlsCollapsed ? "max-h-0 opacity-0 pointer-events-none pb-0" : "max-h-12 opacity-100 pb-1"
+        )}>
           {openCount > 0 && (
             <button
               onClick={() => onSelectSummaryFilter(activeFilter === 'open' ? null : 'open')}

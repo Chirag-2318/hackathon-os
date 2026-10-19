@@ -64,6 +64,8 @@ export interface PhaseTaskImportSummary {
   memberHours: Record<string, number>;
   uncoveredRequirements: string[];
   nextPhaseKey: string | null;
+  diagnostics?: any;
+  requestId?: string;
 }
 
 export interface PhaseAdvanceResponse {

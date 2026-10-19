@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Globe, Link as LinkIcon, Plus, Check, Copy, Download, Edit3, X, Eye, EyeOff } from 'lucide-react';
 import { getPresetAvatarUrl } from '@/features/onboarding/preset-avatars';
+import { formatIsoDate } from '@/shared/lib/format';
 import type { UserProfileDto, PortfolioSettingsDto, UpdateSettingsRequest } from '../types';
 
 const GithubIcon: React.FC<{ className?: string }> = ({ className = 'h-3.5 w-3.5' }) => (
@@ -77,7 +78,7 @@ export const IdentityHero: React.FC<IdentityHeroProps> = ({
   };
 
   const joinDate = profile.joinedAt
-    ? new Date(profile.joinedAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    ? formatIsoDate(profile.joinedAt)
     : '2026';
 
   const avatarSrc = profile.avatarUrl || (profile.avatarPreset ? getPresetAvatarUrl(profile.avatarPreset) : null);

@@ -125,9 +125,9 @@ export function DiagramPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-background">
+    <div className="min-h-full flex-1 flex flex-col overflow-hidden bg-page">
       {/* Top Header */}
-      <div className="h-14 border-b border-border/60 flex items-center px-4 shrink-0 justify-between gap-3">
+      <div className="h-14 border-b border-border bg-page flex items-center px-4 shrink-0 justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           {/* Back to Docs button */}
           {handoff && (
@@ -204,11 +204,11 @@ export function DiagramPage() {
       </div>
 
       {/* Split Editor/Preview */}
-      <div className="flex flex-1 overflow-hidden">
-        <div className="w-1/3 min-w-[320px] max-w-2xl border-r border-border/60 flex flex-col">
+      <div className="flex flex-1 min-h-0 h-full overflow-hidden bg-page">
+        <div className="w-1/3 min-w-[320px] max-w-2xl border-r border-border bg-surface flex flex-col">
           <MermaidEditor value={code} onChange={(c) => setCode(roomId || '', c)} />
         </div>
-        <div className="flex-1 flex flex-col relative">
+        <div className="flex-1 flex flex-col relative bg-page">
           <MermaidPreview
             code={code}
             mode="studio"

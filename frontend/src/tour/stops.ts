@@ -16,7 +16,7 @@ export const TOUR_STOPS: TourStop[] = [
     sidebarTag: 'PLAN > Brief',
     title: 'Read the rules before they read you.',
     caption:
-      'Paste the event text. Hackathon OS turns it into a rubric, deadlines and a rules checklist your team can tick.',
+      'Paste the event text. [brackit] turns it into a rubric, deadlines and a rules checklist your team can tick.',
     durationMs: 8500,
     Scene: BriefScene,
   },

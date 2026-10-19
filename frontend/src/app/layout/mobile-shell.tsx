@@ -17,6 +17,7 @@ import { BlockerFAB } from '@/components/primitives/blocker-fab';
 import { useOverlay } from '@/app/providers/overlay-store';
 import { useSidebarStore } from './use-sidebar-store';
 import { AppSidebar } from './sidebar';
+import { BRAND_NAME } from '@/shared/constants/copy';
 import { useState, type ReactNode } from 'react';
 
 // ── Mobile Top Bar ──────────────────────────────────────────────
@@ -28,7 +29,7 @@ function MobileTopBar({ inRoom }: { inRoom: boolean }) {
   return (
     <header className="h-14 flex items-center justify-between px-4 bg-canvas border-b border-border shrink-0">
       <span className="text-body-strong truncate">
-        {inRoom && roomName ? roomName : 'Hackathon OS'}
+        {inRoom && roomName ? roomName : BRAND_NAME}
       </span>
       <div className="flex items-center gap-2">
         {inRoom && (

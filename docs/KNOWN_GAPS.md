@@ -1,4 +1,4 @@
-# Hackathon OS — Known Gaps & Future Roadmap
+# [brackit] — Known Gaps & Future Roadmap
 
 ## 1. Intentional Non-Goals (Current Release)
 

@@ -5,8 +5,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { roomService, checkpointService } from '@/services';
 import { phaseService } from '@/services/phaseService';
 import { PhaseRail } from '../board/components/phase-rail';
+import { useTaskCounts } from '../board/task-selectors';
 import { useRoomOverview } from './hooks/use-room-overview';
 import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 import { OverviewHeader } from './components/overview-header';
 import { OverviewStatStrip } from './components/overview-stat-strip';
 import { OverviewNeedsAttention, type AttentionItemData } from './components/overview-needs-attention';
@@ -139,12 +141,13 @@ export function RoomOverviewPage() {
 
   // Stat Strip Data
   const vitals = overview?.vitals;
+  const taskCounts = useTaskCounts(activeRoomId);
   const passedCheckpoints = vitals?.checkpoints?.passed ?? 0;
   const totalCheckpoints = vitals?.checkpoints?.total ?? Math.max(1, overview?.checkpoints?.length ?? 1);
-  const openTasksCount = vitals?.tasks?.open ?? 0;
-  const todoCount = vitals?.tasks?.todo ?? 0;
-  const inProgressCount = vitals?.tasks?.inProgress ?? 0;
-  const blockedCount = vitals?.tasks?.blocked ?? 0;
+  const openTasksCount = taskCounts.total > 0 ? taskCounts.open : (vitals?.tasks?.open ?? 0);
+  const todoCount = taskCounts.total > 0 ? taskCounts.todo : (vitals?.tasks?.todo ?? 0);
+  const inProgressCount = taskCounts.total > 0 ? taskCounts.inProgress : (vitals?.tasks?.inProgress ?? 0);
+  const blockedCount = taskCounts.total > 0 ? taskCounts.blocked : (vitals?.tasks?.blocked ?? 0);
   const deltaPct = vitals?.vsPlan?.deltaPct ?? overview?.progress?.deltaPct ?? 0;
   const actualPct = vitals?.vsPlan?.actualPct ?? overview?.progress?.actualPct ?? 0;
   const plannedPct = vitals?.vsPlan?.plannedPct ?? overview?.progress?.plannedPct ?? 0;
@@ -306,6 +309,49 @@ export function RoomOverviewPage() {
             />
           </div>
         )}
+
+        {/* 2b. Slim row for the next action directly under the rail */}
+        {room.nextStep && room.nextStep.label && (() => {
+          const nextStep = room.nextStep;
+          return (
+            <div className="mt-2.5 flex items-center justify-between gap-3 px-3.5 py-2 rounded-[12px] bg-card border border-border text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground shrink-0">
+                  Next up
+                </span>
+                {nextStep.reason && (
+                  <>
+                    <span className="text-muted-foreground/60 shrink-0">·</span>
+                    <span className="text-muted-foreground truncate">
+                      {nextStep.reason}
+                    </span>
+                  </>
+                )}
+              </div>
+
+              <div className="shrink-0 flex items-center">
+                {nextStep.leaderOnly && !room.isLeader ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigate(nextStep.route || `/app/room/${activeRoomId}/board`)}
+                    className="h-7 px-3 rounded-full text-xs font-medium text-foreground hover:bg-muted cursor-pointer"
+                  >
+                    View
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={() => navigate(nextStep.route || `/app/room/${activeRoomId}/board`)}
+                    className="h-7 px-3.5 rounded-full text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer shadow-xs"
+                  >
+                    {nextStep.label}
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </motion.div>
 
       {/* 3. Stat Strip (4 stats separated by hairlines above and below) */}

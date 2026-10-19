@@ -8,8 +8,10 @@ import com.hackathonos.backend.brief.BriefRepository;
 import com.hackathonos.backend.checkpoints.CheckpointService;
 import com.hackathonos.backend.common.http.SafeHttpClient;
 import com.hackathonos.backend.common.error.BadRequestException;
+import com.hackathonos.backend.common.error.EntityConflictException;
 import com.hackathonos.backend.common.error.ForbiddenException;
 import com.hackathonos.backend.common.error.NotFoundException;
+import com.hackathonos.backend.users.dto.UserSummaryDto;
 import com.hackathonos.backend.demo.DemoMedia;
 import com.hackathonos.backend.demo.DemoMediaRepository;
 import com.hackathonos.backend.docs.Doc;
@@ -290,6 +292,15 @@ public class SubmissionService {
         Submission sub = submissionRepository.findByRoomId(roomId)
                 .orElseGet(() -> new Submission(roomId, "DRAFT", "{}", "[]", Instant.now()));
 
+        if (req.version() != null && req.version() != sub.getVersion()) {
+            UserSummaryDto lastEditor = sub.getLastEditedBy() != null && userRepository != null
+                    ? userRepository.findById(sub.getLastEditedBy()).map(UserSummaryDto::from).orElse(null)
+                    : null;
+            SubmissionDtos.SubmissionDraftDto latestDraft = getSubmission(roomId, user).draft();
+            throw new EntityConflictException("CHANGED", "Submission draft was updated by another team member", sub.getVersion(), lastEditor, sub.getCreatedAt(), latestDraft);
+        }
+        sub.setLastEditedBy(user.getId());
+
         Map<String, String> map = new HashMap<>();
         map.put("whatItDoes", req.whatItDoes() != null ? req.whatItDoes().trim() : "");
         map.put("whyItMatters", req.whyItMatters() != null ? req.whyItMatters().trim() : "");
@@ -389,7 +400,7 @@ public class SubmissionService {
                 .orElseThrow(() -> new NotFoundException("ITEM_NOT_FOUND", "Checklist item not found"));
 
         if (item.isAuto()) {
-            throw new BadRequestException("AUTO_ITEM", "This checklist item is automatically updated by Hackathon OS");
+            throw new BadRequestException("AUTO_ITEM", "This checklist item is automatically updated by [brackit]");
         }
 
         boolean newState = req.done() != null ? req.done() : !item.isDone();

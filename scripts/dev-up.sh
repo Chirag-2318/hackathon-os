@@ -2,7 +2,7 @@
 set -euo pipefail
 
 echo "======================================================"
-echo " Starting Hackathon OS Production Container Stack     "
+echo " Starting [brackit] Production Container Stack     "
 echo "======================================================"
 
 if ! command -v docker &> /dev/null; then
@@ -22,7 +22,7 @@ docker compose up --build -d
 
 echo ""
 echo "======================================================"
-echo " Hackathon OS services are running:                  "
+echo " [brackit] services are running:                  "
 echo "   App & Reverse Proxy: http://localhost              "
 echo "   Direct Backend API:  http://localhost:8080         "
 echo "   PostgreSQL Database: localhost:5432 (hackathon_os) "

@@ -397,7 +397,7 @@ export function IntegrationsSection() {
               Connect GitHub Account
             </DialogTitle>
             <DialogDescription className="text-xs text-ink-muted">
-              Connect your GitHub account to sync repositories, issues, and commits in Hackathon OS.
+              Connect your GitHub account to sync repositories, issues, and commits in [brackit].
             </DialogDescription>
           </DialogHeader>
 

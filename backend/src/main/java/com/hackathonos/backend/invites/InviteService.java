@@ -42,10 +42,11 @@ public class InviteService {
     private final ActivityLogger activityLogger;
     private final NotificationService notificationService;
     private final AppProperties appProperties;
-    private final com.hackathonos.backend.templates.EventTemplateRepository templateRepository;
     private final com.hackathonos.backend.events.RoomEventService roomEventService;
+    private final com.hackathonos.backend.events.RoomEventHub eventHub;
     private final MailService mailService;
     private final EmailOutboxRepository outboxRepository;
+    private final com.hackathonos.backend.templates.EventTemplateRepository templateRepository;
 
     public InviteService(InviteRepository inviteRepository,
                          RoomRepository roomRepository,
@@ -60,6 +61,7 @@ public class InviteService {
                          AppProperties appProperties,
                          com.hackathonos.backend.templates.EventTemplateRepository templateRepository,
                          com.hackathonos.backend.events.RoomEventService roomEventService,
+                         com.hackathonos.backend.events.RoomEventHub eventHub,
                          MailService mailService,
                          EmailOutboxRepository outboxRepository) {
         this.inviteRepository = inviteRepository;
@@ -75,6 +77,7 @@ public class InviteService {
         this.appProperties = appProperties;
         this.templateRepository = templateRepository;
         this.roomEventService = roomEventService;
+        this.eventHub = eventHub;
         this.mailService = mailService;
         this.outboxRepository = outboxRepository;
     }
@@ -249,6 +252,13 @@ public class InviteService {
             userRepository.findById(room.getOwnerId()).ifPresent(leader ->
                     notificationService.notifyUser(leader, room, NotificationType.MEMBER_JOINED,
                             "Teammate joined", caller.getName() + " joined " + room.getName()));
+        }
+
+        eventHub.publish(room.getId(), "members", caller, member.getId().toString());
+        eventHub.publish(room.getId(), "overview", caller, null);
+        eventHub.publishUser(caller.getId(), "rooms");
+        if (room.getOwnerId() != null) {
+            eventHub.publishUser(room.getOwnerId(), "rooms");
         }
 
         sendJoinedEmails(caller, room);

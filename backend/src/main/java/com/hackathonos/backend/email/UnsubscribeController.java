@@ -86,10 +86,10 @@ public class UnsubscribeController {
                 + ".btn { display:inline-block; padding:12px 24px; background:#0B0B0C; color:#F6F3EC; text-decoration:none; border-radius:8px; font-size:14px; font-weight:600; }"
                 + "</style></head><body>"
                 + "<div class=\"card\">"
-                + "<div class=\"brand\">Hackathon OS</div>"
+                + "<div class=\"brand\">[brackit]</div>"
                 + "<h1>" + title + "</h1>"
                 + "<p>" + message + "</p>"
-                + "<a href=\"" + appUrl + "\" class=\"btn\">Return to Hackathon OS</a>"
+                + "<a href=\"" + appUrl + "\" class=\"btn\">Return to [brackit]</a>"
                 + "</div></body></html>";
     }
 }

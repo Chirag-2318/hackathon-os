@@ -46,7 +46,7 @@ public class GitHubController {
         return user != null ? user : currentUser.get();
     }
 
-    @GetMapping("/api/v1/rooms/{roomId}/github")
+    @GetMapping({"/rooms/{roomId}/github", "/api/v1/rooms/{roomId}/github"})
     public GithubPageResponse getPage(
             @PathVariable UUID roomId,
             @AuthenticationPrincipal User user
@@ -54,7 +54,124 @@ public class GitHubController {
         return gitHubService.getPage(roomId, resolveUser(user));
     }
 
-    @PostMapping("/api/v1/rooms/{roomId}/github/connect")
+    @PostMapping({"/rooms/{roomId}/github/link", "/api/v1/rooms/{roomId}/github/link"})
+    public ResponseEntity<RepoSummarySectionDto> link(
+            @PathVariable UUID roomId,
+            @RequestBody LinkRepoRequest request,
+            @AuthenticationPrincipal User user
+    ) {
+        RepoSummarySectionDto summary = gitHubService.link(roomId, request, resolveUser(user));
+        return ResponseEntity.ok(summary);
+    }
+
+    @GetMapping({"/rooms/{roomId}/github/summary", "/api/v1/rooms/{roomId}/github/summary"})
+    public ResponseEntity<SectionResponse<RepoSummarySectionDto>> getSummary(
+            @PathVariable UUID roomId,
+            @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch,
+            @AuthenticationPrincipal User user
+    ) {
+        return handleSectionResponse(gitHubService.getSummarySection(roomId, resolveUser(user)), ifNoneMatch);
+    }
+
+    @GetMapping({"/rooms/{roomId}/github/branches", "/api/v1/rooms/{roomId}/github/branches"})
+    public ResponseEntity<SectionResponse<List<BranchDto>>> getBranches(
+            @PathVariable UUID roomId,
+            @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch,
+            @AuthenticationPrincipal User user
+    ) {
+        return handleSectionResponse(gitHubService.getBranchesSection(roomId, resolveUser(user)), ifNoneMatch);
+    }
+
+    @GetMapping({"/rooms/{roomId}/github/commits", "/api/v1/rooms/{roomId}/github/commits"})
+    public ResponseEntity<SectionResponse<List<CommitItemDto>>> getCommits(
+            @PathVariable UUID roomId,
+            @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch,
+            @AuthenticationPrincipal User user
+    ) {
+        return handleSectionResponse(gitHubService.getCommitsSection(roomId, resolveUser(user)), ifNoneMatch);
+    }
+
+    @GetMapping({"/rooms/{roomId}/github/pulls", "/api/v1/rooms/{roomId}/github/pulls"})
+    public ResponseEntity<SectionResponse<List<PullItemDto>>> getPulls(
+            @PathVariable UUID roomId,
+            @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch,
+            @AuthenticationPrincipal User user
+    ) {
+        return handleSectionResponse(gitHubService.getPullsSection(roomId, resolveUser(user)), ifNoneMatch);
+    }
+
+    @GetMapping({"/rooms/{roomId}/github/health", "/api/v1/rooms/{roomId}/github/health"})
+    public ResponseEntity<SectionResponse<List<HealthItemDto>>> getHealth(
+            @PathVariable UUID roomId,
+            @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch,
+            @AuthenticationPrincipal User user
+    ) {
+        return handleSectionResponse(gitHubService.getHealthSection(roomId, resolveUser(user)), ifNoneMatch);
+    }
+
+    @GetMapping({"/rooms/{roomId}/github/checks", "/api/v1/rooms/{roomId}/github/checks"})
+    public List<GithubCheckDto> getChecks(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user
+    ) {
+        return gitHubService.getChecks(roomId, resolveUser(user));
+    }
+
+    @GetMapping({"/rooms/{roomId}/github/contributors", "/api/v1/rooms/{roomId}/github/contributors"})
+    public GithubContributorsResponse getContributors(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user
+    ) {
+        return gitHubService.getContributors(roomId, resolveUser(user));
+    }
+
+    @GetMapping({"/rooms/{roomId}/github/task-links", "/api/v1/rooms/{roomId}/github/task-links"})
+    public GithubTaskLinksResponse getTaskLinks(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user
+    ) {
+        return gitHubService.getTaskLinks(roomId, resolveUser(user));
+    }
+
+    @GetMapping({"/rooms/{roomId}/github/demo-marker", "/api/v1/rooms/{roomId}/github/demo-marker"})
+    public ResponseEntity<DemoMarkerDto> getDemoMarker(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user
+    ) {
+        DemoMarkerDto marker = gitHubService.getDemoMarker(roomId, resolveUser(user));
+        return ResponseEntity.ok(marker);
+    }
+
+    @PostMapping({"/rooms/{roomId}/github/demo-marker", "/api/v1/rooms/{roomId}/github/demo-marker"})
+    public DemoMarkerDto saveDemoMarker(
+            @PathVariable UUID roomId,
+            @RequestBody(required = false) SaveDemoMarkerRequest request,
+            @AuthenticationPrincipal User user
+    ) {
+        return gitHubService.saveDemoMarker(roomId, request, resolveUser(user));
+    }
+
+    @DeleteMapping({"/rooms/{roomId}/github/demo-marker", "/api/v1/rooms/{roomId}/github/demo-marker"})
+    public ResponseEntity<Void> deleteDemoMarker(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user
+    ) {
+        gitHubService.deleteDemoMarker(roomId, resolveUser(user));
+        return ResponseEntity.noContent().build();
+    }
+
+    private <T> ResponseEntity<SectionResponse<T>> handleSectionResponse(SectionResponse<T> resp, String ifNoneMatch) {
+        String etag = "\"" + Integer.toHexString(java.util.Objects.hash(resp.data(), resp.state(), resp.error())) + "\"";
+        if (ifNoneMatch != null && ifNoneMatch.equals(etag)) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_MODIFIED).eTag(etag).build();
+        }
+        return ResponseEntity.ok()
+                .eTag(etag)
+                .cacheControl(org.springframework.http.CacheControl.maxAge(java.time.Duration.ofMinutes(3)))
+                .body(resp);
+    }
+
+    @PostMapping({"/rooms/{roomId}/github/connect", "/api/v1/rooms/{roomId}/github/connect"})
     public GithubPageResponse connect(
             @PathVariable UUID roomId,
             @RequestBody ConnectRepoRequest request,
@@ -258,7 +375,7 @@ public class GitHubController {
             userConn.setReadTimeout(8000);
             userConn.setRequestProperty("Accept", "application/vnd.github+json");
             userConn.setRequestProperty("Authorization", "Bearer " + accessToken);
-            userConn.setRequestProperty("User-Agent", "HackathonOS-Server");
+            userConn.setRequestProperty("User-Agent", "brackit-Server");
 
             if (userConn.getResponseCode() >= 400) {
                 response.sendRedirect(fallbackRedirect + "?github=error&reason=fetch_user_failed");

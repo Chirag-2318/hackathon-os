@@ -19,7 +19,7 @@ export function Barcode({
   showText = false,
 }: BarcodeProps) {
   const bars = useMemo(() => {
-    const str = value || 'hackathon-os-participant';
+    const str = value || 'brackit-participant';
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;

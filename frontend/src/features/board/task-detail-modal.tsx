@@ -14,6 +14,7 @@ import { useCurrentUser } from '@/features/auth/useCurrentUser';
 import { TaskDetailsSidebar } from './components/task-details-sidebar';
 import { TaskActivitySection } from './components/task-activity-section';
 import { TaskPrerequisitesSection } from './components/task-prerequisites-section';
+import { TaskCommitsAndPrsSection } from './components/task-commits-and-prs-section';
 
 export interface TaskDetailModalProps {
   task: Task;
@@ -615,6 +616,12 @@ export function TaskDetailModal({
               members={members}
               activeRoomId={activeRoomId}
               onUpdateTask={onUpdateTask}
+            />
+
+            {/* Commits and PRs Section */}
+            <TaskCommitsAndPrsSection
+              taskKey={task.key}
+              roomId={activeRoomId}
             />
 
             {/* Activity Stream */}

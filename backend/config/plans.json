@@ -24,7 +24,7 @@
       "features": [
         { "text": "Everything in Free", "planned": false },
         { "text": "25 rooms per month", "planned": false },
-        { "text": "Claude MCP access: connect Hackathon OS to Claude so it can read your room context", "planned": true },
+        { "text": "Claude MCP access: connect [brackit] to Claude so it can read your room context", "planned": true },
         { "text": "Post-hackathon support: a continuation plan and a portfolio entry for your project", "planned": true },
         { "text": "Higher AI limits", "planned": true },
         { "text": "Priority support", "planned": true }

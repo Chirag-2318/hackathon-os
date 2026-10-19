@@ -1,4 +1,4 @@
-# Hackathon OS Smoke Checklist
+# [brackit] Smoke Checklist
 
 A manual verification checklist for the golden path, in exact sequence.
 

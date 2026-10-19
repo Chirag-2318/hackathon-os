@@ -16,7 +16,7 @@ export interface AiDraftBadgeProps {
  */
 export function AiDraftBadge({ onAccept, className }: AiDraftBadgeProps) {
   return (
-    <Tooltip content="Drafted by Hackathon OS AI. Review, customize, and save to make it yours.">
+    <Tooltip content="Drafted by [brackit] AI. Review, customize, and save to make it yours.">
       <span className={cn('inline-flex items-center gap-1.5 select-none', className)}>
         <Chip
           variant="brand"

@@ -22,7 +22,8 @@ public class RoomMapper {
             boolean aiAllowed,
             RoomProgressSummaryDto progressSummary,
             List<StageUnlockRuleDto> unlockRules,
-            com.hackathonos.backend.rooms.dto.NextStepDto nextStep
+            com.hackathonos.backend.rooms.dto.NextStepDto nextStep,
+            List<com.hackathonos.backend.phases.dto.PhaseSummaryDto> phases
     ) {
         RoomDetailDto.StageDone stageDone = new RoomDetailDto.StageDone(
                 room.isBriefDone(),
@@ -60,8 +61,24 @@ public class RoomMapper {
                 progressSummary,
                 unlockRules != null ? unlockRules : List.of(),
                 room.getWorkflowStage(),
-                nextStep != null ? nextStep : new com.hackathonos.backend.rooms.dto.NextStepDto("Continue setup", "/app/rooms/" + room.getId(), "Work on project")
+                nextStep != null ? nextStep : new com.hackathonos.backend.rooms.dto.NextStepDto("Continue setup", "/app/rooms/" + room.getId(), "Work on project"),
+                phases != null ? phases : List.of()
         );
+    }
+
+    public RoomDetailDto toDetail(
+            Room room,
+            String templateName,
+            long memberCount,
+            String myRole,
+            boolean isLeader,
+            RoomClockDto clock,
+            boolean aiAllowed,
+            RoomProgressSummaryDto progressSummary,
+            List<StageUnlockRuleDto> unlockRules,
+            com.hackathonos.backend.rooms.dto.NextStepDto nextStep
+    ) {
+        return toDetail(room, templateName, memberCount, myRole, isLeader, clock, aiAllowed, progressSummary, unlockRules, nextStep, List.of());
     }
 
     public RoomDetailDto toDetail(Room room, String templateName, long memberCount, String myRole, boolean isLeader) {

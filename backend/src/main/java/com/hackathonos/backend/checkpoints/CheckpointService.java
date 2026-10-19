@@ -203,11 +203,15 @@ public class CheckpointService {
             throw new BadRequestException("INVALID_ROOM", "Checkpoint does not belong to this room");
         }
 
+        boolean pass = request.passed() != null && request.passed();
+        if (pass && cp.getPassedAt() != null) {
+            return toDto(cp, "passed");
+        }
+
         if (AUTO_RULES.contains(cp.getRuleKey())) {
             throw new BadRequestException("AUTO_CHECKPOINT", "This checkpoint is automated and cannot be toggled manually");
         }
 
-        boolean pass = request.passed() != null && request.passed();
         cp.setPassedAt(pass ? clock.instant() : null);
         cp.setPassedBy(pass ? user.getId() : null);
         cp.setAutoPassed(false);

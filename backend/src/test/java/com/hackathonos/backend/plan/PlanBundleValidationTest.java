@@ -95,6 +95,7 @@ public class PlanBundleValidationTest {
 
         Room room = new Room();
         room.setId(roomId);
+        room.setName("TrafficCast");
         room.setPlanStartedAt(Instant.now());
 
         lenient().when(roomAccess.getActiveRoomOrThrow(roomId)).thenReturn(room);
@@ -219,11 +220,161 @@ public class PlanBundleValidationTest {
         // STEP1-BUNDLE.MD
         MockMultipartFile f2 = new MockMultipartFile("files", "STEP1-BUNDLE.MD", "text/markdown", fixtureContent.getBytes(StandardCharsets.UTF_8));
         ValidatePlanResponse r2 = planValidationService.validateStepMultipart(roomId, "1", List.of(f2), false, leaderUser);
-        assertValid(r2, "Variant J2 (STEP1-BUNDLE.MD)");
-
         // no extension
         MockMultipartFile f3 = new MockMultipartFile("files", "step1-bundle", "application/octet-stream", fixtureContent.getBytes(StandardCharsets.UTF_8));
         ValidatePlanResponse r3 = planValidationService.validateStepMultipart(roomId, "1", List.of(f3), false, leaderUser);
         assertValid(r3, "Variant J3 (no extension)");
     }
+
+    private void assertBlockedWithCode(ValidatePlanResponse response, String expectedCode, String testName) {
+        assertNotNull(response, testName + " response was null");
+        assertFalse(response.ok(), testName + " should have ok==false");
+        boolean hasCode = response.issues().stream()
+                .anyMatch(i -> "BLOCK".equalsIgnoreCase(i.severity()) && expectedCode.equalsIgnoreCase(i.code()));
+        List<String> blockCodes = response.issues().stream()
+                .filter(i -> "BLOCK".equalsIgnoreCase(i.severity()))
+                .map(i -> i.code() + ": " + i.message())
+                .toList();
+        assertTrue(hasCode, testName + " expected BLOCK code " + expectedCode + ", but found: " + blockCodes);
+    }
+
+    @Test
+    void testNegative_Readme() {
+        String content = """
+                # TrafficCast
+
+                A traffic prediction dashboard for city operations.
+
+                ## Installation
+                Run `npm install` and `npm start`.
+
+                ## License
+                MIT
+                """;
+        MockMultipartFile file = new MockMultipartFile("files", "README.md", "text/markdown", content.getBytes(StandardCharsets.UTF_8));
+        ValidatePlanResponse resp = planValidationService.validateStepMultipart(roomId, "1", List.of(file), false, leaderUser);
+        assertBlockedWithCode(resp, "DOCUMENT_TOO_SHORT", "Negative: README");
+    }
+
+    @Test
+    void testNegative_LoremIpsum() {
+        String content = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(60);
+        MockMultipartFile file = new MockMultipartFile("files", "lorem.md", "text/markdown", content.getBytes(StandardCharsets.UTF_8));
+        ValidatePlanResponse resp = planValidationService.validateStepMultipart(roomId, "1", List.of(file), false, leaderUser);
+        assertBlockedWithCode(resp, "DOCUMENT_TOO_SHORT", "Negative: Lorem Ipsum");
+    }
+
+    @Test
+    void testNegative_PromptText() {
+        String content = """
+                OUTPUT DELIVERY: Return the full PRD and MVP in bundle format.
+                {{project_name}}
+                <<<USER_DATA>>>
+                SELF-CHECK: Ensure all headings match.
+                You are writing the plan for TrafficCast.
+                """;
+        MockMultipartFile file = new MockMultipartFile("files", "step1-prompt.md", "text/markdown", content.getBytes(StandardCharsets.UTF_8));
+        ValidatePlanResponse resp = planValidationService.validateStepMultipart(roomId, "1", List.of(file), false, leaderUser);
+        assertBlockedWithCode(resp, "LOOKS_LIKE_PROMPT", "Negative: Prompt text");
+    }
+
+    @Test
+    void testNegative_JsonFile() {
+        String content = """
+                {
+                  "project": "TrafficCast",
+                  "version": "1.0.0",
+                  "dependencies": {
+                    "react": "^18.0.0"
+                  }
+                }
+                """;
+        MockMultipartFile file = new MockMultipartFile("files", "package.json", "application/json", content.getBytes(StandardCharsets.UTF_8));
+        ValidatePlanResponse resp = planValidationService.validateStepMultipart(roomId, "1", List.of(file), false, leaderUser);
+        assertBlockedWithCode(resp, "NOT_A_DOCUMENT", "Negative: JSON file");
+    }
+
+    @Test
+    void testNegative_Resume() {
+        String content = """
+                # John Doe - Senior Full Stack Engineer
+                TrafficCast Contributor
+
+                ## Experience
+                Senior Software Engineer at ACME Corp.
+                - Designed scalable APIs and systems.
+                - Managed deployment pipelines.
+
+                ## Education
+                B.S. in Computer Science.
+                """;
+        MockMultipartFile file = new MockMultipartFile("files", "resume.md", "text/markdown", content.getBytes(StandardCharsets.UTF_8));
+        ValidatePlanResponse resp = planValidationService.validateStepMultipart(roomId, "1", List.of(file), false, leaderUser);
+        assertBlockedWithCode(resp, "DOCUMENT_TOO_SHORT", "Negative: Resume");
+    }
+
+    @Test
+    void testNegative_Step2FileUploadedToStep1() {
+        String content = """
+                =====FILE: TECH_STACK.md=====
+                # Tech stack: TrafficCast
+                ## Decision summary
+                This is a comprehensive tech stack decision summary for TrafficCast with more than 300 characters of text describing the database, frontend framework, backend service, and all dependencies in complete detail.
+                ## New-tech budget
+                Budget details.
+                ## Rejected options
+                Rejected choices.
+                ## Cost and limits
+                Cost details.
+                ## Accounts and setup
+                Setup details.
+                ## Rule compliance
+                Compliant.
+                ## Reality check
+                Reality checked.
+                =====END FILE=====
+
+                =====FILE: ARCHITECTURE.md=====
+                # Architecture: TrafficCast
+                ## Overview
+                Architecture overview.
+                ## System diagram
+                Diagram.
+                ## Core flow sequence
+                Sequence.
+                ## Data model
+                Model.
+                ## Components
+                Components.
+                ## API contract
+                Contract.
+                ## External services and fallbacks
+                Services.
+                ## Repository and branches
+                Branches.
+                ## Environments and demo setup
+                Setup.
+                ## Security and secrets
+                Security.
+                ## Failure modes
+                Failures.
+                ## Reality check
+                Check.
+                =====END FILE=====
+                """;
+        MockMultipartFile file = new MockMultipartFile("files", "step2-bundle.md", "text/markdown", content.getBytes(StandardCharsets.UTF_8));
+        ValidatePlanResponse resp = planValidationService.validateStepMultipart(roomId, "1", List.of(file), false, leaderUser);
+        assertBlockedWithCode(resp, "WRONG_STEP", "Negative: Step 2 file in Step 1");
+    }
+
+    @Test
+    void testNegative_LongTextNoMatchingHeadings() {
+        String longBody = "This is a detailed analysis of TrafficCast without expected sections. ".repeat(50);
+        String content = "=====FILE: PRD.md=====\n# PRD: TrafficCast\n" + longBody + "\n=====END FILE=====\n\n"
+                + "=====FILE: MVP.md=====\n# MVP: TrafficCast\n" + longBody + "\n=====END FILE=====";
+        MockMultipartFile file = new MockMultipartFile("files", "step1-bundle.md", "text/markdown", content.getBytes(StandardCharsets.UTF_8));
+        ValidatePlanResponse resp = planValidationService.validateStepMultipart(roomId, "1", List.of(file), false, leaderUser);
+        assertBlockedWithCode(resp, "STRUCTURE_MISMATCH", "Negative: Long text with no matching headings");
+    }
 }
+

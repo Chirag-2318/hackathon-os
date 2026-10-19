@@ -164,7 +164,11 @@ export function AiKeyDialog() {
           exit={{ opacity: 0 }}
           transition={{ duration: prefersReduced ? 0 : 0.2 }}
           onClick={handleSkip}
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 bg-[var(--backdrop-fallback,#0a0a0b80)] backdrop-blur-[3px] supports-[backdrop-filter]:bg-[var(--backdrop)]"
+          style={{
+            backdropFilter: 'var(--backdrop-blur, blur(3px))',
+            WebkitBackdropFilter: 'var(--backdrop-blur, blur(3px))',
+          }}
           aria-hidden="true"
         />
 

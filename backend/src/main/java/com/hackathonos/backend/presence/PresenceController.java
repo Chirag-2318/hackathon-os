@@ -32,7 +32,7 @@ public class PresenceController {
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping
+    @GetMapping({"/members", "/online-members"})
     public List<UserSummaryDto> getOnlineMembers(@PathVariable UUID roomId) {
         User user = currentUser.get();
         roomAccess.requireMember(roomId, user);

@@ -1,5 +1,13 @@
 # Work Log
 
+## 2026-10-17: Board Drag Bug Fix & Whole-Room Real-Time Engine
+
+- **Board Drag Bug**: Resolved drop target and index directly from pointer element (`document.elementFromPoint`); applied immediate optimistic update to board `tasks` state; added sequence guard ignoring stale refetches and protecting in-flight moves; applied server task directly on move response instead of whole-board refetching; removed echo suppression in favor of sequence guard + 250ms debounce.
+- **Backend Event Hub (`RoomEventHub`)**: Monotonic `AtomicLong` sequence per room, 200-event ring buffer for replay, SSE stream (`/api/v1/rooms/{roomId}/events`) with `Last-Event-ID` support and `resync` topic on sequence gaps, 25s pings, user stream for room membership changes, and presence endpoint (`/presence`).
+- **Central Mutation Interceptor (`RoomChangeInterceptor`)**: Captures non-GET mutating endpoints under `/api/v1/rooms/{roomId}/**` and dev endpoints with 150ms burst deduplication, broadcasting primary topic, entity topic (`task:<id>`), and `overview`.
+- **Frontend Real-Time (`useRoomLive`)**: Mounted once in room layout; exponential backoff (1s-30s), tab-hidden 2-minute sleep and wake resync; 3-try fallback to 30s polling; 250ms debounced topic query invalidation; live status chip ("Live", "Reconnecting...", "Polling", "Offline") and online avatar stack; 1.2s soft accent fade on foreign mutations; notable event toasts.
+- **Concurrency & Locking**: `RoomLock` pessimistic write locking on task move/create, plan completion, enter build, and idea review; Flyway V38 optimistic locking version on submissions and pitch scripts with 409 `CHANGED` conflict resolution; idempotent moves and checkpoints.
+
 ## 2026-10-12: PRESENT Group Redesign (Deck, Pitch Kit, Submission)
 
 - **Navigation**: Collapsed Deck + Demo + Rehearse + Q&A + Submission into 3 items: `Deck` (/deck), `Pitch kit` (/pitch-kit?open=…) and `Submission` (/submission); old sub-routes redirect with `Navigate`. Updated PRESENT group in `room-nav.tsx`; new hover icon animations added to `icons.css` (Deck: screen slides up + bar grows; Pitch kit: mic emits two waves; Submission: plane flies up-right and settles).
@@ -28,3 +36,10 @@
 - **Dynamic Context Injection**: Updated `PromptBuilder` with full brief text (12k limit), approved ideas with authors, team skills, and hours; AI fills answer box without auto-saving.
 - **User Display Names**: Replaced raw IDs across ideas feed, task modal, task activity, doc versions, team list, and branch map.
 - **Dynamic Plan Regeneration**: Clean regeneration deletes and regenerates docs, phases, tasks, MVP, diagrams, demo script/shots, and pitch QA from plan without fake fallbacks.
+
+## 2026-10-16: Product Brand Rename to [brackit]
+
+- **Product Rebranding**: Renamed product from "Hackathon OS" to `[brackit]` (exact spelling: lowercase, square brackets included, no spaces) across user-facing surfaces, shell, documentation, templates, OpenAPI specification, and email layouts.
+- **Source of Truth**: Defined `BRAND_NAME = "[brackit]"` and `BRAND_DESCRIPTOR = "the hackathon OS"` in `frontend/src/shared/constants/copy.ts`.
+- **System Stability & Scope**: Retained code identifiers (Java packages `com.hackathonos`, database name `hackathon_os`, docker containers/volumes, local storage keys, and historical migrations) while updating public brand copy, download filenames (`brackit-docs.zip`), export headers, and OpenAPI title (`[brackit] API`).
+

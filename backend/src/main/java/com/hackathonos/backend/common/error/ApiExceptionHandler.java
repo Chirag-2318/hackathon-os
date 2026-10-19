@@ -165,7 +165,11 @@ public class ApiExceptionHandler {
         Map<String, Object> details = new HashMap<>();
         details.put("currentVersion", ex.getCurrentVersion());
         details.put("lastEditedBy", ex.getLastEditedBy());
+        details.put("editorName", ex.getLastEditedBy() != null ? ex.getLastEditedBy().displayName() : null);
         details.put("updatedAt", ex.getUpdatedAt());
+        if (ex.getLatestData() != null) {
+            details.put("latestData", ex.getLatestData());
+        }
 
         ErrorResponse body = new ErrorResponse(
                 ex.getCode() != null ? ex.getCode() : ErrorCode.VERSION_CONFLICT.getCode(),

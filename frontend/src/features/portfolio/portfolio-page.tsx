@@ -38,7 +38,7 @@ export const PortfolioPage: React.FC = () => {
 
       // Set document title for passport / public showcase
       if (res?.profile?.name) {
-        document.title = `${res.profile.name} — Builder Passport | Hackathon OS`;
+        document.title = `${res.profile.name} — Builder Passport | [brackit]`;
       }
     } catch (err: any) {
       setError(err?.message || 'Failed to load portfolio passport');
@@ -117,17 +117,17 @@ export const PortfolioPage: React.FC = () => {
   if (loading) {
     return (
       <div className="mx-auto max-w-5xl space-y-6 p-6 animate-pulse">
-        <div className="flex items-center gap-4 border-b border-neutral-800 pb-6">
-          <div className="h-16 w-16 rounded-full bg-neutral-800" />
+        <div className="flex items-center gap-4 border-b border-border pb-6">
+          <div className="h-16 w-16 rounded-full bg-muted" />
           <div className="space-y-2">
-            <div className="h-5 w-48 rounded bg-neutral-800" />
-            <div className="h-3 w-64 rounded bg-neutral-800/60" />
+            <div className="h-5 w-48 rounded bg-muted" />
+            <div className="h-3 w-64 rounded bg-muted/60" />
           </div>
         </div>
-        <div className="h-12 w-full rounded bg-neutral-900/60 border border-neutral-800" />
+        <div className="h-12 w-full rounded bg-card/60 border border-border" />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="h-64 rounded bg-neutral-900/40 border border-neutral-800" />
-          <div className="h-64 rounded bg-neutral-900/40 border border-neutral-800" />
+          <div className="h-64 rounded bg-card/60 border border-border" />
+          <div className="h-64 rounded bg-card/60 border border-border" />
         </div>
       </div>
     );
@@ -137,14 +137,14 @@ export const PortfolioPage: React.FC = () => {
   if (error || !data) {
     return (
       <div className="mx-auto max-w-md py-16 px-4 text-center space-y-4">
-        <div className="flex justify-center text-red-400">
+        <div className="flex justify-center text-destructive">
           <AlertCircle className="h-10 w-10" />
         </div>
-        <h3 className="text-base font-semibold text-neutral-100">Unable to load passport</h3>
-        <p className="text-xs text-neutral-400 leading-relaxed">{error || 'An unexpected error occurred.'}</p>
+        <h3 className="text-base font-semibold text-foreground">Unable to load passport</h3>
+        <p className="text-xs text-muted-foreground leading-relaxed">{error || 'An unexpected error occurred.'}</p>
         <button
           onClick={loadPortfolio}
-          className="inline-flex items-center gap-2 rounded bg-neutral-800 px-3.5 py-1.5 text-xs font-medium text-neutral-200 hover:bg-neutral-700 transition-colors"
+          className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-xs font-medium text-foreground hover:bg-hover transition-colors shadow-xs cursor-pointer"
         >
           <RefreshCw className="h-3.5 w-3.5" />
           <span>Try again</span>

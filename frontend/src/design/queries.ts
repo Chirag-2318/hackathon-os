@@ -3,7 +3,7 @@ import { apiFetch } from './api';
 import { toast } from './components/toast';
 
 /**
- * Standard query keys for Hackathon OS data layer
+ * Standard query keys for [brackit] data layer
  */
 export const queryKeys = {
   home: ['home'] as const,

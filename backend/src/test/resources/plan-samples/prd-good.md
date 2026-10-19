@@ -7,7 +7,7 @@ Hackathon participants struggle to assemble high-performing teams with complemen
 Hackathon hackers, first-time builders, and solo designers looking for sprint companions.
 
 ## One-sentence identity
-Hackathon OS is the agile command centre transforming chaotic hackathon ideas into shipped MVPs.
+[brackit] is the agile command centre transforming chaotic hackathon ideas into shipped MVPs.
 
 ## Core flow
 1. Hacker creates or joins a room via invite code.

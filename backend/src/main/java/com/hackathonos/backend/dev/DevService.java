@@ -412,7 +412,7 @@ public class DevService {
             submissionRepository.save(new Submission(
                     roomId,
                     "DRAFT",
-                    "{\"whatItDoes\":\"Hackathon OS is an execution engine that keeps teams focused, aligned, and deadline-ready.\",\"whyItMatters\":\"Most hackathon teams fail due to misalignment and missed deadlines rather than lack of technical skill.\",\"howBuilt\":\"React, TypeScript, TailwindCSS, Spring Boot, PostgreSQL, Flyway.\",\"challenges\":\"Building deterministic attention rules and real-time state synchronisation across modules.\",\"whatsNext\":\"Multi-room tournaments and judge portals.\"}",
+                    "{\"whatItDoes\":\"[brackit] is an execution engine that keeps teams focused, aligned, and deadline-ready.\",\"whyItMatters\":\"Most hackathon teams fail due to misalignment and missed deadlines rather than lack of technical skill.\",\"howBuilt\":\"React, TypeScript, TailwindCSS, Spring Boot, PostgreSQL, Flyway.\",\"challenges\":\"Building deterministic attention rules and real-time state synchronisation across modules.\",\"whatsNext\":\"Multi-room tournaments and judge portals.\"}",
                     "[]",
                     clock.instant()
             ));

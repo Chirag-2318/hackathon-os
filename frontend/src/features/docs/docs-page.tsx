@@ -158,7 +158,7 @@ export function DocsPage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'hackathon-os-docs.zip';
+      a.download = 'brackit-docs.zip';
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -200,7 +200,7 @@ export function DocsPage() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-64px)] p-6">
+      <div className="flex items-center justify-center min-h-full flex-1 bg-page p-6">
         <ErrorState
           message={error.message}
           requestId={error.requestId}
@@ -215,7 +215,7 @@ export function DocsPage() {
 
   if (loading) {
     return (
-      <div className="flex h-[calc(100vh-64px)] w-full p-4 gap-4">
+      <div className="flex min-h-full flex-1 w-full p-4 gap-4 bg-page">
         <Skeleton className="w-[260px] h-full rounded-xl" />
         <Skeleton className="flex-1 h-full rounded-xl" />
         <Skeleton className="w-[260px] h-full rounded-xl hidden lg:block" />
@@ -226,7 +226,7 @@ export function DocsPage() {
   // Empty state
   if (files.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-64px)] p-6">
+      <div className="flex items-center justify-center min-h-full flex-1 bg-page p-6">
         <EmptyState
           headline="Your vault is empty"
           subtext="You haven't generated any plan documents yet. Complete the Plan phase to auto-generate your sprint documents."
@@ -242,7 +242,7 @@ export function DocsPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-64px)] max-h-[calc(100dvh-64px)] w-full flex flex-col bg-background overflow-hidden">
+    <div className="min-h-full flex-1 w-full flex flex-col bg-page overflow-hidden">
       {/* 3-Pane Full-Height Container with Hairlines */}
       <div className="flex-1 flex min-h-0 w-full overflow-hidden relative">
         {/* LEFT list pane (260px) */}

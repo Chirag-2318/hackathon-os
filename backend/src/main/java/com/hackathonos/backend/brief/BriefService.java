@@ -7,6 +7,7 @@ import com.hackathonos.backend.ai.AiService;
 import com.hackathonos.backend.brief.dto.*;
 import com.hackathonos.backend.common.error.BadRequestException;
 import com.hackathonos.backend.common.error.ConflictException;
+import com.hackathonos.backend.common.error.EntityConflictException;
 import com.hackathonos.backend.common.error.NotFoundException;
 import com.hackathonos.backend.common.security.RoomAccess;
 import com.hackathonos.backend.members.RoomMember;
@@ -16,6 +17,8 @@ import com.hackathonos.backend.rooms.Room;
 import com.hackathonos.backend.rooms.RoomRepository;
 import com.hackathonos.backend.rooms.RoomStageService;
 import com.hackathonos.backend.users.User;
+import com.hackathonos.backend.users.UserRepository;
+import com.hackathonos.backend.users.dto.UserSummaryDto;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,6 +57,8 @@ public class BriefService {
     private final AiService aiService;
     private final ObjectMapper objectMapper;
 
+    private final UserRepository userRepository;
+
     @Value("${app.upload-dir:./uploads}")
     private String uploadDir;
 
@@ -74,7 +79,8 @@ public class BriefService {
             FileTextExtractor fileTextExtractor,
             BriefMapper briefMapper,
             AiService aiService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            UserRepository userRepository) {
         this.briefRepository = briefRepository;
         this.rubricRepository = rubricRepository;
         this.uploadedFileRepository = uploadedFileRepository;
@@ -89,6 +95,7 @@ public class BriefService {
         this.briefMapper = briefMapper;
         this.aiService = aiService;
         this.objectMapper = objectMapper;
+        this.userRepository = userRepository;
     }
 
     /**
@@ -127,6 +134,13 @@ public class BriefService {
         validateRubricSumIfPresent(fields != null ? fields.rubric() : null);
 
         Brief brief = briefRepository.findByRoomId(roomId).orElseGet(() -> new Brief(roomId, req.source() != null ? req.source() : "manual"));
+        if (req.version() != null && req.version() != brief.getVersion()) {
+            UserSummaryDto lastEditor = brief.getLastEditedBy() != null
+                    ? userRepository.findById(brief.getLastEditedBy()).map(UserSummaryDto::from).orElse(null)
+                    : null;
+            BriefResponseDto latestDto = getBrief(roomId, user);
+            throw new EntityConflictException("CHANGED", "Brief was updated by another team member", brief.getVersion(), lastEditor, brief.getUpdatedAt(), latestDto);
+        }
         boolean wasConfirmed = brief.isConfirmed();
 
         if (req.source() != null) brief.setSource(req.source());
@@ -153,6 +167,7 @@ public class BriefService {
             brief.setConfirmedFields(briefMapper.toJson(req.confirmedFields()));
         }
 
+        brief.setLastEditedBy(user.getId());
         brief.setUpdatedAt(Instant.now());
         brief = briefRepository.save(brief);
 

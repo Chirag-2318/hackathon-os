@@ -223,9 +223,13 @@ export function PlanPrepareScreen({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm transition-opacity duration-200 ${
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--backdrop-fallback,#0a0a0b80)] supports-[backdrop-filter]:bg-[var(--backdrop)] backdrop-blur-[3px] transition-opacity duration-200 ${
         isLiftingAway ? 'opacity-0 -translate-y-1 pointer-events-none' : 'opacity-100 translate-y-0'
       }`}
+      style={{
+        backdropFilter: 'var(--backdrop-blur, blur(3px))',
+        WebkitBackdropFilter: 'var(--backdrop-blur, blur(3px))',
+      }}
     >
       <div className="w-full max-w-[480px] bg-card border border-border rounded-xl p-6 sm:p-8 text-card-foreground shadow-xl relative flex flex-col gap-6">
         {/* Hairline Progress Line */}

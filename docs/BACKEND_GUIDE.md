@@ -1,6 +1,9 @@
-# Hackathon OS - Backend Guide
+# [brackit] - Backend Guide
 
 This guide documents the architecture, directory layout, request flow, and security mechanisms implemented for **Phase 1: Foundation & Core Identity** and **Phase 2: Planning Flow (Brief, Ideate, Plan, Docs & Board Read Endpoints)**.
+
+> Real-time state (SSE emitters, sequence counters, and event ring buffers) is maintained in-memory per backend instance, suitable for single-instance deployments.
+> For horizontal multi-instance scaling in the future, back the hub with Redis pub/sub or Postgres LISTEN/NOTIFY.
 
 ---
 

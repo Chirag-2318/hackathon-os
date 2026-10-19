@@ -1,18 +1,19 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { cn } from '@/lib/utils';
+import { useDraggable } from '@dnd-kit/core';
 import {
-  Flag, MoreHorizontal, Check, UserCheck, ShieldAlert, ArrowRight, CornerDownRight, GitBranch, Lock, Unlock, Trash2
+  Flag, MoreHorizontal, Check, UserCheck, ArrowRight, Lock, Unlock, Trash2
 } from 'lucide-react';
 import type { Task, RoomMember, BoardPhase, TaskStatus } from '@/services/types';
 import {
   IssueKey, IssueTypeIcon, PriorityIcon, StatusLozenge, PhaseChip,
   DueChip, EstimateChip, SubtaskProgress, CommentCount
 } from '@/features/build/ui';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { UserAvatar } from '@/components/ui/user-avatar';
+import { useLiveContext } from '@/design';
 
 export interface JiraCardProps {
   task: Task;
@@ -26,11 +27,8 @@ export interface JiraCardProps {
   onToggleBlock: (taskId: string) => void;
   onDeferTask?: (taskId: string) => void;
   onDropTask?: (taskId: string) => void;
-  // Drag-and-drop pointer handlers
-  onPointerDownDrag?: (e: React.PointerEvent, task: Task) => void;
-  onDragStartTask?: (taskId: string) => void;
-  onDragEndTask?: () => void;
   onAdvanceTaskStatus?: (taskId: string) => void;
+  isOverlay?: boolean;
 }
 
 export function JiraCard({
@@ -45,68 +43,48 @@ export function JiraCard({
   onToggleBlock,
   onDeferTask,
   onDropTask,
-  onPointerDownDrag,
-  onDragStartTask,
-  onDragEndTask,
   onAdvanceTaskStatus,
+  isOverlay = false,
 }: JiraCardProps) {
   const isDone = task.status === 'done';
-  const isBlocked = task.flagged || Boolean(task.blockedReason);
+  const isBlocked = task.flagged || Boolean(task.blockedReason) || Boolean(task.isBlocked);
   const assignee = members.find(m => m.id === task.assigneeId);
   const phaseIndex = phases.findIndex(p => p.id === task.phaseId);
   const phase = phases[phaseIndex] || { name: 'Sprint' };
-  const [justDragged, setJustDragged] = useState(false);
+
+  // @dnd-kit draggable hook
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    isDragging: isKitDragging,
+  } = useDraggable({
+    id: task.id,
+    data: { task },
+    disabled: isOverlay,
+  });
 
   // Subtask progress
   const totalSubtasks = (task.subtasks || []).length;
   const doneSubtasks = (task.subtasks || []).filter(s => s.done).length;
 
+  const dragActive = isDragging || isKitDragging;
+  const { recentChanges } = useLiveContext();
+  const isChanged = recentChanges.has(task.id);
+
   return (
     <div
+      ref={setNodeRef}
+      {...(isOverlay ? {} : attributes)}
+      {...(isOverlay ? {} : listeners)}
       role="button"
       tabIndex={0}
       data-task-id={task.id}
       data-task-key={task.key}
-      draggable={true}
-      onDragStart={(e) => {
-        if ((e.target as HTMLElement).closest('button, [role="menuitem"], a, input')) {
-          e.preventDefault();
-          return;
-        }
-        e.dataTransfer.setData('text/plain', task.id);
-        e.dataTransfer.effectAllowed = 'move';
-
-        // Full card drag preview: full opacity, elevated shadow, 2deg tilt
-        const target = e.currentTarget as HTMLElement;
-        const clone = target.cloneNode(true) as HTMLElement;
-        clone.style.position = 'absolute';
-        clone.style.top = '-9999px';
-        clone.style.left = '-9999px';
-        clone.style.width = `${target.offsetWidth}px`;
-        clone.style.opacity = '1';
-        clone.style.transform = 'rotate(2deg)';
-        clone.style.boxShadow = '0 16px 32px rgba(16, 16, 20, 0.22)';
-        clone.style.pointerEvents = 'none';
-        clone.style.zIndex = '9999';
-        document.body.appendChild(clone);
-        const rect = target.getBoundingClientRect();
-        e.dataTransfer.setDragImage(clone, e.clientX - rect.left, e.clientY - rect.top);
-        setTimeout(() => {
-          if (document.body.contains(clone)) {
-            document.body.removeChild(clone);
-          }
-        }, 0);
-
-        setJustDragged(true);
-        onDragStartTask?.(task.id);
-      }}
-      onDragEnd={() => {
-        setJustDragged(false);
-        onDragEndTask?.();
-      }}
-      onPointerDown={(e) => {
-        if ((e.target as HTMLElement).closest('button, [role="menuitem"], a, input')) return;
-        onPointerDownDrag?.(e, task);
+      style={{
+        touchAction: 'none',
+        ...(dragActive ? { transition: 'none' } : {}),
+        ...(isOverlay ? { transition: 'none', animation: 'none' } : {}),
       }}
       onDoubleClick={(e) => {
         if ((e.target as HTMLElement).closest('button, [role="menuitem"], a, input')) return;
@@ -115,7 +93,7 @@ export function JiraCard({
         onAdvanceTaskStatus?.(task.id);
       }}
       onClick={(e) => {
-        if (justDragged) return;
+        if ((e.target as HTMLElement).closest('button, [role="menuitem"], a, input')) return;
         onOpen(task);
       }}
       onKeyDown={(e) => {
@@ -126,15 +104,16 @@ export function JiraCard({
       }}
       className={cn(
         'group relative bg-white dark:bg-card rounded-[12px] p-3 text-left border border-[#E7E7E9] dark:border-border select-none cursor-grab active:cursor-grabbing',
-        'shadow-[0_1px_2px_rgba(16,16,20,0.06)] transition-all duration-150',
-        'hover:shadow-md hover:border-[#D6D6DA] dark:hover:border-border/80',
+        'shadow-[0_1px_2px_rgba(16,16,20,0.06)]',
+        !dragActive && !isOverlay && 'transition-all duration-150 hover:shadow-md hover:border-[#D6D6DA] dark:hover:border-border/80',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500',
         isBlocked && 'border-l-[3px] border-l-rose-500 dark:border-l-rose-500',
-        isDragging
-          ? 'opacity-30 border-dashed border-border bg-muted/40 shadow-none pointer-events-none'
-          : justDragged && 'opacity-60 shadow-md'
+        dragActive && 'border-2 border-dashed border-border bg-muted/20 shadow-none pointer-events-none transition-none',
+        isOverlay && 'shadow-2xl border-border bg-card opacity-100 cursor-grabbing transition-none',
+        isChanged && 'live-change-flash ring-2 ring-indigo-400/50'
       )}
     >
+      <div className={cn("flex flex-col gap-2", dragActive && "invisible")}>
       {/* Top row: Flag + BLOCKED Lozenge (only when relevant) */}
       {isBlocked && (
         <div className="flex items-center justify-between gap-1 mb-2">
@@ -310,6 +289,7 @@ export function JiraCard({
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

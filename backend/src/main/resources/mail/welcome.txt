@@ -1,4 +1,4 @@
-HACKATHON OS - PARTICIPANT BADGE
+[brackit] - PARTICIPANT BADGE
 
 PARTICIPANT: @{{HANDLE}}
 NAME: {{DISPLAY_NAME}}
@@ -12,8 +12,8 @@ Your first ten minutes:
 2. Paste the event brief once
 3. Post one idea
 
-Open Hackathon OS:
+Open [brackit]:
 {{APP_URL}}
 
 --
-Hackathon OS - Collaborative command center for intense hackathons
+[brackit] - Collaborative command center for intense hackathons

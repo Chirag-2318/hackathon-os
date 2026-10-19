@@ -6,7 +6,39 @@ import java.util.Optional;
 
 public interface GitHubClient {
 
-    record ClientRepo(String fullName, String url, String visibility, String defaultBranch, String licenseSpdx) {}
+    record ClientRepo(
+            String fullName,
+            String name,
+            String description,
+            String url,
+            String visibility,
+            String defaultBranch,
+            String language,
+            int stars,
+            String pushedDate,
+            String htmlUrl,
+            String licenseSpdx
+    ) {
+        public ClientRepo(String fullName, String url, String visibility, String defaultBranch, String licenseSpdx) {
+            this(
+                    fullName,
+                    fullName != null && fullName.contains("/") ? fullName.substring(fullName.lastIndexOf('/') + 1) : (fullName != null ? fullName : ""),
+                    "",
+                    url,
+                    visibility,
+                    defaultBranch,
+                    "",
+                    0,
+                    null,
+                    url,
+                    licenseSpdx
+            );
+        }
+    }
+
+    default int getRateLimitRemaining() {
+        return 60;
+    }
 
     record ClientBranch(String name, String sha) {}
 

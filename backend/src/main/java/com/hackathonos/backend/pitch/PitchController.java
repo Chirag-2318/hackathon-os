@@ -25,19 +25,22 @@ public class PitchController {
     private final PitchScriptService scriptService;
     private final PitchRehearsalService rehearsalService;
     private final PitchQaService qaService;
+    private final PitchDocService pitchDocService;
 
     public PitchController(
             PitchDeckService deckService,
             PitchDeckSourceService deckSourceService,
             PitchScriptService scriptService,
             PitchRehearsalService rehearsalService,
-            PitchQaService qaService
+            PitchQaService qaService,
+            PitchDocService pitchDocService
     ) {
         this.deckService = deckService;
         this.deckSourceService = deckSourceService;
         this.scriptService = scriptService;
         this.rehearsalService = rehearsalService;
         this.qaService = qaService;
+        this.pitchDocService = pitchDocService;
     }
 
     // ── DECK SOURCE ──────────────────────────────────────────────────
@@ -335,5 +338,41 @@ public class PitchController {
             @AuthenticationPrincipal User user
     ) {
         return qaService.toggleDefensePracticed(roomId, id, user);
+    }
+
+    // ── PITCH & Q&A FROM DOCS ────────────────────────────────────────
+
+    @GetMapping("/doc-status")
+    public PitchDocDtos.PitchDocStatusDto getDocStatus(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user
+    ) {
+        return pitchDocService.getDocStatus(roomId, user);
+    }
+
+    @PostMapping("/from-doc")
+    public PitchDtos.PitchScriptDto useDemoScript(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user
+    ) {
+        return pitchDocService.useDemoScript(roomId, user);
+    }
+
+    @GetMapping("/qna-doc")
+    public PitchDocDtos.QnaDocResponseDto getQnaDoc(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user
+    ) {
+        return pitchDocService.getQnaDoc(roomId, user);
+    }
+
+    @PostMapping("/qna-practice")
+    public ResponseEntity<Void> toggleQnaPractice(
+            @PathVariable UUID roomId,
+            @AuthenticationPrincipal User user,
+            @RequestBody PitchDocDtos.ToggleQnaPracticeRequest req
+    ) {
+        pitchDocService.togglePractice(roomId, user, req.questionHash(), req.practiced());
+        return ResponseEntity.ok().build();
     }
 }

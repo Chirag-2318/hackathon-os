@@ -144,7 +144,7 @@ app:
     username: ${MAIL_USERNAME:}
     app-password: ${MAIL_APP_PASSWORD:}
     from-address: ${MAIL_FROM_ADDRESS:${MAIL_USERNAME:}}
-    from-name: ${MAIL_FROM_NAME:Hackathon OS}
+    from-name: "${MAIL_FROM_NAME:[brackit]}"
     reply-to: ${MAIL_REPLY_TO:}
     daily-limit: ${MAIL_DAILY_LIMIT:400}
     dry-run: ${MAIL_DRY_RUN:false}

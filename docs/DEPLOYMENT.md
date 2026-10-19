@@ -1,12 +1,12 @@
-# Production Deployment Guide: HackathonOS
+# Production Deployment Guide: [brackit]
 
-This guide covers production deployment of HackathonOS on a single Linux VM (Docker Compose with PostgreSQL 16, Spring Boot backend, and Caddy 2 for HTTPS) serving a frontend hosted on Vercel.
+This guide covers production deployment of [brackit] on a single Linux VM (Docker Compose with PostgreSQL 16, Spring Boot backend, and Caddy 2 for HTTPS) serving a frontend hosted on Vercel.
 
 ---
 
 ## 1. Architecture Overview
 
-HackathonOS supports two distinct deployment modes configured entirely via environment variables.
+[brackit] supports two distinct deployment modes configured entirely via environment variables.
 
 ### Mode A (Recommended: Shared Registrable Domain)
 
@@ -32,7 +32,7 @@ graph TD
 
 ### Mode B (Single Origin / Vercel Rewrites)
 
-When no custom domain is available, Vercel hosts the frontend (e.g., `https://hackathon-os.vercel.app`) and proxies `/api`, `/oauth2`, `/login/oauth2`, and `/uploads` directly to the backend VM. The browser communicates with a single origin using host-only cookies.
+When no custom domain is available, Vercel hosts the frontend (e.g., `https://brackit.vercel.app`) and proxies `/api`, `/oauth2`, `/login/oauth2`, and `/uploads` directly to the backend VM. The browser communicates with a single origin using host-only cookies.
 
 ```mermaid
 graph TD

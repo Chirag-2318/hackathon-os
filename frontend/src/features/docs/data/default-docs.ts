@@ -56,7 +56,7 @@ Hackathon teams struggle with chaotic coordination, fragmented notes, and panic 
 High-velocity hackathon builders, solo developers, and multidisciplinary student/professional hackathon teams aiming for podium finishes.
 
 ## One-sentence identity
-Hackathon OS is the autonomous command center that turns chaotic hackathon sprints into polished, winning submissions.
+[brackit] is the autonomous command center that turns chaotic hackathon sprints into polished, winning submissions.
 
 ## Core flow
 1. **Intake & Brief:** Extract problem statement, rubric criteria, and constraints.
@@ -196,7 +196,7 @@ The following items are intentionally cut from the initial hackathon sprint to p
 ## 3-Minute Live Demo Script
 
 - **[0:00 - 0:30] Hook & Problem:**
-  "Judges, every hackathon team has lived through the 3:00 AM panic: half-written docs, lost architecture decisions, and an unpracticed pitch. We built Hackathon OS to solve this."
+  "Judges, every hackathon team has lived through the 3:00 AM panic: half-written docs, lost architecture decisions, and an unpracticed pitch. We built [brackit] to solve this."
 
 - **[0:30 - 1:15] The Docs Vault & AI Assistant:**
   "Show the Docs Vault. Navigate to DECISIONS.md. Highlight an architectural decision, trigger the inline Ask AI toolbar, and watch Groq return instant, tailored architectural analysis."
@@ -208,7 +208,7 @@ The following items are intentionally cut from the initial hackathon sprint to p
   "Demonstrate offline banner and local persistence. Click 'All (.zip)' to show instant packaging."
 
 - **[2:30 - 3:00] Summary & Q&A Transition:**
-  "Hackathon OS gives teams the clarity to build fast and win. Thank you, we'd love to take your questions."
+  "[brackit] gives teams the clarity to build fast and win. Thank you, we'd love to take your questions."
 `,
   },
   {
@@ -221,7 +221,7 @@ The following items are intentionally cut from the initial hackathon sprint to p
 ## Likely Questions & Strategic Responses
 
 ### Q1: "How is this different from Notion or Google Docs?"
-**Answer:** Notion is a general-purpose workspace. Hackathon OS is purpose-built for the high-velocity 36-hour sprint: it enforces rubric alignment, generates sprint phases, provides inline Groq AI tailored to hackathon criteria, and packages your final submission for GitHub in one click.
+**Answer:** Notion is a general-purpose workspace. [brackit] is purpose-built for the high-velocity 36-hour sprint: it enforces rubric alignment, generates sprint phases, provides inline Groq AI tailored to hackathon criteria, and packages your final submission for GitHub in one click.
 
 ### Q2: "What happens if your AI provider goes down during the hackathon?"
 **Answer:** Our AI Gateway implements a circuit breaker with automated exponential retry and local fallback templates. Furthermore, all documents and edits are persisted locally in IndexedDB so the team can continue working without disruption.

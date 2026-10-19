@@ -18,6 +18,7 @@ import com.hackathonos.backend.overview.ClockService;
 import com.hackathonos.backend.plan.PlanPhase;
 import com.hackathonos.backend.plan.PlanPhaseRepository;
 import com.hackathonos.backend.rooms.Room;
+import com.hackathonos.backend.rooms.RoomRepository;
 import com.hackathonos.backend.tasks.dto.*;
 import com.hackathonos.backend.users.User;
 import com.hackathonos.backend.users.UserRepository;
@@ -55,6 +56,7 @@ public class TaskService {
     private final GithubBranchTaskRepository branchTaskRepository;
     private final GithubBranchRepository branchRepository;
     private final com.hackathonos.backend.events.RoomEventService roomEventService;
+    private final RoomRepository roomRepository;
 
     public TaskService(
             TaskRepository taskRepository,
@@ -77,7 +79,8 @@ public class TaskService {
             Clock clock,
             GithubBranchTaskRepository branchTaskRepository,
             GithubBranchRepository branchRepository,
-            com.hackathonos.backend.events.RoomEventService roomEventService
+            com.hackathonos.backend.events.RoomEventService roomEventService,
+            RoomRepository roomRepository
     ) {
         this.taskRepository = taskRepository;
         this.subtaskRepository = subtaskRepository;
@@ -100,6 +103,7 @@ public class TaskService {
         this.branchTaskRepository = branchTaskRepository;
         this.branchRepository = branchRepository;
         this.roomEventService = roomEventService;
+        this.roomRepository = roomRepository;
     }
 
     /**
@@ -107,6 +111,7 @@ public class TaskService {
      */
     @Transactional
     public TaskDetailDto createTask(UUID roomId, User user, CreateTaskRequest request) {
+        roomRepository.findWithLockById(roomId);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
         roomAccess.requireMember(roomId, user);
 
@@ -202,6 +207,7 @@ public class TaskService {
      */
     @Transactional
     public MoveTaskResponseDto moveTask(UUID roomId, User user, UUID taskId, MoveTaskRequest request) {
+        roomRepository.findWithLockById(roomId);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
         roomAccess.requireMember(roomId, user);
         Task task = taskRepository.findByIdAndRoomId(taskId, roomId)
@@ -209,6 +215,13 @@ public class TaskService {
 
         String targetStatus = toInternalStatus(request.toStatus());
         String oldStatus = task.getStatus();
+
+        // Idempotency: moving a task to the column it is already in with matching position returns 200 with current state
+        if (targetStatus.equals(oldStatus) && (request.toIndex() == null || request.toIndex() == task.getPosition())) {
+            BoardSummaryDto summary = computeBoardSummary(roomId);
+            TaskDto currentDto = buildTaskDto(task);
+            return new MoveTaskResponseDto(summary, currentDto);
+        }
 
         if (("IN_PROGRESS".equals(targetStatus) || "DONE".equals(targetStatus)) && !"DONE".equals(oldStatus)) {
             List<String> blockers = getBlockingTaskNames(task);
@@ -224,7 +237,7 @@ public class TaskService {
 
         if ("DONE".equals(targetStatus) && !"DONE".equals(oldStatus)) {
             task.setCompletedAt(clock.instant());
-            boolean isLeader = roomAccess.isLeader(roomId, user.getId());
+            boolean isLeader = roomAccess.isLeader(roomId, user.getId()) || (room.getOwnerId() != null && room.getOwnerId().equals(user.getId()));
             if (isLeader) {
                 task.setReviewState("CONFIRMED");
                 task.setConfirmedAt(clock.instant());
@@ -232,6 +245,20 @@ public class TaskService {
                 task.setReviewNote(null);
                 historyRepository.save(new TaskHistory(task.getId(), user.getId(), "moved to Done and confirmed"));
                 activityLogger.log(room, user, "TASK_COMPLETED", "finished " + task.getTaskKey());
+
+                if (task.getPhaseKey() != null) {
+                    phaseRepository.findByRoomIdAndPlanKey(roomId, task.getPhaseKey()).ifPresent(phase -> {
+                        if ("ACTIVE".equalsIgnoreCase(phase.getStatus()) && phase.getTasksGeneratedAt() != null && phase.getReadyNotifiedAt() == null) {
+                            List<Task> pTasks = taskRepository.findByRoomIdAndPhaseKey(roomId, phase.getPhaseKey());
+                            boolean allDone = !pTasks.isEmpty() && pTasks.stream().allMatch(t -> (t.getId().equals(task.getId()) ? true : (t.isConfirmedDone() || t.isDropped())));
+                            if (allDone) {
+                                phase.setReadyNotifiedAt(clock.instant());
+                                phaseRepository.save(phase);
+                                roomEventService.recordEvent(roomId, "PHASE_READY", "phase", phase.getPhaseKey(), null);
+                            }
+                        }
+                    });
+                }
             } else {
                 task.setReviewState("AWAITING");
                 task.setConfirmedAt(null);

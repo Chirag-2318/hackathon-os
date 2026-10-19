@@ -74,7 +74,7 @@ export function PlanLockedView({
 
           {!isLeader && (
             <p className="text-[11px] text-muted-foreground text-center">
-              The team leader can manage stage transitions and task allocations.
+              Sprint plan is locked. Enter the build workspace to collaborate with your team.
             </p>
           )}
         </div>

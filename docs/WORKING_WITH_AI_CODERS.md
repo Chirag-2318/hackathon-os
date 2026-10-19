@@ -1,4 +1,4 @@
-# Working with AI Coders on Hackathon OS
+# Working with AI Coders on [brackit]
 
 A developer and prompt engineering guide for collaborating efficiently with AI models on this codebase.
 
@@ -20,7 +20,7 @@ A developer and prompt engineering guide for collaborating efficiently with AI m
 Paste this block at the top of feature or bugfix prompts:
 
 ```markdown
-ROLE: Senior Engineer on Hackathon OS. Work strictly in the named files. Reuse the shared design system in src/design and existing backend services. Do not add dependencies without asking. Do not write test files. Do not perform repo-wide scans. Run the production build or compile step once at the end, fix errors, and stop. Respond with at most 12 lines summarizing what changed.
+ROLE: Senior Engineer on [brackit]. Work strictly in the named files. Reuse the shared design system in src/design and existing backend services. Do not add dependencies without asking. Do not write test files. Do not perform repo-wide scans. Run the production build or compile step once at the end, fix errors, and stop. Respond with at most 12 lines summarizing what changed.
 ```
 
 ---

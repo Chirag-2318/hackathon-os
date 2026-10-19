@@ -1,8 +1,10 @@
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { planService, ideaService, roomService } from '@/services';
+import { phaseService } from '@/services/phaseService';
+import { boardService } from '@/services/boardService';
 import { fetchSettings } from '@/features/prep/api/settings-api';
 import { PlanStepper } from './components/plan-stepper';
 import { PromptBridgePanel } from './components/prompt-bridge-panel';
@@ -43,6 +45,8 @@ export function PlanPage() {
   const { roomId, id } = useParams<{ roomId?: string; id?: string }>();
   const activeRoomId = roomId || id || '';
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const forceGuide = searchParams.get('guide') === '1';
   const queryClient = useQueryClient();
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -206,33 +210,85 @@ export function PlanPage() {
 
   // First-time "How this works" Guide modal trigger (step 1 on first entry)
   useEffect(() => {
+    // Must be step 1
     if (currentStepIndex !== 0) return;
-    if (hasTriggeredGuideRef.current) return;
+    // Must not be in BeforeWePlan
+    if (plan?.started === false) return;
+    // Prompt panel must have rendered
+    if (loadingStepPrompt || !stepPromptData) return;
+    // If already triggered or open, return
+    if (hasTriggeredGuideRef.current || showGuideModal) return;
 
     const storageKey = currentUser?.id
       ? `plan_guide_done_v2_${currentUser.id}`
-      : `plan_guide_done_v2_guest_${activeRoomId}`;
+      : 'plan_guide_done_v2_guest';
 
     const hasSeen = typeof window !== 'undefined' && (
       localStorage.getItem(storageKey) === 'true' ||
       Boolean(currentUser?.hotspotsSeen?.includes('plan_guide_v2'))
     );
 
-    if (!hasSeen) {
+    if (!forceGuide && hasSeen) return;
+
+    // Check no tour or other modal is open
+    const isTourActive = typeof window !== 'undefined' && (
+      sessionStorage.getItem('tour_active') === '1' ||
+      Boolean(document.querySelector('[data-tour-active="true"]'))
+    );
+    if (isTourActive) return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let checkInterval: ReturnType<typeof setInterval> | null = null;
+
+    const triggerOpen = () => {
+      if (cancelled) return;
       hasTriggeredGuideRef.current = true;
-      const timer = setTimeout(() => {
-        isManualGuideOpenRef.current = false;
-        setShowGuideModal(true);
-      }, 400);
-      return () => clearTimeout(timer);
+      isManualGuideOpenRef.current = false;
+      setShowGuideModal(true);
+    };
+
+    if (isPreparing) {
+      const startTime = Date.now();
+      checkInterval = setInterval(() => {
+        if (!isPreparing || Date.now() - startTime >= 3000) {
+          if (checkInterval) clearInterval(checkInterval);
+          if (timer) clearTimeout(timer);
+          setIsPreparing(false);
+          triggerOpen();
+        }
+      }, 100);
+
+      timer = setTimeout(() => {
+        if (checkInterval) clearInterval(checkInterval);
+        setIsPreparing(false);
+        triggerOpen();
+      }, 3000);
+    } else {
+      triggerOpen();
     }
-  }, [currentStepIndex, currentUser, activeRoomId]);
+
+    return () => {
+      cancelled = true;
+      if (checkInterval) clearInterval(checkInterval);
+      if (timer) clearTimeout(timer);
+    };
+  }, [
+    currentStepIndex,
+    plan?.started,
+    loadingStepPrompt,
+    stepPromptData,
+    isPreparing,
+    currentUser,
+    forceGuide,
+    showGuideModal,
+  ]);
 
   const handleCloseGuide = () => {
     setShowGuideModal(false);
     const storageKey = currentUser?.id
       ? `plan_guide_done_v2_${currentUser.id}`
-      : `plan_guide_done_v2_guest_${activeRoomId}`;
+      : 'plan_guide_done_v2_guest';
     if (typeof window !== 'undefined') {
       localStorage.setItem(storageKey, 'true');
       if (currentUser?.id) {
@@ -255,6 +311,37 @@ export function PlanPage() {
     }
   };
 
+  const syncPostPlanData = async () => {
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['room', activeRoomId] }),
+        queryClient.invalidateQueries({ queryKey: ['phases', activeRoomId] }),
+        queryClient.invalidateQueries({ queryKey: ['tasks', activeRoomId] }),
+        queryClient.invalidateQueries({ queryKey: ['board', activeRoomId] }),
+        queryClient.invalidateQueries({ queryKey: ['nav-badges', activeRoomId] }),
+      ]);
+
+      const [roomData, phasesData] = await Promise.all([
+        queryClient.refetchQueries({ queryKey: ['room', activeRoomId] }),
+        queryClient.fetchQuery({
+          queryKey: ['phases', activeRoomId],
+          queryFn: () => phaseService.getPhases(activeRoomId),
+        }),
+        queryClient.refetchQueries({ queryKey: ['tasks', activeRoomId] }),
+      ]);
+
+      const activePhase = (phasesData as any[])?.find((p: any) => p.status === 'ACTIVE') || (phasesData as any[])?.[0];
+      if (activePhase) {
+        await queryClient.prefetchQuery({
+          queryKey: ['phase-prompt', activeRoomId, activePhase.key, 'FRESH'],
+          queryFn: () => phaseService.getPhaseTaskPrompt(activeRoomId, activePhase.key, 'FRESH'),
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to pre-sync post plan data:', e);
+    }
+  };
+
   // Multipart Files Validation handler
   const handleValidateStepFiles = async (files: File[], confirm = false, override = false) => {
     const res = await planService.validateStepFiles(activeRoomId, currentStepIndex + 1, files, confirm, override);
@@ -272,8 +359,7 @@ export function PlanPage() {
         try {
           await planService.enterBuild(activeRoomId);
         } catch (_) {}
-        queryClient.invalidateQueries({ queryKey: ['room', activeRoomId] });
-        queryClient.invalidateQueries({ queryKey: ['nav-badges', activeRoomId] });
+        await syncPostPlanData();
         setTransitionCounts({
           docs: (res.completion as any)?.docs ?? (res.completion as any)?.docsCount ?? plan?.completion?.docsCount ?? 9,
           tasks: (res.completion as any)?.tasks ?? (res.completion as any)?.tasksCount ?? plan?.completion?.tasksCount ?? 0,
@@ -300,8 +386,7 @@ export function PlanPage() {
         try {
           await planService.enterBuild(activeRoomId);
         } catch (_) {}
-        queryClient.invalidateQueries({ queryKey: ['room', activeRoomId] });
-        queryClient.invalidateQueries({ queryKey: ['nav-badges', activeRoomId] });
+        await syncPostPlanData();
         setTransitionCounts({
           docs: (res.completion as any)?.docs ?? (res.completion as any)?.docsCount ?? plan?.completion?.docsCount ?? 9,
           tasks: (res.completion as any)?.tasks ?? (res.completion as any)?.tasksCount ?? plan?.completion?.tasksCount ?? 0,
@@ -311,13 +396,11 @@ export function PlanPage() {
     return res;
   };
 
-  const handleStepSuccess = () => {
+  const handleStepSuccess = async () => {
     if (currentStepIndex < STEP_CONFIG.length - 1) {
       setCurrentStepIndex(currentStepIndex + 1);
     } else {
-      queryClient.invalidateQueries({ queryKey: ['plan', activeRoomId] });
-      queryClient.invalidateQueries({ queryKey: ['room', activeRoomId] });
-      queryClient.invalidateQueries({ queryKey: ['plan-state', activeRoomId] });
+      await syncPostPlanData();
       const storageKey = `plan_transition_${activeRoomId}`;
       if (!sessionStorage.getItem(storageKey)) {
         setShowTransitionOverlay(true);
@@ -348,6 +431,16 @@ export function PlanPage() {
     setIsEnteringBuild(true);
     try {
       await planService.enterBuild(activeRoomId);
+    } catch (e: any) {
+      if (!plan?.planLocked) {
+        toast.error(e.message || 'Failed to enter build phase');
+        setIsEnteringBuild(false);
+        return;
+      }
+    }
+
+    try {
+      await syncPostPlanData();
       const storageKey = `plan_transition_${activeRoomId}`;
       if (!sessionStorage.getItem(storageKey)) {
         setTransitionCounts({
@@ -358,8 +451,8 @@ export function PlanPage() {
       } else {
         navigate(`/app/room/${activeRoomId}/board`);
       }
-    } catch (e: any) {
-      toast.error(e.message || 'Failed to enter build phase');
+    } catch (_) {
+      navigate(`/app/room/${activeRoomId}/board`);
     } finally {
       setIsEnteringBuild(false);
     }
@@ -414,7 +507,11 @@ export function PlanPage() {
           phasesCount={plan?.completion?.phasesCount ?? 5}
           onEnterBuild={handleEnterBuild}
           isEnteringBuild={isEnteringBuild}
-          isLeader={plan.permissions?.isLeader ?? true}
+          isLeader={Boolean(
+            (plan.permissions as any)?.isLeader ??
+            room?.isLeader ??
+            (room?.myRole || '').toUpperCase() === 'LEADER'
+          )}
         />
         {showTransitionOverlay && (
           <React.Suspense fallback={null}>

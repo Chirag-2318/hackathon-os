@@ -7,8 +7,10 @@ import com.hackathonos.backend.ai.AiService;
 import com.hackathonos.backend.brief.Brief;
 import com.hackathonos.backend.brief.BriefRepository;
 import com.hackathonos.backend.common.error.BadRequestException;
+import com.hackathonos.backend.common.error.EntityConflictException;
 import com.hackathonos.backend.common.error.NotFoundException;
 import com.hackathonos.backend.common.security.RoomAccess;
+import com.hackathonos.backend.users.dto.UserSummaryDto;
 import com.hackathonos.backend.demo.DemoSection;
 import com.hackathonos.backend.demo.DemoSectionRepository;
 import com.hackathonos.backend.docs.DocRepository;
@@ -216,6 +218,15 @@ public class PitchScriptService {
         PitchScript script = scriptRepository.findById(roomId)
                 .orElseThrow(() -> new NotFoundException("SCRIPT_NOT_FOUND", "Pitch script not found"));
 
+        if (req.version() != null && req.version() != script.getVersion()) {
+            UserSummaryDto lastEditor = script.getLastEditedBy() != null && userRepository != null
+                    ? userRepository.findById(script.getLastEditedBy()).map(UserSummaryDto::from).orElse(null)
+                    : null;
+            PitchDtos.PitchScriptDto latestDto = toDto(script);
+            throw new EntityConflictException("CHANGED", "Pitch script was updated by another team member", script.getVersion(), lastEditor, script.getGeneratedAt(), latestDto);
+        }
+        script.setLastEditedBy(user.getId());
+
         List<PitchDtos.PitchSlidePlanDto> slides = parseSlideDtos(script.getSlides());
         boolean found = false;
         List<PitchDtos.PitchSlidePlanDto> updated = new ArrayList<>();
@@ -376,7 +387,9 @@ public class PitchScriptService {
                 s.getTotalSeconds(),
                 slideList,
                 s.getGeneratedBy(),
-                s.getGeneratedAt()
+                s.getGeneratedAt(),
+                s.getSource(),
+                s.getDocVersion()
         );
     }
 

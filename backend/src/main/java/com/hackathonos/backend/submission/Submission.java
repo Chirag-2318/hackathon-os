@@ -37,6 +37,13 @@ public class Submission {
     @Column(name = "submitted_by")
     private UUID submittedBy;
 
+    @Version
+    @Column(nullable = false)
+    private long version = 0L;
+
+    @Column(name = "last_edited_by")
+    private UUID lastEditedBy;
+
     public Submission() {}
 
     public Submission(UUID roomId, String status, String draft, String formFields, Instant createdAt) {
@@ -76,4 +83,10 @@ public class Submission {
 
     public UUID getSubmittedBy() { return submittedBy; }
     public void setSubmittedBy(UUID submittedBy) { this.submittedBy = submittedBy; }
+
+    public long getVersion() { return version; }
+    public void setVersion(long version) { this.version = version; }
+
+    public UUID getLastEditedBy() { return lastEditedBy; }
+    public void setLastEditedBy(UUID lastEditedBy) { this.lastEditedBy = lastEditedBy; }
 }

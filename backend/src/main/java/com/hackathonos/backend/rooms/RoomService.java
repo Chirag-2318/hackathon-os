@@ -30,9 +30,11 @@ import com.hackathonos.backend.users.UserRepository;
 import com.hackathonos.backend.users.UserSettings;
 import com.hackathonos.backend.users.UserSettingsRepository;
 import com.hackathonos.backend.users.dto.UserSummaryDto;
+import com.hackathonos.backend.phases.dto.PhaseSummaryDto;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.security.SecureRandom;
 import java.time.*;
 import java.time.temporal.ChronoUnit;
@@ -66,6 +68,7 @@ public class RoomService {
     private final DocRepository docRepository;
     private final DocVersionRepository docVersionRepository;
     private final ObjectMapper objectMapper;
+    private final com.hackathonos.backend.events.RoomEventHub eventHub;
 
     public RoomService(RoomRepository roomRepository,
                        RoomMemberRepository memberRepository,
@@ -87,7 +90,8 @@ public class RoomService {
                        PlanPhaseRepository phaseRepository,
                        DocRepository docRepository,
                        DocVersionRepository docVersionRepository,
-                       ObjectMapper objectMapper) {
+                       ObjectMapper objectMapper,
+                       com.hackathonos.backend.events.RoomEventHub eventHub) {
         this.roomRepository = roomRepository;
         this.memberRepository = memberRepository;
         this.templateService = templateService;
@@ -109,6 +113,7 @@ public class RoomService {
         this.docRepository = docRepository;
         this.docVersionRepository = docVersionRepository;
         this.objectMapper = objectMapper;
+        this.eventHub = eventHub;
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -169,6 +174,7 @@ public class RoomService {
 
         activityLogger.log(room, creator, "room_created", "Created the room");
         notificationService.notifyUser(creator, room, NotificationType.ROOM_CREATED, "Room created", room.getName());
+        eventHub.publishUser(creator.getId(), "rooms");
 
         return getRoomDetail(creator, room.getId());
     }
@@ -276,8 +282,10 @@ public class RoomService {
         List<StageUnlockRuleDto> unlockRules = stageService.computeUnlockRules(room);
         NextStepDto nextStep = nextStepService.computeNextStep(room, user);
 
+        List<PhaseSummaryDto> phases = computePhaseSummaries(room);
+
         return roomMapper.toDetail(room, templateName, memberCount, member.getRole(), isLeader,
-                clock, aiAllowed, progress, unlockRules, nextStep);
+                clock, aiAllowed, progress, unlockRules, nextStep, phases);
     }
 
     @Transactional
@@ -311,6 +319,12 @@ public class RoomService {
         room.setUpdatedAt(Instant.now());
         roomRepository.save(room);
         activityLogger.log(room, user, "room_archived", "Archived the room");
+        eventHub.publish(roomId, "members", user, null);
+        eventHub.publish(roomId, "overview", user, null);
+        List<RoomMember> members = memberRepository.findByRoomId(roomId);
+        for (RoomMember m : members) {
+            eventHub.publishUser(m.getUserId(), "rooms");
+        }
     }
 
     @Transactional
@@ -321,6 +335,12 @@ public class RoomService {
         room.setUpdatedAt(Instant.now());
         roomRepository.save(room);
         activityLogger.log(room, user, "room_deleted", "Deleted the room");
+        eventHub.publish(roomId, "members", user, null);
+        eventHub.publish(roomId, "overview", user, null);
+        List<RoomMember> members = memberRepository.findByRoomId(roomId);
+        for (RoomMember m : members) {
+            eventHub.publishUser(m.getUserId(), "rooms");
+        }
     }
 
     @Transactional
@@ -384,6 +404,78 @@ public class RoomService {
             String up = p.toUpperCase();
             return !(up.contains("FORBIDDEN") || up.contains("RESTRICTED") || up.contains("PROHIBITED") || up.contains("NO_AI"));
         }).orElse(true);
+    }
+
+    private List<PhaseSummaryDto> computePhaseSummaries(Room room) {
+        List<PlanPhase> phases = phaseRepository.findByRoomIdOrderByPositionAsc(room.getId());
+        if (phases.isEmpty()) {
+            return List.of();
+        }
+        List<Task> allTasks = taskRepository.findByRoomId(room.getId());
+        Instant clockNow = Instant.now();
+        Instant buildStart = room.getBuildStartedAt() != null ? room.getBuildStartedAt() : room.getEventStart();
+
+        List<PhaseSummaryDto> result = new ArrayList<>(phases.size());
+        int n = phases.size();
+
+        for (int i = 0; i < n; i++) {
+            PlanPhase p = phases.get(i);
+            String pKey = p.getPhaseKey();
+            List<Task> pTasks = allTasks.stream()
+                    .filter(t -> pKey != null && pKey.equalsIgnoreCase(t.getPhaseKey()))
+                    .toList();
+
+            int total = (int) pTasks.stream().filter(t -> !t.isDropped()).count();
+            int confirmed = (int) pTasks.stream().filter(t -> t.isConfirmedDone() && !t.isDropped()).count();
+            int awaiting = (int) pTasks.stream().filter(t -> !t.isDropped() && !t.isConfirmedDone() && "done".equalsIgnoreCase(t.getStatus())).count();
+            int inProgress = (int) pTasks.stream().filter(t -> !t.isDropped() && "inprogress".equalsIgnoreCase(t.getStatus())).count();
+            int todo = (int) pTasks.stream().filter(t -> !t.isDropped() && "todo".equalsIgnoreCase(t.getStatus())).count();
+            int dropped = (int) pTasks.stream().filter(Task::isDropped).count();
+
+            double hoursPlanned = pTasks.stream()
+                    .filter(t -> !t.isDropped() && t.getEstimateHours() != null)
+                    .mapToDouble(Task::getEstimateHours)
+                    .sum();
+            double hoursConfirmed = pTasks.stream()
+                    .filter(t -> t.isConfirmedDone() && !t.isDropped() && t.getEstimateHours() != null)
+                    .mapToDouble(Task::getEstimateHours)
+                    .sum();
+
+            BigDecimal startH = p.getStartHour() != null ? p.getStartHour() : BigDecimal.ZERO;
+            BigDecimal endH = p.getEndHour() != null ? p.getEndHour() : BigDecimal.valueOf(Math.max(1, room.getDurationHours()));
+            Instant startTime = buildStart != null ? buildStart.plus(Duration.ofMinutes((long) (startH.doubleValue() * 60))) : null;
+            Instant endTime = buildStart != null ? buildStart.plus(Duration.ofMinutes((long) (endH.doubleValue() * 60))) : null;
+
+            boolean overdue = "ACTIVE".equalsIgnoreCase(p.getStatus()) && endTime != null && clockNow.isAfter(endTime);
+            boolean tasksGen = p.getTasksGeneratedAt() != null;
+            boolean isCur = "ACTIVE".equalsIgnoreCase(p.getStatus());
+            boolean ready = isCur && tasksGen && !pTasks.isEmpty() && pTasks.stream().allMatch(t -> t.isConfirmedDone() || t.isDropped());
+            String nextPhaseKey = (i + 1 < n) ? phases.get(i + 1).getPhaseKey() : null;
+
+            result.add(new PhaseSummaryDto(
+                    p.getId(),
+                    p.getPhaseKey(),
+                    p.getName(),
+                    p.getPosition(),
+                    p.getStatus(),
+                    p.getGoal(),
+                    p.getExitCheckpoint(),
+                    p.getOwners(),
+                    p.getDeliverables(),
+                    p.getRawMarkdown(),
+                    new PhaseSummaryDto.TaskCountsDto(total, confirmed, awaiting, inProgress, todo, dropped),
+                    hoursPlanned,
+                    hoursConfirmed,
+                    new PhaseSummaryDto.PhaseWindowDto(startH, endH, startTime, endTime),
+                    overdue,
+                    ready,
+                    tasksGen,
+                    isCur,
+                    nextPhaseKey
+            ));
+        }
+
+        return result;
     }
 
     private void applyRoomUpdates(Room room, UpdateRoomRequest request, EventTemplate template) {

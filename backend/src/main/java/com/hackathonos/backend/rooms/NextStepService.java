@@ -2,6 +2,7 @@ package com.hackathonos.backend.rooms;
 
 import com.hackathonos.backend.brief.Brief;
 import com.hackathonos.backend.brief.BriefRepository;
+import com.hackathonos.backend.ideas.IdeaRepository;
 import com.hackathonos.backend.members.RoomMember;
 import com.hackathonos.backend.members.RoomMemberRepository;
 import com.hackathonos.backend.plan.PlanPhase;
@@ -29,19 +30,22 @@ public class NextStepService {
     private final TaskRepository taskRepository;
     private final SubmissionRepository submissionRepository;
     private final PlanPhaseRepository phaseRepository;
+    private final IdeaRepository ideaRepository;
 
     public NextStepService(BriefRepository briefRepository,
                            RoomMemberRepository memberRepository,
                            PlanStepRepository planStepRepository,
                            TaskRepository taskRepository,
                            SubmissionRepository submissionRepository,
-                           PlanPhaseRepository phaseRepository) {
+                           PlanPhaseRepository phaseRepository,
+                           IdeaRepository ideaRepository) {
         this.briefRepository = briefRepository;
         this.memberRepository = memberRepository;
         this.planStepRepository = planStepRepository;
         this.taskRepository = taskRepository;
         this.submissionRepository = submissionRepository;
         this.phaseRepository = phaseRepository;
+        this.ideaRepository = ideaRepository;
     }
 
     public NextStepDto computeNextStep(Room room) {
@@ -50,180 +54,150 @@ public class NextStepService {
 
     public NextStepDto computeNextStep(Room room, User user) {
         if (room == null) {
-            return new NextStepDto("Create a room", "/app", "Start a hackathon sprint");
+            return new NextStepDto("Create a room", "/app", "Start a hackathon sprint", false);
         }
         UUID roomId = room.getId();
 
-        // 0. Submitted room check
-        if (room.getSubmittedAt() != null) {
+        // Submitted room check
+        if (room.getSubmittedAt() != null || "SUBMITTED".equalsIgnoreCase(room.getStage())) {
             return new NextStepDto(
-                    "Review your summary",
+                    "View summary",
                     "/app/room/" + roomId + "/summary",
-                    "Room is complete; view your milestone timeline and achievements"
+                    "Room is complete; view your milestone timeline and achievements",
+                    false
             );
         }
 
-        // 1. Brief confirmation
+        // 1. Brief not confirmed: "Open Brief"
         Optional<Brief> briefOpt = briefRepository.findByRoomId(roomId);
         if (briefOpt.isEmpty() || !briefOpt.get().isConfirmed()) {
             return new NextStepDto(
-                    "Add the event brief",
-                    "/app/rooms/" + roomId + "/brief",
-                    "Confirm event rules, constraints, and judging criteria"
+                    "Open Brief",
+                    "/app/room/" + roomId + "/brief",
+                    "Confirm event rules, constraints, and judging criteria",
+                    false
             );
         }
 
-        // 2. Team membership check
-        long memberCount = memberRepository.countByRoomId(roomId);
-        if (memberCount < 2) {
+        // 2. Brief confirmed and no approved idea: "Go to Ideate" (ideation in progress)
+        long approvedIdeas = ideaRepository.countByRoomIdAndStatus(roomId, "APPROVED");
+        if (approvedIdeas == 0) {
             return new NextStepDto(
-                    "Invite your team",
-                    "/app/rooms/" + roomId + "/team",
-                    "Share your 8-character room code with teammates"
+                    "Go to Ideate",
+                    "/app/room/" + roomId + "/ideate",
+                    "Brainstorm and approve the winning project direction",
+                    false
             );
         }
 
-        // 3. Plan steps evaluation (4 milestones)
+        // 3. An approved idea but the plan not finished: "Continue Plan, step N of 4"
         List<PlanStep> steps = planStepRepository.findByRoomId(roomId);
         long validatedSteps = steps.stream().filter(PlanStep::isValidated).count();
         if (validatedSteps < 4) {
-            String nextStepName = findFirstIncompleteStep(steps);
+            long stepNum = Math.min(4, validatedSteps + 1);
             return new NextStepDto(
-                    "Validate " + nextStepName,
-                    "/app/rooms/" + roomId + "/plan",
-                    "Complete all 4 planning milestones to unlock Build"
+                    "Continue Plan, step " + stepNum + " of 4",
+                    "/app/room/" + roomId + "/plan",
+                    "Complete all 4 planning milestones to unlock Build",
+                    false
             );
         }
 
-        // 4. Build phase tasks
+        boolean isLeader = true;
+        if (user != null) {
+            isLeader = memberRepository.findByRoomIdAndUserId(roomId, user.getId())
+                    .map(m -> "LEADER".equalsIgnoreCase(m.getRole()))
+                    .orElse(true);
+        }
+
+        // 4. Build stage / phases
+        List<PlanPhase> phases = phaseRepository.findByRoomIdOrderByPositionAsc(roomId);
+        boolean allPhasesComplete = !phases.isEmpty() && phases.stream().allMatch(p -> "COMPLETED".equalsIgnoreCase(p.getStatus()));
         String stage = room.getWorkflowStage() != null ? room.getWorkflowStage() : room.getStage();
-        if ("BUILD".equalsIgnoreCase(stage)) {
-            List<PlanPhase> phases = phaseRepository.findByRoomIdOrderByPositionAsc(roomId);
 
+        if (allPhasesComplete || "PRESENT".equalsIgnoreCase(stage)) {
+            return new NextStepDto(
+                    "Go to Present",
+                    "/app/room/" + roomId + "/submission",
+                    "Build is complete; prepare final submission and pitch materials",
+                    false
+            );
+        }
+
+        if (!phases.isEmpty()) {
             // Find active phase
-            Optional<PlanPhase> activePhaseOpt = phases.stream()
+            PlanPhase activePhase = phases.stream()
                     .filter(p -> "ACTIVE".equalsIgnoreCase(p.getStatus()))
-                    .findFirst();
+                    .findFirst()
+                    .orElse(phases.stream().filter(p -> !"COMPLETED".equalsIgnoreCase(p.getStatus())).findFirst().orElse(phases.get(0)));
 
-            if (activePhaseOpt.isPresent()) {
-                PlanPhase activePhase = activePhaseOpt.get();
-                String pKey = activePhase.getPhaseKey() != null ? activePhase.getPhaseKey() : ("P" + (activePhase.getPosition() + 1));
-                int pos = activePhase.getPosition();
-                String nextPKey = (pos + 1 < phases.size()) ? phases.get(pos + 1).getPhaseKey() : null;
+            String pKey = activePhase.getPhaseKey() != null ? activePhase.getPhaseKey() : ("P" + (activePhase.getPosition() + 1));
+            int pos = activePhase.getPosition();
+            String nextPKey = (pos + 1 < phases.size()) ? phases.get(pos + 1).getPhaseKey() : null;
 
-                List<Task> phaseTasks = taskRepository.findByRoomIdAndPhaseKey(roomId, activePhase.getPhaseKey()).stream()
+            List<Task> phaseTasks = taskRepository.findByRoomIdAndPhaseKey(roomId, activePhase.getPhaseKey()).stream()
+                    .filter(t -> !t.isDropped())
+                    .toList();
+            if (phaseTasks.isEmpty() && activePhase.getId() != null) {
+                phaseTasks = taskRepository.findByRoomIdAndPhaseId(roomId, activePhase.getId()).stream()
                         .filter(t -> !t.isDropped())
                         .toList();
-                if (phaseTasks.isEmpty() && activePhase.getId() != null) {
-                    phaseTasks = taskRepository.findByRoomIdAndPhaseId(roomId, activePhase.getId()).stream()
-                            .filter(t -> !t.isDropped())
-                            .toList();
-                }
+            }
 
-                boolean isLeader = true;
-                if (user != null) {
-                    isLeader = memberRepository.findByRoomIdAndUserId(roomId, user.getId())
-                            .map(m -> "LEADER".equalsIgnoreCase(m.getRole()))
-                            .orElse(true);
-                }
-
-                boolean tasksGenerated = activePhase.getTasksGeneratedAt() != null;
-                boolean isReady = tasksGenerated && !phaseTasks.isEmpty() && phaseTasks.stream().allMatch(Task::isConfirmedDone);
-
-                if (isReady) {
-                    if (isLeader) {
-                        String actionTitle = nextPKey != null ? ("Start phase " + nextPKey) : "Complete build";
-                        return new NextStepDto(
-                                actionTitle,
-                                "/app/room/" + roomId + "/board",
-                                "Phase checkpoint reached; advance to the next phase"
-                        );
-                    } else {
-                        return new NextStepDto(
-                                "Waiting for the leader to start " + (nextPKey != null ? nextPKey : "next stage"),
-                                "/app/room/" + roomId + "/board",
-                                pKey + " complete. Waiting for the leader to advance."
-                        );
-                    }
-                }
-
-                if (!tasksGenerated || phaseTasks.isEmpty()) {
-                    if (isLeader) {
-                        return new NextStepDto(
-                                "Generate tasks for " + pKey,
-                                "/app/room/" + roomId + "/board",
-                                "Break down phase deliverables into board tasks"
-                        );
-                    } else {
-                        return new NextStepDto(
-                                "Waiting for the leader to generate " + pKey + " tasks",
-                                "/app/room/" + roomId + "/board",
-                                "Your room leader is preparing tasks for this phase"
-                        );
-                    }
+            // active phase has no tasks
+            if (phaseTasks.isEmpty()) {
+                if (isLeader) {
+                    return new NextStepDto(
+                            "Generate tasks for " + pKey,
+                            "/app/room/" + roomId + "/board",
+                            "Break down phase deliverables into board tasks",
+                            true
+                    );
                 } else {
-                    if (user != null) {
-                        boolean hasAssignedOpen = phaseTasks.stream()
-                                .anyMatch(t -> user.getId().equals(t.getAssigneeId()) && !t.isConfirmedDone());
-                        if (hasAssignedOpen) {
-                            return new NextStepDto(
-                                    "Pick up your next task",
-                                    "/app/room/" + roomId + "/board",
-                                    "Advance your assigned tasks on the Kanban board"
-                            );
-                        }
-                    }
-
-                    long unassigned = phaseTasks.stream().filter(t -> t.getAssigneeId() == null).count();
-                    if (unassigned > 0) {
-                        return new NextStepDto(
-                                "Assign " + unassigned + " open tasks",
-                                "/app/room/" + roomId + "/board",
-                                "Delegate unassigned tasks to active teammates"
-                        );
-                    }
-                    long openTasks = phaseTasks.stream().filter(t -> !t.isConfirmedDone()).count();
-                    if (openTasks > 0) {
-                        return new NextStepDto(
-                                "Complete " + openTasks + " active tasks",
-                                "/app/room/" + roomId + "/board",
-                                "Advance in-progress tasks toward phase freeze"
-                        );
-                    }
+                    return new NextStepDto(
+                            "Open Board",
+                            "/app/room/" + roomId + "/board",
+                            "Waiting for the leader to generate " + pKey + " tasks",
+                            false
+                    );
                 }
             }
-        }
 
-        // 5. Present phase & submission
-        if ("PRESENT".equalsIgnoreCase(stage)) {
-            Optional<Submission> submissionOpt = submissionRepository.findByRoomId(roomId);
-            if (submissionOpt.isEmpty() || !submissionOpt.get().isComplete()) {
-                return new NextStepDto(
-                    "Finish the submission checklist",
-                    "/app/rooms/" + roomId + "/submission",
-                    "Verify repo links, demo video, and submit before deadline"
-                );
+            // tasks exist: check if phase ready
+            boolean isReady = phaseTasks.stream().allMatch(Task::isConfirmedDone);
+            if (isReady) {
+                if (isLeader) {
+                    String actionTitle = nextPKey != null ? ("Start " + nextPKey) : "Complete build";
+                    return new NextStepDto(
+                            actionTitle,
+                            "/app/room/" + roomId + "/board",
+                            pKey + " complete; advance to the next phase",
+                            true
+                    );
+                } else {
+                    return new NextStepDto(
+                            "Open Board",
+                            "/app/room/" + roomId + "/board",
+                            pKey + " complete. Waiting for the leader to advance.",
+                            true
+                    );
+                }
             }
-            return new NextStepDto(
-                "Prepare pitch kit and demo",
-                "/app/rooms/" + roomId + "/pitch",
-                "Rehearse demo transitions and review judge Q&A"
-            );
-        }
 
-        // 6. Review / Retrospective
-        if ("REVIEW".equalsIgnoreCase(stage) || room.getSubmittedAt() != null) {
+            // tasks exist and active
             return new NextStepDto(
-                "Conduct team retrospective",
-                "/app/rooms/" + roomId + "/review",
-                "Capture project highlights, feedback, and lessons learned"
+                    "Open Board",
+                    "/app/room/" + roomId + "/board",
+                    "Advance active tasks on the Kanban board",
+                    false
             );
         }
 
         return new NextStepDto(
-                "Go to room overview",
-                "/app/rooms/" + roomId + "/overview",
-                "Review live progress and team momentum"
+                "Open Board",
+                "/app/room/" + roomId + "/board",
+                "Advance active tasks on the Kanban board",
+                false
         );
     }
 

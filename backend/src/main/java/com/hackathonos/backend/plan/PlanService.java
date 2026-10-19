@@ -81,12 +81,14 @@ public class PlanService {
     private final PlanDocumentParser planDocumentParser;
     private final PlanDownstreamSyncService planDownstreamSyncService;
     private final com.hackathonos.backend.rooms.RoomService roomService;
+    private final com.hackathonos.backend.docs.DocVersionRepository docVersionRepository;
     private final PlanValidationService planValidationService;
 
     public PlanService(
             PlanStepRepository stepRepository,
             PlanPhaseRepository phaseRepository,
             DocRepository docRepository,
+            com.hackathonos.backend.docs.DocVersionRepository docVersionRepository,
             TaskRepository taskRepository,
             BriefRepository briefRepository,
             BriefRubricItemRepository rubricRepository,
@@ -118,6 +120,7 @@ public class PlanService {
         this.stepRepository = stepRepository;
         this.phaseRepository = phaseRepository;
         this.docRepository = docRepository;
+        this.docVersionRepository = docVersionRepository;
         this.taskRepository = taskRepository;
         this.briefRepository = briefRepository;
         this.rubricRepository = rubricRepository;
@@ -326,7 +329,7 @@ public class PlanService {
         boolean planLocked = room.getBuildStartedAt() != null;
         boolean canEnterBuild = room.isPlanDone() && !planLocked;
 
-        PlanPermissionsDto permissions = new PlanPermissionsDto(!planLocked, isLeader && canEnterBuild);
+        PlanPermissionsDto permissions = new PlanPermissionsDto(!planLocked, canEnterBuild, isLeader);
 
         String statementPreview = (brief != null && brief.getProblemStatement() != null && !brief.getProblemStatement().isBlank())
                 ? brief.getProblemStatement()
@@ -501,19 +504,27 @@ public class PlanService {
     }
 
     /**
-     * Transitions room into build stage if plan is complete (leader only).
+     * Transitions room into build stage if plan is complete (any room member).
      */
     @Transactional
     public void enterBuild(UUID roomId, User user) {
-        roomAccess.requireLeader(roomId, user);
+        roomRepository.findWithLockById(roomId);
+        roomAccess.requireMember(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
-        if (!room.isPlanDone()) {
+        if (!room.isPlanDone() && room.getBuildStartedAt() == null) {
             throw new BadRequestException("PLAN_NOT_COMPLETE", "Plan must be completed before entering build phase");
         }
 
         if (room.getBuildStartedAt() == null) {
-            room.setBuildStartedAt(Instant.now());
+            docRepository.findByRoomIdAndFileName(room.getId(), "PHASES.md").ifPresent(doc -> {
+                docVersionRepository.findByDocIdAndVersion(doc.getId(), doc.getCurrentVersion()).ifPresent(ver -> {
+                    planDownstreamSyncService.syncPhasesFromMarkdown(room, ver.getContent());
+                });
+            });
+
+            room.setWorkflowStage("BUILD");
             room.setStage("build");
+            room.setBuildStartedAt(Instant.now());
             roomRepository.save(room);
 
             // Auto-activate first phase

@@ -22,10 +22,17 @@ public class CorsConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+        java.util.List<String> origins = new java.util.ArrayList<>(Arrays.stream(allowedOrigins.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
-                .toList();
+                .toList());
+
+        // Ensure standard local dev origins are always permitted
+        if (!origins.contains("http://localhost:5173")) origins.add("http://localhost:5173");
+        if (!origins.contains("http://127.0.0.1:5173")) origins.add("http://127.0.0.1:5173");
+        if (!origins.contains("http://localhost:3000")) origins.add("http://localhost:3000");
+        if (!origins.contains("http://127.0.0.1:3000")) origins.add("http://127.0.0.1:3000");
+
         config.setAllowedOrigins(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of(
@@ -34,9 +41,14 @@ public class CorsConfig {
                 "Accept",
                 "X-Requested-With",
                 "X-XSRF-TOKEN",
-                "X-Request-Id"
+                "X-Request-Id",
+                "Idempotency-Key",
+                "If-None-Match",
+                "Last-Event-ID",
+                "Cache-Control",
+                "*"
         ));
-        config.setExposedHeaders(List.of("X-Request-Id", "Retry-After"));
+        config.setExposedHeaders(List.of("X-Request-Id", "Retry-After", "Idempotency-Key", "ETag"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 

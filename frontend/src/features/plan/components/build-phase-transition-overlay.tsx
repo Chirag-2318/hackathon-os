@@ -77,6 +77,7 @@ export function BuildPhaseTransitionOverlay({
 
   return (
     <AnimatedTransition
+      roomId={roomId}
       docsCount={docsCount}
       phasesCount={phasesCount}
       tasksCount={tasksCount}
@@ -86,13 +87,17 @@ export function BuildPhaseTransitionOverlay({
   );
 }
 
+import { phaseService } from '@/services/phaseService';
+
 function AnimatedTransition({
+  roomId,
   docsCount,
   phasesCount,
   tasksCount,
   onNavigate,
   onComplete,
 }: {
+  roomId: string;
   docsCount?: number | null;
   phasesCount?: number | null;
   tasksCount?: number | null;
@@ -105,6 +110,7 @@ function AnimatedTransition({
   const [canSkip, setCanSkip] = useState(false);
   const [isLifting, setIsLifting] = useState(false);
   const [hasNavigated, setHasNavigated] = useState(false);
+  const [dataReady, setDataReady] = useState(false);
 
   const navigatedRef = useRef(false);
   const completedRef = useRef(false);
@@ -119,6 +125,40 @@ function AnimatedTransition({
     setIsLifting(true);
     setTimeout(onComplete, 350);
   };
+
+  // Pre-check phases and active phase prompt (5 second maximum timeout)
+  useEffect(() => {
+    let active = true;
+
+    const checkReadiness = async () => {
+      try {
+        const phases = await phaseService.getPhases(roomId);
+        const activePhase = phases.find((p) => p.status === 'ACTIVE') || phases[0];
+        if (activePhase) {
+          await phaseService.getPhaseTaskPrompt(roomId, activePhase.key, 'FRESH');
+        }
+      } catch (err) {
+        console.warn('Phase/prompt pre-check error:', err);
+      } finally {
+        if (active) {
+          setDataReady(true);
+        }
+      }
+    };
+
+    checkReadiness();
+
+    const maxTimeout = setTimeout(() => {
+      if (active) {
+        setDataReady(true);
+      }
+    }, 5000);
+
+    return () => {
+      active = false;
+      clearTimeout(maxTimeout);
+    };
+  }, [roomId]);
 
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
@@ -135,37 +175,40 @@ function AnimatedTransition({
     // Crossfade headline to "Your build is ready."
     timers.push(setTimeout(() => setShowHeadlineReady(true), 1900));
 
-    // Navigate router underneath at ~2250ms
-    timers.push(
-      setTimeout(() => {
+    return () => {
+      timers.forEach(clearTimeout);
+    };
+  }, []);
+
+  // Overlay closes only when animations are finished AND phases + active phase prompt are ready
+  useEffect(() => {
+    if (showHeadlineReady && dataReady) {
+      const navTimer = setTimeout(() => {
         if (!navigatedRef.current) {
           navigatedRef.current = true;
           setHasNavigated(true);
           onNavigate();
         }
-      }, 2250)
-    );
+      }, 350);
 
-    // Fade and lift away overlay at 2600ms over 350ms
-    timers.push(
-      setTimeout(() => {
+      const liftTimer = setTimeout(() => {
         setIsLifting(true);
-      }, 2350)
-    );
+      }, 450);
 
-    timers.push(
-      setTimeout(() => {
+      const completeTimer = setTimeout(() => {
         if (!completedRef.current) {
           completedRef.current = true;
           onComplete();
         }
-      }, 2700)
-    );
+      }, 800);
 
-    return () => {
-      timers.forEach(clearTimeout);
-    };
-  }, [onNavigate, onComplete]);
+      return () => {
+        clearTimeout(navTimer);
+        clearTimeout(liftTimer);
+        clearTimeout(completeTimer);
+      };
+    }
+  }, [showHeadlineReady, dataReady, onNavigate, onComplete]);
 
   const rows = [
     { label: 'Plan locked', count: null },

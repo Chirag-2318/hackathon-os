@@ -108,7 +108,7 @@ class PlanValidatorTest {
         String text = """
                 # Likely judge Q&A
                 1. Q: What did you build this weekend?
-                A: We built the Hackathon OS platform.
+                A: We built the [brackit] platform.
                 
                 2. **Q:** What breaks first?
                 **A:** Network timeouts.

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Copy, Check, ExternalLink, Download, Upload, Sparkles,
-  AlertCircle, AlertTriangle, FileText, CheckCircle2, Loader2, ArrowRight
+  AlertCircle, AlertTriangle, FileText, CheckCircle2, Loader2, ArrowRight, RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -13,6 +14,8 @@ import { planService } from '@/services/planService';
 import { ideaService } from '@/services/ideaService';
 import { playSound } from '@/shared/sound/sound-effects';
 import { AiGate, useAiAction } from '@/features/ai-gate';
+import { useCurrentUser } from '@/features/auth/useCurrentUser';
+import { apiFetch } from '@/api/client';
 
 export interface PhaseGenerationPanelProps {
   roomId: string;
@@ -31,27 +34,39 @@ export function PhaseGenerationPanel({
   onImportSuccess,
   onCancel,
 }: PhaseGenerationPanelProps) {
+  const { data: currentUser } = useCurrentUser();
+  const userId = currentUser?.id ? String(currentUser.id) : '';
+
   const [promptData, setPromptData] = useState<PhaseTaskPromptResponse | null>(null);
   const [loadingPrompt, setLoadingPrompt] = useState(true);
+  const [promptError, setPromptError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
 
-  // Auto-trigger Phase Guide Modal on first entry to this phase
+  // Auto-trigger Phase Guide Modal only the first time the user ever sees a phase generation panel, in any room
   useEffect(() => {
-    const key = `phase_guide_seen_${roomId}_${phase.key}`;
-    if (typeof window !== 'undefined' && !localStorage.getItem(key)) {
+    if (!userId) return;
+    const hasSeenHotspot = Boolean(currentUser?.hotspotsSeen?.includes('phase_guide_v1'));
+    const hasSeenLocal = typeof window !== 'undefined' ? Boolean(localStorage.getItem(`phase_guide_done_${userId}`)) : false;
+
+    if (!hasSeenHotspot && !hasSeenLocal) {
       const timer = setTimeout(() => {
         setIsGuideOpen(true);
       }, 400);
       return () => clearTimeout(timer);
     }
-  }, [roomId, phase.key]);
+  }, [userId, currentUser?.hotspotsSeen]);
 
   const handleCloseGuide = () => {
     setIsGuideOpen(false);
-    const key = `phase_guide_seen_${roomId}_${phase.key}`;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(key, 'true');
+    if (userId) {
+      try {
+        localStorage.setItem(`phase_guide_done_${userId}`, 'true');
+      } catch {}
+      apiFetch('/api/v1/users/me/hotspots', {
+        method: 'POST',
+        body: JSON.stringify({ key: 'phase_guide_v1' }),
+      }).catch(() => null);
     }
   };
 
@@ -65,27 +80,26 @@ export function PhaseGenerationPanel({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load prompt data
-  useEffect(() => {
-    let mounted = true;
+  // Load prompt data only when phase key is present
+  const fetchPrompt = React.useCallback(() => {
+    if (!roomId || !phase?.key) return;
     setLoadingPrompt(true);
+    setPromptError(null);
     phaseService.getPhaseTaskPrompt(roomId, phase.key, mode)
       .then((data) => {
-        if (mounted) {
-          setPromptData(data);
-          setLoadingPrompt(false);
-        }
+        setPromptData(data);
+        setLoadingPrompt(false);
       })
       .catch((err) => {
         console.error('Failed to load phase prompt:', err);
-        if (mounted) {
-          setLoadingPrompt(false);
-        }
+        setPromptError(err?.message || 'Failed to load phase prompt');
+        setLoadingPrompt(false);
       });
-    return () => {
-      mounted = false;
-    };
-  }, [roomId, phase.key, mode]);
+  }, [roomId, phase?.key, mode]);
+
+  useEffect(() => {
+    fetchPrompt();
+  }, [fetchPrompt]);
 
   const handleCopyPrompt = async () => {
     if (!promptData?.prompt) return;
@@ -154,7 +168,7 @@ export function PhaseGenerationPanel({
         setValidationResult(summary);
       }
     } catch (err: any) {
-      const msg = err?.message || err?.details?.message || 'Validation failed';
+      const msg = err?.message || err?.details?.message || (err?.code ? `The server returned an error (code ${err.code}, request ${err.requestId || 'unknown'})` : 'The server returned an error');
       setValidationError(msg);
       if (err?.code === 'TASKS_ALREADY_STARTED') {
         toast.error('Tasks in this phase have already started and cannot be regenerated.');
@@ -261,7 +275,7 @@ export function PhaseGenerationPanel({
   }
 
   return (
-    <div className="w-full py-4 flex flex-col lg:flex-row gap-6 items-start">
+    <div className="w-full pt-1 pb-4 flex flex-col lg:flex-row gap-6 items-start">
       {/* Left: Phase Summary */}
       <div className="w-full lg:w-[380px] shrink-0 rounded-2xl bg-card border border-border p-6 flex flex-col gap-5 shadow-xs">
         <div className="flex items-center justify-between border-b border-border/60 pb-4">
@@ -403,12 +417,27 @@ export function PhaseGenerationPanel({
               </div>
 
               {loadingPrompt ? (
-                <div className="h-28 flex items-center justify-center text-muted-foreground text-xs font-mono">
-                  <Loader2 className="size-4 animate-spin mr-2" /> Assembling prompt...
+                <div className="p-3 space-y-2">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-4/5" />
+                  <Skeleton className="h-4 w-2/3" />
+                </div>
+              ) : promptError || !promptData?.prompt ? (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-xs flex items-center justify-between">
+                  <span className="text-destructive font-medium">{promptError || 'Failed to load phase prompt'}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={fetchPrompt}
+                    className="h-7 px-2.5 text-xs flex items-center gap-1 cursor-pointer"
+                  >
+                    <RefreshCw className="size-3" />
+                    <span>Retry</span>
+                  </Button>
                 </div>
               ) : (
                 <div className="max-h-36 overflow-y-auto text-xs font-mono text-muted-foreground whitespace-pre-wrap rounded-lg bg-background/60 p-3 border border-border/40">
-                  {promptData?.prompt || 'No prompt content'}
+                  {promptData.prompt}
                 </div>
               )}
 
@@ -497,41 +526,132 @@ export function PhaseGenerationPanel({
               {/* Validation Issues / Warnings / Confirmation Panel */}
               {validationResult && (!validationResult.ok || validationResult.needsConfirmation) && (
                 <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 flex flex-col gap-3 text-xs">
-                  <div className="flex items-center gap-2 text-destructive font-semibold">
-                    <AlertCircle className="size-4 shrink-0" />
-                    <span>
-                      {validationResult.needsConfirmation
-                        ? 'Existing tasks detected in this phase'
-                        : 'Validation found issues'}
-                    </span>
+                  <div className="flex items-center justify-between gap-2 text-destructive font-semibold">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="size-4 shrink-0" />
+                      <span>
+                        {validationResult.needsConfirmation
+                          ? 'Existing tasks detected in this phase'
+                          : 'Validation found issues'}
+                      </span>
+                    </div>
+                    {/* Copy Diagnostics Button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const payload = JSON.stringify(
+                          validationResult.diagnostics || {
+                            requestId: validationResult.requestId,
+                            issues: validationResult.issues,
+                          },
+                          null,
+                          2
+                        );
+                        navigator.clipboard.writeText(payload);
+                        toast.success('Copied diagnostics to clipboard');
+                      }}
+                      className="h-7 px-2.5 text-[11px] font-mono border-destructive/30 text-destructive hover:bg-destructive/10 cursor-pointer"
+                    >
+                      <Copy className="size-3 mr-1" />
+                      <span>Copy diagnostics</span>
+                    </Button>
                   </div>
+
                   {validationResult.needsConfirmation && (
                     <p className="text-muted-foreground">
                       Tasks have already been created for this phase. Click below to confirm replacing existing todo tasks.
                     </p>
                   )}
+
+                  {/* If no issues, show server error details */}
+                  {(!validationResult.issues || validationResult.issues.length === 0) && !validationResult.needsConfirmation && (
+                    <p className="text-muted-foreground font-mono">
+                      The server returned an error (code {validationResult.requestId ? 'SERVER_ERROR' : 'UNKNOWN'}, request {validationResult.requestId || 'unknown'})
+                    </p>
+                  )}
+
+                  {/* Render issues grouped by file, line, expected, found */}
                   {validationResult.issues && validationResult.issues.length > 0 && (
-                    <ul className="flex flex-col gap-1 text-muted-foreground">
-                      {validationResult.issues.map((issue: any, i: number) => (
-                        <li key={i} className="flex items-start gap-1.5">
-                          <span className="font-mono uppercase text-[10px] px-1 rounded bg-muted">
-                            {issue.severity || 'WARN'}
+                    <div className="flex flex-col gap-2.5 pt-1">
+                      {/* Step-level issues */}
+                      {validationResult.issues
+                        .filter((iss: any) => !iss.file && !iss.document)
+                        .map((iss: any, i: number) => (
+                          <div key={i} className="flex flex-col gap-0.5 text-xs text-foreground/90 pl-1">
+                            <div className="flex items-start gap-1.5">
+                              <span className={cn(
+                                "font-mono uppercase text-[10px] px-1 py-0.2 rounded shrink-0",
+                                iss.severity === 'BLOCK' ? "bg-destructive/20 text-destructive" : "bg-muted text-muted-foreground"
+                              )}>
+                                {iss.severity || 'WARN'}
+                              </span>
+                              <span className="font-medium">{iss.message || iss.heading || 'Formatting warning'}</span>
+                            </div>
+                            {(iss.expected || iss.found) && (
+                              <span className="text-[11px] text-muted-foreground pl-6 font-mono">
+                                Expected: &ldquo;{iss.expected}&rdquo;, found: &ldquo;{iss.found}&rdquo;
+                              </span>
+                            )}
+                          </div>
+                        ))}
+
+                      {/* File-grouped issues */}
+                      {Object.entries(
+                        validationResult.issues.reduce((acc: Record<string, any[]>, iss: any) => {
+                          const fileKey = iss.file || iss.document;
+                          if (fileKey) {
+                            if (!acc[fileKey]) acc[fileKey] = [];
+                            acc[fileKey].push(iss);
+                          }
+                          return acc;
+                        }, {})
+                      ).map(([fileKey, issues]: [string, any[]]) => (
+                        <div key={fileKey} className="flex flex-col gap-1 pl-1">
+                          <span className="text-[11px] font-semibold text-foreground uppercase tracking-wider">
+                            {fileKey}
                           </span>
-                          <span>{issue.message || issue.heading || 'Formatting warning'}</span>
-                        </li>
+                          <div className="flex flex-col gap-1.5 pl-2 border-l border-destructive/20">
+                            {issues.map((iss: any, i: number) => (
+                              <div key={i} className="flex flex-col gap-0.5 text-xs text-foreground/90">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={cn(
+                                    "font-mono uppercase text-[10px] px-1 py-0.2 rounded shrink-0",
+                                    iss.severity === 'BLOCK' ? "bg-destructive/20 text-destructive" : "bg-muted text-muted-foreground"
+                                  )}>
+                                    {iss.severity || 'WARN'}
+                                  </span>
+                                  {iss.line && (
+                                    <span className="font-mono text-[11px] text-muted-foreground">
+                                      L{iss.line}:
+                                    </span>
+                                  )}
+                                  <span>{iss.message || iss.heading || 'Formatting warning'}</span>
+                                </div>
+                                {(iss.expected || iss.found) && (
+                                  <span className="text-[11px] text-muted-foreground pl-6 font-mono">
+                                    Expected: &ldquo;{iss.expected}&rdquo;, found: &ldquo;{iss.found}&rdquo;
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   )}
 
                   {/* Import Anyway / Confirm Button */}
-                  <div className="pt-2 flex justify-end">
-                    <Button
-                      onClick={() => handleValidate(true)}
-                      className="h-8 px-3 rounded-full bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs cursor-pointer shadow-xs"
-                    >
-                      {validationResult.needsConfirmation ? 'Confirm & Replace Tasks' : 'Import anyway'}
-                    </Button>
-                  </div>
+                  {isLeader && (
+                    <div className="pt-2 flex justify-end">
+                      <Button
+                        onClick={() => handleValidate(true)}
+                        className="h-8 px-3 rounded-full bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs cursor-pointer shadow-xs"
+                      >
+                        {validationResult.needsConfirmation ? 'Confirm & Replace Tasks' : 'Import anyway'}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ExternalLink, X, ChevronLeft, AlertCircle, RefreshCw, Activity, CheckCircle2, Sparkles, CheckSquare, TrendingUp, Code2, Palette, Mic, ShieldCheck } from 'lucide-react';
+import { DeckAuditPanel } from './components/deck-audit-panel';
 
 interface DeckSource {
   provider: 'canva' | 'pptx' | 'gslides';
@@ -241,7 +242,7 @@ export function DeckPage() {
 
   if (loading) {
     return (
-      <div className="p-6 space-y-4">
+      <div className="min-h-full flex-1 bg-page p-6 space-y-4">
         <Skeleton className="h-10 w-48" />
         <div className="grid grid-cols-3 gap-4">
           <Skeleton className="h-48" /><Skeleton className="h-48" /><Skeleton className="h-48" />
@@ -252,7 +253,7 @@ export function DeckPage() {
 
   if (error) {
     return (
-      <div className="p-8 flex flex-col items-center justify-center min-h-[40vh] gap-3 text-center">
+      <div className="min-h-full flex-1 bg-page p-8 flex flex-col items-center justify-center min-h-[40vh] gap-3 text-center">
         <AlertCircle className="w-8 h-8" style={{ color: '#d1d5db' }} />
         <p className="text-sm" style={{ color: '#737373' }}>Could not load deck data.</p>
         <Button variant="outline" onClick={() => window.location.reload()}>
@@ -265,7 +266,7 @@ export function DeckPage() {
   /* ── State A ── */
   if (!source) {
     return (
-      <div className="stage-theme flex-1 overflow-y-auto">
+      <div className="stage-theme min-h-full flex-1 flex flex-col bg-page overflow-y-auto">
         <div className="p-6 max-w-4xl mx-auto space-y-6">
           <div className="stage-rise stage-card stage-card-dark p-8 text-center" style={{ '--delay': '0ms' } as React.CSSProperties}>
             <div className="flex justify-center mb-3"><StarBurst size={32} /></div>
@@ -299,7 +300,7 @@ export function DeckPage() {
   const providerLabel = PROVIDER_LABELS[source.provider] ?? source.provider;
 
   return (
-    <div className="stage-theme flex-1 overflow-y-auto">
+    <div className="stage-theme min-h-full flex-1 flex flex-col bg-page overflow-y-auto">
       <div className="p-6 max-w-7xl mx-auto space-y-4">
         {/* Top bar */}
         <div className="stage-rise flex items-center flex-wrap gap-3" style={{ '--delay': '0ms' } as React.CSSProperties}>
@@ -363,124 +364,7 @@ export function DeckPage() {
 
           {/* Sidebar (4/12) */}
           <div className="stage-rise col-span-12 lg:col-span-4 space-y-4" style={{ '--delay': '80ms' } as React.CSSProperties}>
-            {/* Redesigned Premium Deck Health Card (Matching Reference Layout) */}
-            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm space-y-4 font-sans">
-              {/* Top Control Bar */}
-              <div className="flex items-center justify-between bg-muted/40 rounded-xl px-3.5 py-2.5 border border-border/40">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-6 h-6 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
-                    <Activity className="w-3.5 h-3.5" />
-                  </div>
-                  <span className="text-xs font-sans font-bold uppercase tracking-wider text-foreground">Deck Health</span>
-                </div>
-                <div>
-                  {lintIssues.length === 0 ? (
-                    <span className="text-xs font-mono uppercase tracking-wider font-semibold px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" /> Ready
-                    </span>
-                  ) : (
-                    <span className="text-xs font-mono uppercase tracking-wider font-semibold px-2.5 py-0.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
-                      {lintIssues.length} suggestions
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Suggestions / Audits Section */}
-              <div>
-                <div className="flex items-center justify-between mb-2.5 px-0.5">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Suggestions & Audits</span>
-                  <span className="text-[11px] text-muted-foreground">{lintIssues.length} found</span>
-                </div>
-                {lintIssues.length > 0 ? (
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                    {lintIssues.map((issue: any, i: number) => (
-                      <div
-                        key={i}
-                        className="flex items-center gap-3 p-2.5 rounded-xl bg-muted/30 hover:bg-muted/50 border border-border/40 transition-colors"
-                      >
-                        <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0 text-amber-600 dark:text-amber-400">
-                          <AlertCircle className="w-4 h-4" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-foreground truncate">{issue.message || issue.type}</p>
-                          <p className="text-[11px] text-muted-foreground truncate">{issue.rule || 'Actionable slide presentation improvement'}</p>
-                        </div>
-                        <span className="text-[11px] text-muted-foreground shrink-0 font-medium">Review</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    <span>All slides meet rubric requirements.</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Rubric Criteria Coverage Section */}
-              <div className="pt-2 border-t border-border/60">
-                <div className="flex items-center justify-between mb-2.5 px-0.5">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Rubric Coverage</span>
-                  <span className="text-[11px] text-muted-foreground">Target: 100%</span>
-                </div>
-                <div className="space-y-2">
-                  {RUBRIC.map(c => {
-                    const pct = slides.length > 0 ? Math.round(((coverage[c.id]?.length ?? 0) / slides.length) * 100) : 0;
-                    const gap = pct < 50;
-                    const Icon = RUBRIC_ICONS[c.id] || Sparkles;
-                    return (
-                      <div key={c.id} className="flex items-center gap-3 p-2 rounded-xl bg-muted/20 border border-border/40">
-                        <div className="w-9 h-9 rounded-xl bg-muted/60 border border-border/50 flex items-center justify-center shrink-0 text-foreground">
-                          <Icon className="w-4 h-4 text-muted-foreground" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-semibold text-foreground truncate">{c.name}</span>
-                            <span className="text-[11px] text-muted-foreground font-mono">{pct}% ({c.weight}% wt)</span>
-                          </div>
-                          <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden mt-1.5">
-                            <div
-                              className={cn('h-full rounded-full transition-all duration-500', gap ? 'bg-amber-500' : 'bg-primary')}
-                              style={{ width: `${Math.min(100, Math.max(5, pct))}%` }}
-                            />
-                          </div>
-                        </div>
-                        <div className="shrink-0 pl-1">
-                          {gap ? (
-                            <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
-                              Needs slide
-                            </span>
-                          ) : (
-                            <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Bottom Rehearsals Row (Matching Reference Bottom Action Row) */}
-              <div className="pt-3 border-t border-border/60 flex items-center justify-between">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-7 h-7 rounded-full bg-primary/15 text-primary text-xs font-bold flex items-center justify-center shrink-0">
-                    {rehearsalCount}
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-xs font-semibold text-foreground truncate">Rehearsals {rehearsalCount}/3</span>
-                    <span className="text-[10px] text-muted-foreground">Practice stage delivery</span>
-                  </div>
-                </div>
-                <Link
-                  to={`/app/room/${roomId}/pitch-kit?open=pitch&rehearse=1`}
-                  id="deck-rehearsal-link"
-                  className="px-3.5 py-1.5 rounded-xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 hover:opacity-90 active:scale-95 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs"
-                >
-                  Practice <span aria-hidden>→</span>
-                </Link>
-              </div>
-            </div>
+            {roomId && <DeckAuditPanel roomId={roomId} />}
           </div>
         </div>
       </div>

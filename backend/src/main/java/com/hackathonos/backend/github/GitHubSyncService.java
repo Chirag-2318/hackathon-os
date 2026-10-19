@@ -182,12 +182,12 @@ public class GitHubSyncService {
             ));
             b.setLastCommitSha(fb.sha());
 
-            // Compare top 30 non-default branches
+            // Compare top 10 non-default branches
             if (fb.name().equalsIgnoreCase(repo.getDefaultBranch())) {
                 b.setAhead(0);
                 b.setBehind(0);
                 b.setRole("main");
-            } else if (compareCount < 30) {
+            } else if (compareCount < 10) {
                 GitHubClient.ClientBranchCompare cmp = client.compareBranches(owner, repoName, repo.getDefaultBranch(), fb.name(), token);
                 b.setAhead(cmp.aheadBy());
                 b.setBehind(cmp.behindBy());

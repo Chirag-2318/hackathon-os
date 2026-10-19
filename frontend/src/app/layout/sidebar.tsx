@@ -29,7 +29,10 @@ import { formatClock, useClock } from '@/shared/lib/clock';
 import { Copy, Plus } from 'lucide-react';
 import { UserName } from '@/components/ui/user-name';
 import { UserAvatar } from '@/components/ui/user-avatar';
+import { useTheme } from '@/components/theme-provider';
 import goproImg from '../../../images/gopro.png';
+import darkLogo from '../../../images/dark.svg';
+import lightLogo from '../../../images/light.svg';
 
 // ── Nav configuration ──────────────────────────────────────────────
 interface NavItem {
@@ -170,31 +173,14 @@ function NavRow({
   return row;
 }
 
-// ── Brand logo mark ─────────────────────────────────────────────────
-function LogoMark({ size = 18 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 18 18"
-      fill="none"
-      aria-hidden="true"
-      data-testid="brand-glyph"
-    >
-      <rect width="18" height="18" rx="4" fill="var(--logo-bg)" />
-      <path
-        d="M5 4v10M13 4v10M5 9h8"
-        stroke="var(--logo-fg)"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
+
 
 // ── Sidebar ──────────────────────────────────────────────────────────
 export function AppSidebar() {
   const { isCollapsed, toggleCollapsed } = useSidebarStore();
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
+  const logoSrc = isDark ? darkLogo : lightLogo;
   const { data: user } = useCurrentUser();
   const { data: homeData } = useHome();
   const createRoomModal = useOverlay('create-room-dialog');
@@ -238,19 +224,46 @@ export function AppSidebar() {
       <div className="flex flex-col h-full" style={{ minWidth: isCollapsed ? 40 : 192 }}>
 
         {/* 1. Brand row */}
-        <div className="flex h-7 items-center gap-2.5 px-2.5 mb-0 shrink-0">
-          <div className="shrink-0 flex items-center justify-center size-5">
-            <LogoMark size={20} />
-          </div>
-          {!isCollapsed && (
-            <span
-              className="text-[16px] leading-[24px] font-semibold text-ink truncate tracking-[-0.01em]"
-              style={{ fontWeight: 600 }}
-              data-testid="brand-text"
-            >
-              Hackathon OS
-            </span>
+        <div
+          className={cn(
+            'flex h-10 items-center mb-2 shrink-0',
+            isCollapsed ? 'justify-center px-0' : 'px-1'
           )}
+        >
+          <NavLink
+            to="/app/home"
+            className="flex items-center focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2 rounded"
+            aria-label="bracket"
+            data-testid="brand-logo"
+          >
+            {isCollapsed ? (
+              <Tooltip delayDuration={100}>
+                <TooltipTrigger asChild>
+                  <div className="w-10 h-10 overflow-hidden flex items-center justify-start shrink-0">
+                    <img
+                      key={isDark ? 'dark' : 'light'}
+                      src={logoSrc}
+                      alt="bracket"
+                      className="h-10 max-w-none object-cover object-left"
+                      style={{ width: '128px' }}
+                      data-testid="brand-glyph"
+                    />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right" sideOffset={12} className="rounded-[8px] text-[14px]">
+                  bracket
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <img
+                key={isDark ? 'dark' : 'light'}
+                src={logoSrc}
+                alt="bracket"
+                className="h-10 w-auto max-w-[180px] object-contain"
+                data-testid="brand-glyph"
+              />
+            )}
+          </NavLink>
         </div>
 
         {/* 2. Collapse row */}

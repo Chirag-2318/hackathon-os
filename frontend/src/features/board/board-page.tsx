@@ -1,7 +1,19 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  type DragStartEvent,
+  type DragEndEvent,
+} from '@dnd-kit/core';
 import { boardService } from '@/services/boardService';
 import { roomService } from '@/services/roomService';
 import { phaseService, type PhaseSummary } from '@/services/phaseService';
@@ -18,12 +30,15 @@ import { PhaseRail } from './components/phase-rail';
 import { PhaseHeaderRow } from './components/phase-header-row';
 import { PhaseGenerationPanel } from './components/phase-generation-panel';
 import { PhaseCompleteDialog } from './components/phase-complete-dialog';
+import { JiraCard } from './components/jira-card';
+import { selectTaskCounts } from './task-selectors';
 import { SegmentedControl, SegmentedControlItem } from '@/components/primitives/segmented-control';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Check } from 'lucide-react';
+import { ArrowRight, Check, SlidersHorizontal, ChevronDown } from 'lucide-react';
 import { EmptyState, ErrorState, celebrateAchievement } from '@/design';
 import { playSound } from '@/shared/sound/sound-effects';
+import { cn } from '@/lib/utils';
 
 import { useCurrentUser } from '@/features/auth/useCurrentUser';
 
@@ -31,9 +46,48 @@ export function BoardPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: currentUser } = useCurrentUser();
   const currentUserId = currentUser?.id ? String(currentUser.id) : '';
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+  const [activeDragTask, setActiveDragTask] = useState<Task | null>(null);
+  const [activeDragWidth, setActiveDragWidth] = useState<number | null>(null);
+
+  // Sequence guard & in-flight mutations tracking
+  const sequenceRef = useRef(0);
+  const inFlightMovesRef = useRef(new Set<string>());
+  const pointerPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const handlePointerMove = (e: PointerEvent) => {
+      pointerPosRef.current = { x: e.clientX, y: e.clientY };
+    };
+    window.addEventListener('pointermove', handlePointerMove, { passive: true });
+    return () => window.removeEventListener('pointermove', handlePointerMove);
+  }, []);
+
+  // Fetch room data to obtain buildStartedAt (phases updated-at)
+  const { data: roomData } = useQuery({
+    queryKey: ['room', roomId],
+    queryFn: () => roomService.getRoom(roomId!),
+    enabled: Boolean(roomId),
+  });
+  const phasesUpdatedAt = roomData?.buildStartedAt || (roomData as any)?.phasesUpdatedAt || '';
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 6,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 150,
+        tolerance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor)
+  );
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [phases, setPhases] = useState<BoardPhase[]>([]);
@@ -51,9 +105,9 @@ export function BoardPage() {
 
   const [dismissedReadyKey, setDismissedReadyKey] = useState<string | null>(null);
 
-  // Phases from phase engine
+  // Phases from phase engine - include phasesUpdatedAt in query keys
   const { data: phasesData = [], refetch: refetchPhases } = useQuery({
-    queryKey: ['phases', roomId],
+    queryKey: ['phases', roomId, phasesUpdatedAt],
     queryFn: () => phaseService.getPhases(roomId!),
     enabled: Boolean(roomId),
   });
@@ -109,12 +163,24 @@ export function BoardPage() {
   // Load Board data
   const loadData = async (silent = false) => {
     if (!roomId) return;
+    const fetchSeq = ++sequenceRef.current;
     try {
       const [boardData, memberList] = await Promise.all([
         boardService.getBoard(roomId),
         roomService.getMembers(roomId).catch(() => []),
       ]);
-      setTasks(boardData.tasks || []);
+
+      // Sequence guard: ignore if a mutation started or finished after this refetch began
+      if (fetchSeq < sequenceRef.current) {
+        return;
+      }
+
+      setTasks(prev => {
+        const incoming = boardData.tasks || [];
+        if (inFlightMovesRef.current.size === 0) return incoming;
+        // The 15-second poll and live events must not overwrite an in-flight optimistic move
+        return incoming.map((t: Task) => inFlightMovesRef.current.has(t.id) ? (prev.find(p => p.id === t.id) || t) : t);
+      });
       setPhases(boardData.phases || []);
       setBoardSummary(boardData.summary || null);
       if (typeof boardData.hoursLeft === 'number') setHoursLeft(boardData.hoursLeft);
@@ -211,18 +277,47 @@ export function BoardPage() {
     setSearchParams(nextParams);
   };
 
-  // Status Change with Optimistic Update and Undo toast
-  const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
+  // Status Change with Optimistic Update and Sequence Guard
+  const handleStatusChange = async (taskId: string, newStatus: TaskStatus, targetIndex = 0) => {
     if (!roomId) return;
     const prevTask = tasks.find(t => t.id === taskId);
     if (!prevTask || prevTask.status === newStatus) return;
 
-    const oldStatus = prevTask.status;
-    const updated = { ...prevTask, status: newStatus };
-    setTasks(prev => prev.map(t => t.id === taskId ? updated : t));
+    // Sequence guard: counter increases on local mutation start
+    sequenceRef.current++;
+    inFlightMovesRef.current.add(taskId);
+
+    const currentMember = members.find((m) => m.id === currentUserId) || members[0] || null;
+    const isLeaderUser = currentMember?.role === 'leader' || roomData?.ownerId === currentUserId;
+    const willBeConfirmed = newStatus === 'done' && isLeaderUser;
+
+    const updated: Task = {
+      ...prevTask,
+      status: newStatus,
+      position: targetIndex,
+      reviewState: willBeConfirmed ? 'CONFIRMED' : (newStatus === 'done' ? 'AWAITING' : 'NONE'),
+      confirmedAt: willBeConfirmed ? new Date().toISOString() : prevTask.confirmedAt,
+      confirmedBy: willBeConfirmed ? currentUserId : prevTask.confirmedBy,
+    };
+
+    // 2. Optimistic update: changes the SAME state (tasks) that the board renders immediately
+    setTasks(prev => prev.map(t => (t.id === taskId ? updated : t)));
 
     try {
-      await boardService.moveTask(roomId, taskId, newStatus, 0, (prevTask as any).version);
+      // 4. On move response, apply server's task and positions instead of refetching whole board
+      const serverTask = await boardService.moveTask(
+        roomId,
+        taskId,
+        newStatus,
+        targetIndex,
+        (prevTask as any).version
+      );
+
+      // Apply server's task and positions (server response wins if it disagrees with UI)
+      setTasks(prev => {
+        const effective = (serverTask && serverTask.id) ? serverTask : updated;
+        return prev.map(t => (t.id === taskId ? effective : t));
+      });
 
       if (newStatus === 'done') {
         playSound('success');
@@ -235,23 +330,25 @@ export function BoardPage() {
         }
       }
 
-      toast.success(`Moved ${prevTask.key} to ${newStatus === 'todo' ? 'To do' : newStatus === 'inprogress' ? 'In progress' : 'Done'}`, {
-        action: {
-          label: 'Undo',
-          onClick: async () => {
-            setTasks(prev => prev.map(t => t.id === taskId ? prevTask : t));
-            await boardService.moveTask(roomId, taskId, oldStatus, 0, (updated as any).version);
-          },
-        },
-      });
+      toast.success(
+        `Moved ${prevTask.key} to ${
+          newStatus === 'todo' ? 'To do' : newStatus === 'inprogress' ? 'In progress' : 'Done'
+        }`
+      );
     } catch (err: any) {
-      setTasks(prev => prev.map(t => t.id === taskId ? prevTask : t));
+      // Revert optimistic update on failure
+      setTasks(prev => prev.map(t => (t.id === taskId ? prevTask : t)));
+
       if (err?.status === 409 || err?.message?.includes('TASK_CHANGED')) {
         toast.error('Task was updated by another team member. Reloading board...');
         loadData();
       } else {
         toast.error(err?.message || 'Failed to update status');
       }
+    } finally {
+      // Sequence guard: mutation finished
+      sequenceRef.current++;
+      inFlightMovesRef.current.delete(taskId);
     }
   };
 
@@ -263,13 +360,6 @@ export function BoardPage() {
     await handleStatusChange(taskId, nextStatus);
   };
 
-  // Drag-and-drop on column
-  const handleDropTask = async (taskId: string, targetStatus: TaskStatus) => {
-    const task = tasks.find(t => t.id === taskId);
-    if (!task || task.status === targetStatus) return;
-    await handleStatusChange(taskId, targetStatus);
-  };
-
   // Assign to me
   const handleAssignToMe = async (taskId: string) => {
     if (!roomId) return;
@@ -278,8 +368,24 @@ export function BoardPage() {
 
     const updated = { ...task, assigneeId: currentUserId };
     setTasks(prev => prev.map(t => t.id === taskId ? updated : t));
-    await boardService.updateTask(roomId, taskId, { assigneeId: currentUserId });
-    toast.success(`Assigned ${task.key} to you`);
+    queryClient.setQueryData<Task[]>(['tasks', roomId, phasesUpdatedAt], old =>
+      (old || []).map(t => t.id === taskId ? updated : t)
+    );
+
+    try {
+      await boardService.updateTask(roomId, taskId, { assigneeId: currentUserId });
+      toast.success(`Assigned ${task.key} to you`);
+      queryClient.invalidateQueries({ queryKey: ['tasks', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['phases', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['board', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['room', roomId] });
+    } catch (err: any) {
+      setTasks(prev => prev.map(t => t.id === taskId ? task : t));
+      queryClient.setQueryData<Task[]>(['tasks', roomId, phasesUpdatedAt], old =>
+        (old || []).map(t => t.id === taskId ? task : t)
+      );
+      toast.error(err?.message || 'Failed to assign task');
+    }
   };
 
   // Toggle Block
@@ -291,41 +397,82 @@ export function BoardPage() {
     const willBlock = !task.flagged;
     const updated = { ...task, flagged: willBlock, blockedReason: willBlock ? 'Blocked' : undefined };
     setTasks(prev => prev.map(t => t.id === taskId ? updated : t));
-    await boardService.updateTask(
-      roomId,
-      taskId,
-      { flagged: willBlock, blockedReason: willBlock ? 'Blocked' : undefined }
+    queryClient.setQueryData<Task[]>(['tasks', roomId, phasesUpdatedAt], old =>
+      (old || []).map(t => t.id === taskId ? updated : t)
     );
-    toast.success(willBlock ? `Flagged ${task.key} as blocked` : `Unblocked ${task.key}`);
+
+    try {
+      await boardService.updateTask(
+        roomId,
+        taskId,
+        { flagged: willBlock, blockedReason: willBlock ? 'Blocked' : undefined }
+      );
+      toast.success(willBlock ? `Flagged ${task.key} as blocked` : `Unblocked ${task.key}`);
+      queryClient.invalidateQueries({ queryKey: ['tasks', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['phases', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['board', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['room', roomId] });
+    } catch (err: any) {
+      setTasks(prev => prev.map(t => t.id === taskId ? task : t));
+      queryClient.setQueryData<Task[]>(['tasks', roomId, phasesUpdatedAt], old =>
+        (old || []).map(t => t.id === taskId ? task : t)
+      );
+      toast.error(err?.message || 'Failed to toggle blocked flag');
+    }
   };
 
   // Inline Create
   const handleInlineCreate = async (status: TaskStatus, summary: string) => {
     if (!roomId) return;
     const targetPhaseKey = currentPhase?.key || phases[0]?.id || 'P1';
-    const newTask = await boardService.createTask(roomId, {
-      summary,
-      status,
-      phaseId: targetPhaseKey,
-      phaseKey: targetPhaseKey,
-      assigneeId: currentUserId,
-      reporterId: currentUserId,
-    });
-    setTasks(prev => [...prev, newTask]);
-    refetchPhases();
-    toast.success(`Created ${newTask.key}`);
+    try {
+      const newTask = await boardService.createTask(roomId, {
+        summary,
+        status,
+        phaseId: targetPhaseKey,
+        phaseKey: targetPhaseKey,
+        assigneeId: currentUserId,
+        reporterId: currentUserId,
+      });
+      setTasks(prev => [...prev, newTask]);
+      queryClient.setQueryData<Task[]>(['tasks', roomId, phasesUpdatedAt], old =>
+        old ? [...old, newTask] : [newTask]
+      );
+      queryClient.invalidateQueries({ queryKey: ['tasks', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['phases', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['board', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['room', roomId] });
+      refetchPhases();
+      toast.success(`Created ${newTask.key}`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to create task');
+    }
   };
 
   // Defer Task (leader only)
   const handleDeferTask = async (taskId: string) => {
     if (!roomId) return;
+    const prev = tasks.find(t => t.id === taskId);
+    setTasks(ts => ts.filter(t => t.id !== taskId));
+    queryClient.setQueryData<Task[]>(['tasks', roomId, phasesUpdatedAt], old =>
+      (old || []).filter(t => t.id !== taskId)
+    );
     try {
       await phaseService.deferTask(roomId, taskId);
       toast.success('Task deferred to next phase');
-      loadData();
+      queryClient.invalidateQueries({ queryKey: ['tasks', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['phases', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['board', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['room', roomId] });
       refetchPhases();
       handleCloseTaskModal();
     } catch (err: any) {
+      if (prev) {
+        setTasks(ts => [...ts, prev]);
+        queryClient.setQueryData<Task[]>(['tasks', roomId, phasesUpdatedAt], old =>
+          old ? [...old, prev] : [prev]
+        );
+      }
       toast.error(err?.message || 'Failed to defer task');
     }
   };
@@ -333,14 +480,28 @@ export function BoardPage() {
   // Drop Task (leader only)
   const handleDropTaskLeader = async (taskId: string) => {
     if (!roomId) return;
+    const prev = tasks.find(t => t.id === taskId);
+    setTasks(ts => ts.filter(t => t.id !== taskId));
+    queryClient.setQueryData<Task[]>(['tasks', roomId, phasesUpdatedAt], old =>
+      (old || []).filter(t => t.id !== taskId)
+    );
     try {
       playSound('destructive');
       await phaseService.dropTask(roomId, taskId, 'Dropped by leader');
       toast.success('Task dropped');
-      loadData();
+      queryClient.invalidateQueries({ queryKey: ['tasks', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['phases', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['board', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['room', roomId] });
       refetchPhases();
       handleCloseTaskModal();
     } catch (err: any) {
+      if (prev) {
+        setTasks(ts => [...ts, prev]);
+        queryClient.setQueryData<Task[]>(['tasks', roomId, phasesUpdatedAt], old =>
+          old ? [...old, prev] : [prev]
+        );
+      }
       toast.error(err?.message || 'Failed to drop task');
     }
   };
@@ -348,23 +509,52 @@ export function BoardPage() {
   // Create Task via Modal
   const handleCreateTask = async (draft: Partial<Task>, createAnother: boolean) => {
     if (!roomId) return;
-    const newTask = await boardService.createTask(roomId, draft);
-    setTasks(prev => [...prev, newTask]);
-    refetchPhases();
-    toast.success(`Created ${newTask.key}`);
-    if (!createAnother) {
-      setIsCreateModalOpen(false);
+    try {
+      const newTask = await boardService.createTask(roomId, draft);
+      setTasks(prev => [...prev, newTask]);
+      queryClient.setQueryData<Task[]>(['tasks', roomId, phasesUpdatedAt], old =>
+        old ? [...old, newTask] : [newTask]
+      );
+      queryClient.invalidateQueries({ queryKey: ['tasks', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['phases', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['board', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['room', roomId] });
+      refetchPhases();
+      toast.success(`Created ${newTask.key}`);
+      if (!createAnother) {
+        setIsCreateModalOpen(false);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to create task');
     }
   };
 
   // Delete Task
   const handleDeleteTask = async (taskId: string) => {
     if (!roomId) return;
-    await boardService.deleteTask(roomId, taskId);
+    const prev = tasks.find(t => t.id === taskId);
     setTasks(prev => prev.filter(t => t.id !== taskId));
-    refetchPhases();
-    handleCloseTaskModal();
-    toast.success('Task deleted');
+    queryClient.setQueryData<Task[]>(['tasks', roomId, phasesUpdatedAt], old =>
+      (old || []).filter(t => t.id !== taskId)
+    );
+    try {
+      await boardService.deleteTask(roomId, taskId);
+      queryClient.invalidateQueries({ queryKey: ['tasks', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['phases', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['board', roomId] });
+      queryClient.invalidateQueries({ queryKey: ['room', roomId] });
+      refetchPhases();
+      handleCloseTaskModal();
+      toast.success('Task deleted');
+    } catch (err: any) {
+      if (prev) {
+        setTasks(curr => [...curr, prev]);
+        queryClient.setQueryData<Task[]>(['tasks', roomId, phasesUpdatedAt], old =>
+          old ? [...old, prev] : [prev]
+        );
+      }
+      toast.error(err?.message || 'Failed to delete task');
+    }
   };
 
   // Filter Tasks
@@ -384,7 +574,7 @@ export function BoardPage() {
 
       // Summary filter
       if (summaryFilter === 'open' && task.status === 'done') return false;
-      if (summaryFilter === 'blocked' && !task.flagged && !task.blockedReason) return false;
+      if (summaryFilter === 'blocked' && !task.flagged && !task.blockedReason && !task.isBlocked) return false;
       if (summaryFilter === 'unassigned' && task.assigneeId) return false;
       if (summaryFilter === 'duetoday') {
         if (!task.dueAt) return false;
@@ -411,7 +601,7 @@ export function BoardPage() {
       if (filterState.onlyMine && task.assigneeId !== currentUserId) return false;
 
       // Blocked
-      if (filterState.blocked && !task.flagged && !task.blockedReason) return false;
+      if (filterState.blocked && !task.flagged && !task.blockedReason && !task.isBlocked) return false;
 
       // Due soon (within 6h or overdue)
       if (filterState.dueSoon) {
@@ -427,129 +617,133 @@ export function BoardPage() {
 
       return true;
     });
-  }, [tasks, filterState, summaryFilter]);
+  }, [tasks, filterState, summaryFilter, selectedPhaseKey, currentPhase, currentUserId]);
 
-  // Drag and drop state
-  const [dropTargetCol, setDropTargetCol] = useState<TaskStatus | null>(null);
-  const [dropIndex, setDropIndex] = useState<number | null>(null);
-  const dragRef = useRef<{ task: Task; startX: number; startY: number } | null>(null);
-
-  const handlePointerDownDrag = (e: React.PointerEvent, task: Task) => {
-    dragRef.current = { task, startX: e.clientX, startY: e.clientY };
-
-    const handlePointerMove = (moveEv: PointerEvent) => {
-      if (!dragRef.current) return;
-      const dist = Math.hypot(moveEv.clientX - dragRef.current.startX, moveEv.clientY - dragRef.current.startY);
-      if (dist > 5) {
-        setDraggingTaskId(task.id);
-
-        // Detect column under pointer
-        const elem = document.elementFromPoint(moveEv.clientX, moveEv.clientY);
-        const colElem = elem?.closest('[data-column-status]');
-        if (colElem) {
-          const colStatus = colElem.getAttribute('data-column-status') as TaskStatus;
-          setDropTargetCol(colStatus);
-
-          // Find insertion index
-          const cards = Array.from(colElem.querySelectorAll('[data-task-id]'));
-          let foundIdx = cards.length;
-          for (let i = 0; i < cards.length; i++) {
-            const rect = cards[i].getBoundingClientRect();
-            if (moveEv.clientY < rect.top + rect.height / 2) {
-              foundIdx = i;
-              break;
-            }
-          }
-          setDropIndex(foundIdx);
-        } else {
-          setDropTargetCol(null);
-          setDropIndex(null);
-        }
+  // @dnd-kit Drag and Drop handlers
+  const handleDragStart = (event: DragStartEvent) => {
+    const task = tasks.find((t) => t.id === event.active.id);
+    if (task) {
+      setActiveDragTask(task);
+      setDraggingTaskId(task.id);
+      const el = document.querySelector(`[data-task-id="${task.id}"]`) as HTMLElement | null;
+      if (el) {
+        setActiveDragWidth(el.getBoundingClientRect().width);
       }
-    };
+    }
+  };
 
-    const handlePointerUp = async () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveDragTask(null);
+    setDraggingTaskId(null);
+    setActiveDragWidth(null);
 
-      if (dragRef.current && dropTargetCol && roomId) {
-        const draggedTask = dragRef.current.task;
-        if (draggedTask.status !== dropTargetCol) {
-          const isMovingForward =
-            (draggedTask.status === 'todo' && (dropTargetCol === 'inprogress' || dropTargetCol === 'done')) ||
-            (draggedTask.status === 'inprogress' && dropTargetCol === 'done');
+    // 1. Take target column and index from the element under the pointer
+    let targetStatus: TaskStatus | null = null;
+    let targetIndex = 0;
 
-          if (draggedTask.isBlocked && isMovingForward) {
-            const unconfirmed = (draggedTask.prerequisites || [])
-              .filter((p) => !p.confirmed)
-              .map((p) => p.title || p.key);
-            toast.error(
-              `You can't start this task yet. Finish: ${unconfirmed.length > 0 ? unconfirmed.join(', ') : 'prerequisites'}.`
-            );
-            dragRef.current = null;
-            setDraggingTaskId(null);
-            setDropTargetCol(null);
-            setDropIndex(null);
-            return;
+    if (pointerPosRef.current) {
+      const el = document.elementFromPoint(pointerPosRef.current.x, pointerPosRef.current.y);
+      if (el) {
+        const colEl = el.closest('[data-column-status]') as HTMLElement | null;
+        if (colEl) {
+          const colStatus = colEl.getAttribute('data-column-status') as TaskStatus;
+          if (['todo', 'inprogress', 'done'].includes(colStatus)) {
+            targetStatus = colStatus;
           }
-
-          // If moving from TO DO to IN PROGRESS and unassigned, assign to current user
-          let patch: Partial<Task> = { status: dropTargetCol };
-          if (draggedTask.status === 'todo' && dropTargetCol === 'inprogress' && !draggedTask.assigneeId) {
-            patch.assigneeId = currentUserId;
-          }
-
-          const prev = tasks.find(t => t.id === draggedTask.id);
-          setTasks(ts => ts.map(t => t.id === draggedTask.id ? { ...t, ...patch } : t));
-
-          try {
-            await boardService.moveTask(
-              roomId,
-              draggedTask.id,
-              dropTargetCol,
-              dropIndex ?? 0,
-              (draggedTask as any).version
-            );
-            toast.success(`Moved ${draggedTask.key} to ${dropTargetCol}`);
-          } catch (err: any) {
-            if (prev) {
-              setTasks(ts => ts.map(t => t.id === draggedTask.id ? prev : t));
-            }
-            if (err?.code === 'TASK_BLOCKED' || err?.message?.includes('TASK_BLOCKED')) {
-              toast.error(err.message || 'Cannot advance task: prerequisites are not finished.');
-            } else if (err?.status === 409 || err?.message?.includes('TASK_CHANGED')) {
-              toast.error('Task was updated by another team member. Reloading board...');
-              loadData();
-            } else if (err?.message?.includes('DEPENDENCY_CYCLE') || err?.code === 'DEPENDENCY_CYCLE') {
-              toast.error('Cannot move task: circular dependency detected.');
-            } else {
-              toast.error(err?.message || 'Failed to move task');
-            }
+          const cardEl = el.closest('[data-task-id]') as HTMLElement | null;
+          if (cardEl) {
+            const cards = Array.from(colEl.querySelectorAll('[data-task-id]'));
+            const idx = cards.indexOf(cardEl);
+            if (idx >= 0) targetIndex = idx;
+          } else {
+            targetIndex = colEl.querySelectorAll('[data-task-id]').length;
           }
         }
       }
+    }
 
-      dragRef.current = null;
-      setDraggingTaskId(null);
-      setDropTargetCol(null);
-      setDropIndex(null);
-    };
+    if (!targetStatus && over?.id) {
+      const overId = String(over.id);
+      if (['todo', 'inprogress', 'done'].includes(overId)) {
+        targetStatus = overId as TaskStatus;
+      }
+    }
 
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
+    if (!targetStatus) return;
+
+    const task = tasks.find((t) => t.id === active.id);
+    if (!task || task.status === targetStatus) return;
+
+    // Check if forward move is blocked
+    const isForward =
+      (task.status === 'todo' && (targetStatus === 'inprogress' || targetStatus === 'done')) ||
+      (task.status === 'inprogress' && targetStatus === 'done');
+
+    const isTaskBlocked = Boolean(
+      task.isBlocked ||
+      task.flagged ||
+      task.blockedReason ||
+      (task.prerequisites && task.prerequisites.some((p) => !p.confirmed))
+    );
+
+    if (isForward && isTaskBlocked) {
+      const blockedPrereq = (task.prerequisites || []).find((p) => !p.confirmed);
+      const prereqKey = blockedPrereq ? blockedPrereq.key : (task.dependsOn?.[0] || 'prerequisite');
+      toast.error(`${task.key} is blocked by ${prereqKey}, which is waiting for the leader to confirm it`, {
+        action: blockedPrereq ? {
+          label: `Open ${prereqKey}`,
+          onClick: () => {
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.set('task', prereqKey);
+            setSearchParams(nextParams);
+          },
+        } : undefined,
+      });
+      return;
+    }
+
+    await handleStatusChange(task.id, targetStatus, targetIndex);
   };
 
   const todoTasks = useMemo(() => filteredTasks.filter(t => t.status === 'todo'), [filteredTasks]);
   const inProgressTasks = useMemo(() => filteredTasks.filter(t => t.status === 'inprogress'), [filteredTasks]);
   const doneTasks = useMemo(() => filteredTasks.filter(t => t.status === 'done'), [filteredTasks]);
 
-  const [isControlsCollapsed, setIsControlsCollapsed] = useState(false);
+  // Collapsed by default; stored in localStorage per user
+  const [isControlsCollapsed, setIsControlsCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const stored = localStorage.getItem('board_toolbar_collapsed');
+    return stored !== null ? stored === 'true' : true;
+  });
+
+  const handleToggleCollapse = () => {
+    setIsControlsCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem('board_toolbar_collapsed', String(next));
+      return next;
+    });
+  };
 
   const currentMember = members.find((m) => m.id === currentUserId) || members[0] || null;
-  const isLeader = currentMember?.role === 'leader';
-  const needsConfirmationCount = useMemo(() => {
-    return tasks.filter((t) => t.status === 'done' && t.reviewState === 'AWAITING').length;
-  }, [tasks]);
+  const isLeader = currentMember?.role === 'leader' || roomData?.ownerId === currentUserId;
+
+  // Derive counts from ONE selector over tasks list in query cache
+  const taskCounts = useMemo(() => selectTaskCounts(tasks), [tasks]);
+  const needsConfirmationCount = taskCounts.needsConfirmation;
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (summaryFilter) count++;
+    if (filterState.search) count++;
+    if (filterState.selectedAssigneeId) count++;
+    if (filterState.onlyMine) count++;
+    if (filterState.blocked) count++;
+    if (filterState.dueSoon) count++;
+    if (filterState.needsConfirmation) count++;
+    if (filterState.groupBy !== 'none') count++;
+    return count;
+  }, [summaryFilter, filterState]);
 
   const currentPhaseTasks = useMemo(() => {
     if (!currentPhase) return [];
@@ -580,14 +774,34 @@ export function BoardPage() {
   );
 
   return (
-    <div className="flex flex-col gap-4 p-5 max-w-full min-h-[calc(100vh-64px)]">
+    <div className="flex flex-col gap-2.5 px-5 pb-5 pt-0 max-w-full min-h-full flex-1 bg-page">
       {/* Phase Rail at top of Board */}
       {phasesData.length > 0 && (
-        <PhaseRail
-          phases={phasesData}
-          selectedPhaseKey={selectedPhaseKey}
-          onSelectPhase={handleSelectPhase}
-        />
+        <div className="mt-3 h-10 sticky top-[72px] z-10 bg-page flex items-center shrink-0">
+          <PhaseRail
+            phases={phasesData}
+            selectedPhaseKey={selectedPhaseKey}
+            onSelectPhase={handleSelectPhase}
+            tasks={tasks}
+            roomId={roomId}
+            rightAction={
+              hasTasks ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleToggleCollapse}
+                  className="h-9 px-3 rounded-full text-xs font-medium border-border hover:bg-muted text-muted-foreground hover:text-foreground flex items-center gap-1.5 cursor-pointer shadow-xs shrink-0"
+                  title={isControlsCollapsed ? (activeFilterCount > 0 ? `Filters (${activeFilterCount})` : 'Expand') : 'Collapse'}
+                  aria-label={isControlsCollapsed ? (activeFilterCount > 0 ? `Filters (${activeFilterCount})` : 'Expand') : 'Collapse'}
+                >
+                  <SlidersHorizontal className="size-3.5" />
+                  <span>{isControlsCollapsed ? (activeFilterCount > 0 ? `Filters (${activeFilterCount})` : 'Expand') : 'Collapse'}</span>
+                  <ChevronDown className={cn("size-3.5 transition-transform duration-[180ms]", !isControlsCollapsed && "rotate-180")} />
+                </Button>
+              ) : null
+            }
+          />
+        </div>
       )}
 
       {/* Active Phase Completed - Jump into Next Phase Banner */}
@@ -653,46 +867,53 @@ export function BoardPage() {
         onSelectSummaryFilter={setSummaryFilter}
         showControls={hasTasks}
         isControlsCollapsed={isControlsCollapsed}
-        onToggleCollapse={() => setIsControlsCollapsed(c => !c)}
+        onToggleCollapse={undefined}
+        activeFilterCount={activeFilterCount}
       />
 
-      {/* Slim Header Row when phase has tasks */}
-      {currentPhase && currentPhase.tasksGenerated && (
-        <PhaseHeaderRow
-          roomId={roomId!}
-          phase={currentPhase}
-          nextPhase={nextPhase}
-          isLeader={isLeader}
-          tasks={tasks}
-          onRefresh={() => {
-            loadData();
-            refetchPhases();
-          }}
-          onAdvanceEarly={async (choice) => {
-            try {
-              await phaseService.advancePhase(roomId!, currentPhase.key, choice);
-              toast.success(`Advanced to ${nextPhase?.key || 'next phase'}`);
+      {/* Collapsible toolbar section: PhaseHeaderRow and BoardFilterBar animates over 180ms */}
+      <div
+        className={cn(
+          "transition-all duration-[180ms] ease-in-out overflow-hidden flex flex-col gap-2.5",
+          isControlsCollapsed ? "max-h-0 opacity-0 pointer-events-none" : "max-h-[500px] opacity-100"
+        )}
+      >
+        {currentPhase && currentPhase.tasksGenerated && (
+          <PhaseHeaderRow
+            roomId={roomId!}
+            phase={currentPhase}
+            nextPhase={nextPhase}
+            isLeader={isLeader}
+            tasks={tasks}
+            onRefresh={() => {
               loadData();
               refetchPhases();
-            } catch (err: any) {
-              toast.error(err?.message || 'Failed to advance phase');
-            }
-          }}
-        />
-      )}
+            }}
+            onAdvanceEarly={async (choice) => {
+              try {
+                await phaseService.advancePhase(roomId!, currentPhase.key, choice);
+                toast.success(`Advanced to ${nextPhase?.key || 'next phase'}`);
+                loadData();
+                refetchPhases();
+              } catch (err: any) {
+                toast.error(err?.message || 'Failed to advance phase');
+              }
+            }}
+          />
+        )}
 
-      {/* 3: Quick filter bar - only rendered when tasks are generated and not collapsed */}
-      {hasTasks && !isControlsCollapsed && (
-        <BoardFilterBar
-          members={members}
-          currentUserId={currentUserId}
-          isLeader={isLeader}
-          needsConfirmationCount={needsConfirmationCount}
-          filterState={filterState}
-          onFilterChange={handleFilterChange}
-          onClearFilters={handleClearFilters}
-        />
-      )}
+        {hasTasks && (
+          <BoardFilterBar
+            members={members}
+            currentUserId={currentUserId}
+            isLeader={isLeader}
+            needsConfirmationCount={needsConfirmationCount}
+            filterState={filterState}
+            onFilterChange={handleFilterChange}
+            onClearFilters={handleClearFilters}
+          />
+        )}
+      </div>
 
       {/* Main Board / List View Area */}
       {showGenerationPanel && currentPhase ? (
@@ -768,7 +989,6 @@ export function BoardPage() {
           onStatusChange={handleStatusChange}
           onAssignToMe={handleAssignToMe}
           onToggleBlock={handleToggleBlock}
-          onPointerDownDrag={handlePointerDownDrag}
         />
       ) : (
         <>
@@ -799,86 +1019,98 @@ export function BoardPage() {
             </SegmentedControl>
           </div>
 
-          {/* 4: Three equal columns grid (NO horizontal scroll at 1100px+) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 min-w-0">
-            <div className={activeMobileColumn !== 'todo' ? 'hidden md:block' : 'block'}>
-              <BoardColumn
-                status="todo"
-                title="TO DO"
-                tasks={todoTasks}
-                members={members}
-                phases={phases}
-                isDropTarget={dropTargetCol === 'todo'}
-                dropIndex={dropTargetCol === 'todo' ? dropIndex : null}
-                draggingTaskId={draggingTaskId}
-                isLeader={isLeader}
-                onOpenTask={handleOpenTask}
-                onStatusChange={handleStatusChange}
-                onAssignToMe={handleAssignToMe}
-                onToggleBlock={handleToggleBlock}
-                onDeferTask={handleDeferTask}
-                onDropTaskLeader={handleDropTaskLeader}
-                onInlineCreate={handleInlineCreate}
-                onPointerDownDrag={handlePointerDownDrag}
-                onDropTask={handleDropTask}
-                onAdvanceTaskStatus={handleAdvanceStatus}
-                onDragStartTask={setDraggingTaskId}
-                onDragEndTask={() => setDraggingTaskId(null)}
-              />
+          {/* 4: Three equal columns grid with @dnd-kit drag and drop */}
+          <DndContext sensors={sensors} autoScroll={false} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 min-w-0">
+              <div className={activeMobileColumn !== 'todo' ? 'hidden md:block' : 'block'}>
+                <BoardColumn
+                  status="todo"
+                  title="TO DO"
+                  tasks={todoTasks}
+                  members={members}
+                  phases={phases}
+                  draggingTaskId={draggingTaskId}
+                  isLeader={isLeader}
+                  onOpenTask={handleOpenTask}
+                  onStatusChange={handleStatusChange}
+                  onAssignToMe={handleAssignToMe}
+                  onToggleBlock={handleToggleBlock}
+                  onDeferTask={handleDeferTask}
+                  onDropTaskLeader={handleDropTaskLeader}
+                  onInlineCreate={handleInlineCreate}
+                  onAdvanceTaskStatus={handleAdvanceStatus}
+                />
+              </div>
+
+              <div className={activeMobileColumn !== 'inprogress' ? 'hidden md:block' : 'block'}>
+                <BoardColumn
+                  status="inprogress"
+                  title="IN PROGRESS"
+                  tasks={inProgressTasks}
+                  members={members}
+                  phases={phases}
+                  draggingTaskId={draggingTaskId}
+                  isLeader={isLeader}
+                  onOpenTask={handleOpenTask}
+                  onStatusChange={handleStatusChange}
+                  onAssignToMe={handleAssignToMe}
+                  onToggleBlock={handleToggleBlock}
+                  onDeferTask={handleDeferTask}
+                  onDropTaskLeader={handleDropTaskLeader}
+                  onInlineCreate={handleInlineCreate}
+                  onAdvanceTaskStatus={handleAdvanceStatus}
+                />
+              </div>
+
+              <div className={activeMobileColumn !== 'done' ? 'hidden md:block' : 'block'}>
+                <BoardColumn
+                  status="done"
+                  title="DONE"
+                  tasks={doneTasks}
+                  members={members}
+                  phases={phases}
+                  draggingTaskId={draggingTaskId}
+                  isLeader={isLeader}
+                  onOpenTask={handleOpenTask}
+                  onStatusChange={handleStatusChange}
+                  onAssignToMe={handleAssignToMe}
+                  onToggleBlock={handleToggleBlock}
+                  onDeferTask={handleDeferTask}
+                  onDropTaskLeader={handleDropTaskLeader}
+                  onInlineCreate={handleInlineCreate}
+                  onAdvanceTaskStatus={handleAdvanceStatus}
+                />
+              </div>
             </div>
 
-            <div className={activeMobileColumn !== 'inprogress' ? 'hidden md:block' : 'block'}>
-              <BoardColumn
-                status="inprogress"
-                title="IN PROGRESS"
-                tasks={inProgressTasks}
-                members={members}
-                phases={phases}
-                isDropTarget={dropTargetCol === 'inprogress'}
-                dropIndex={dropTargetCol === 'inprogress' ? dropIndex : null}
-                draggingTaskId={draggingTaskId}
-                isLeader={isLeader}
-                onOpenTask={handleOpenTask}
-                onStatusChange={handleStatusChange}
-                onAssignToMe={handleAssignToMe}
-                onToggleBlock={handleToggleBlock}
-                onDeferTask={handleDeferTask}
-                onDropTaskLeader={handleDropTaskLeader}
-                onInlineCreate={handleInlineCreate}
-                onPointerDownDrag={handlePointerDownDrag}
-                onDropTask={handleDropTask}
-                onAdvanceTaskStatus={handleAdvanceStatus}
-                onDragStartTask={setDraggingTaskId}
-                onDragEndTask={() => setDraggingTaskId(null)}
-              />
-            </div>
-
-            <div className={activeMobileColumn !== 'done' ? 'hidden md:block' : 'block'}>
-              <BoardColumn
-                status="done"
-                title="DONE"
-                tasks={doneTasks}
-                members={members}
-                phases={phases}
-                isDropTarget={dropTargetCol === 'done'}
-                dropIndex={dropTargetCol === 'done' ? dropIndex : null}
-                draggingTaskId={draggingTaskId}
-                isLeader={isLeader}
-                onOpenTask={handleOpenTask}
-                onStatusChange={handleStatusChange}
-                onAssignToMe={handleAssignToMe}
-                onToggleBlock={handleToggleBlock}
-                onDeferTask={handleDeferTask}
-                onDropTaskLeader={handleDropTaskLeader}
-                onInlineCreate={handleInlineCreate}
-                onPointerDownDrag={handlePointerDownDrag}
-                onDropTask={handleDropTask}
-                onAdvanceTaskStatus={handleAdvanceStatus}
-                onDragStartTask={setDraggingTaskId}
-                onDragEndTask={() => setDraggingTaskId(null)}
-              />
-            </div>
-          </div>
+            {typeof document !== 'undefined' && createPortal(
+              <DragOverlay dropAnimation={null}>
+                {activeDragTask ? (
+                  <div
+                    style={{
+                      width: activeDragWidth ? `${activeDragWidth}px` : undefined,
+                      transition: 'none',
+                      animation: 'none',
+                    }}
+                    className="shadow-2xl opacity-95 pointer-events-none cursor-grabbing select-none"
+                  >
+                    <JiraCard
+                      task={activeDragTask}
+                      members={members}
+                      phases={phases}
+                      isLeader={isLeader}
+                      onOpen={() => {}}
+                      onStatusChange={() => {}}
+                      onAssignToMe={() => {}}
+                      onToggleBlock={() => {}}
+                      isOverlay
+                    />
+                  </div>
+                ) : null}
+              </DragOverlay>,
+              document.body
+            )}
+          </DndContext>
         </>
       )}
 
@@ -892,6 +1124,13 @@ export function BoardPage() {
           onClose={handleCloseTaskModal}
           onUpdateTask={(updated) => {
             setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
+            queryClient.setQueryData<Task[]>(['tasks', roomId, phasesUpdatedAt], old =>
+              (old || []).map(t => t.id === updated.id ? updated : t)
+            );
+            queryClient.invalidateQueries({ queryKey: ['tasks', roomId] });
+            queryClient.invalidateQueries({ queryKey: ['phases', roomId] });
+            queryClient.invalidateQueries({ queryKey: ['board', roomId] });
+            queryClient.invalidateQueries({ queryKey: ['room', roomId] });
           }}
           onDeleteTask={handleDeleteTask}
           onDeferTask={handleDeferTask}

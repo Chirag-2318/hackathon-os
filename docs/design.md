@@ -878,7 +878,7 @@ Direct, calm, specific. Short sentences. The tone of a good teammate at 3 AM, no
 1. Brand color is the lavender from R1 in both themes; orange/peach means time; coral/red means blocked/danger.
 2. Sidebar is dark in the light theme (R1); the light sidebar card from R2 is not used for global navigation, only its members-list pattern.
 3. Speed Mode defaults to dark theme.
-4. The product name and logo are not decided; the header uses a text placeholder "Hackathon OS" (from `ideation.md`).
+4. The product name is [brackit] (originally placeholder "Hackathon OS" from `ideation.md`).
 5. English UI at launch.
 
 **Open questions:**

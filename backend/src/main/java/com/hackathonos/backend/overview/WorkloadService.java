@@ -171,7 +171,7 @@ public class WorkloadService {
 
             List<Task> userTasks = tasksByUser.getOrDefault(m.getUserId(), Collections.emptyList());
             MemberStatusCalculator.MemberStatusResult statusResult =
-                    statusCalculator.calculate(m.getUserId(), m.getLastSeenAt(), userTasks);
+                    statusCalculator.calculate(m.getRoomId(), m.getUserId(), m.getLastSeenAt(), userTasks);
 
             int done = 0;
             int expected = 0;

@@ -132,6 +132,7 @@ public class PlanCompletionService {
      */
     @Transactional
     public PlanCompletionSummaryDto complete(Room room) {
+        roomRepository.findWithLockById(room.getId());
         UUID roomId = room.getId();
 
         List<Doc> docs = docRepository.findByRoomId(roomId).stream()

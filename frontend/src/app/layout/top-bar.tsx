@@ -121,7 +121,7 @@ export function PanelHeader({ inRoom: inRoomProp = false, pageName = 'Home' }: P
               >
                 {roomTitle}
               </Link>
-              <LiveIndicator isReconnecting={isReconnecting} />
+              <LiveIndicator members={overviewData?.members} />
             </div>
             {subSection !== 'overview' && sectionMeta.group && sectionMeta.group.toLowerCase() !== sectionMeta.label.toLowerCase() && (
               <>

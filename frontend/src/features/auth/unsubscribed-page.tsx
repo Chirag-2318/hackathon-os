@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom';
+import { BRAND_NAME } from '@/shared/constants/copy';
 
 export function UnsubscribedPage() {
   return (
     <div className="min-h-screen bg-[#0B0B0C] flex items-center justify-center p-4">
       <div className="bg-[#F6F3EC] text-[#2C2A26] rounded-2xl p-8 max-w-md w-full text-center shadow-2xl border border-[#E2DDD3]">
-        <div className="font-serif text-sm font-bold text-[#8E8980] uppercase tracking-wider mb-3">
-          Hackathon OS
+        <div className="font-serif text-sm font-bold text-[#8E8980] tracking-wider mb-3">
+          {BRAND_NAME}
         </div>
         <h1 className="font-serif text-2xl font-bold text-[#0B0B0C] mb-3">
           Reminders Paused
@@ -18,7 +19,7 @@ export function UnsubscribedPage() {
           to="/"
           className="inline-block px-6 py-3 bg-[#0B0B0C] text-[#F6F3EC] rounded-lg font-medium text-sm hover:opacity-90 transition-opacity"
         >
-          Return to Hackathon OS
+          Return to {BRAND_NAME}
         </Link>
       </div>
     </div>

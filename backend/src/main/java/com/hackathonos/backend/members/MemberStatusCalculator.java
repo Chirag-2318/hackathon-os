@@ -1,6 +1,8 @@
 package com.hackathonos.backend.members;
 
+import com.hackathonos.backend.events.RoomEventHub;
 import com.hackathonos.backend.tasks.Task;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -16,21 +18,29 @@ public class MemberStatusCalculator {
     public record MemberStatusResult(String status, CurrentTaskInfo currentTask) {}
 
     private final Clock clock;
+    private final RoomEventHub eventHub;
 
-    public MemberStatusCalculator(Clock clock) {
+    public MemberStatusCalculator(Clock clock, @Autowired(required = false) RoomEventHub eventHub) {
         this.clock = clock;
+        this.eventHub = eventHub;
     }
 
     /**
      * Determines status ("working", "blocked", "idle") and active task for a member.
      * Rules:
+     * - Online when event hub reports active stream or last_seen_at is within 5 minutes.
      * - BLOCKED when assignee of any flagged, not-done task.
-     * - WORKING when assignee of an in-progress task or online (seen within 5 minutes).
+     * - WORKING when assignee of an in-progress task or online.
      * - IDLE otherwise.
      * - currentTask = their in-progress task with lowest position, else first todo task by position, else null.
      */
-    public MemberStatusResult calculate(UUID userId, Instant lastSeenAt, List<Task> userTasks) {
-        boolean online = lastSeenAt != null && Duration.between(lastSeenAt, clock.instant()).toMinutes() < 5;
+    public MemberStatusResult calculate(UUID roomId, UUID userId, Instant lastSeenAt, List<Task> userTasks) {
+        boolean hubOnline = eventHub != null && (
+                (roomId != null && eventHub.isUserOnline(roomId, userId)) ||
+                eventHub.isUserOnlineAnywhere(userId)
+        );
+        boolean recentSeen = lastSeenAt != null && Duration.between(lastSeenAt, clock.instant()).toMinutes() < 5;
+        boolean online = hubOnline || recentSeen;
 
         boolean hasBlocked = false;
         boolean hasInProgress = false;
@@ -73,5 +83,12 @@ public class MemberStatusCalculator {
                 : null;
 
         return new MemberStatusResult(statusStr, taskInfo);
+    }
+
+    /**
+     * Backward-compatible 3-arg overload for callers without room context.
+     */
+    public MemberStatusResult calculate(UUID userId, Instant lastSeenAt, List<Task> userTasks) {
+        return calculate(null, userId, lastSeenAt, userTasks);
     }
 }

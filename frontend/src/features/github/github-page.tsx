@@ -1,74 +1,105 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import {
+  ExternalLink, RefreshCw, MoreHorizontal, FolderGit2,
+  Trash2, GitPullRequest, ArrowRight
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { githubService } from '@/services/githubService';
-import type {
-  GithubDataComputed, BranchRole, AttentionItem
-} from '@/services/types';
-import { GithubHeader } from './components/github-header';
-import { ReadinessBand } from './components/readiness-band';
-import { BranchMap } from './components/branch-map';
-import { NeedsAttentionCard } from './components/needs-attention-card';
-import { RepoHealthCard } from './components/repo-health-card';
-import { CommitActivityCard } from './components/commit-activity-card';
-import { FreezeDemoDialog } from './components/freeze-demo-dialog';
+import { githubService, type GithubCheck, type GithubContributorsResponse, type DemoMarker } from '@/services/githubService';
+import type { GithubDataComputed, BranchRole, Branch } from '@/services/types';
+import { useCurrentUser } from '@/features/auth/useCurrentUser';
 import { NotConnectedView } from './components/not-connected-view';
+import { GithubSubmissionChecks } from './components/github-submission-checks';
+import { GithubBranchesTable } from './components/github-branches-table';
+import { GithubTeamActivity } from './components/github-team-activity';
+import { GithubDemoMarkerCard } from './components/github-demo-marker-card';
 
 export function GithubPage() {
   const { roomId = '' } = useParams<{ roomId: string }>();
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { data: currentUser } = useCurrentUser();
 
   const [data, setData] = useState<GithubDataComputed | null>(null);
+  const [checks, setChecks] = useState<GithubCheck[]>([]);
+  const [contributors, setContributors] = useState<GithubContributorsResponse | null>(null);
+  const [demoMarker, setDemoMarker] = useState<DemoMarker | null>(null);
+
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
+  const [showConnectModal, setShowConnectModal] = useState(false);
 
-  // Dialog state
-  const [freezeDialogOpen, setFreezeDialogOpen] = useState(false);
+  const isLeader = Boolean(
+    currentUser?.id && data?.repo?.connected
+  );
 
-  const loadData = useCallback(async () => {
+  const loadAll = useCallback(async () => {
     if (!roomId) return;
     try {
       setLoading(true);
-      setError(null);
-      const res = await githubService.getGithubData(roomId);
+      const [res, chk, cont, mark] = await Promise.all([
+        githubService.getGithubData(roomId).catch(() => null),
+        githubService.getChecks(roomId).catch(() => []),
+        githubService.getContributors(roomId).catch(() => null),
+        githubService.getDemoMarker(roomId).catch(() => null),
+      ]);
       setData(res);
+      setChecks(chk);
+      setContributors(cont);
+      setDemoMarker(mark);
     } catch (err: any) {
-      setError(err?.message || 'Failed to load GitHub repository details');
+      toast.error('Failed to load GitHub data');
     } finally {
       setLoading(false);
     }
   }, [roomId]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    loadAll();
+  }, [loadAll]);
 
   useEffect(() => {
     const ghStatus = searchParams.get('github');
     if (ghStatus === 'connected') {
-      toast.success('GitHub account connected successfully!');
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.delete('github');
-      setSearchParams(nextParams, { replace: true });
-      loadData();
+      toast.success('GitHub account connected');
+      const next = new URLSearchParams(searchParams);
+      next.delete('github');
+      setSearchParams(next, { replace: true });
+      loadAll();
     } else if (ghStatus === 'error') {
       const reason = searchParams.get('reason') || 'unknown';
-      toast.error(`Failed to connect GitHub account (${reason})`);
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.delete('github');
-      nextParams.delete('reason');
-      setSearchParams(nextParams, { replace: true });
+      toast.error(`GitHub connection error (${reason})`);
+      const next = new URLSearchParams(searchParams);
+      next.delete('github');
+      next.delete('reason');
+      setSearchParams(next, { replace: true });
     }
-  }, [searchParams, setSearchParams, loadData]);
+  }, [searchParams, setSearchParams, loadAll]);
 
-  // Handlers
   const handleSync = async () => {
-    if (!roomId) return;
-    const res = await githubService.syncRepo(roomId);
-    setData(res);
+    try {
+      setSyncing(true);
+      await githubService.syncRepo(roomId);
+      await loadAll();
+      toast.success('Repository synchronized');
+    } catch (err: any) {
+      toast.error(err?.message || 'Sync failed');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!confirm('Disconnect GitHub repository from this room?')) return;
+    try {
+      await githubService.disconnectRepo(roomId);
+      toast.success('Repository disconnected');
+      setData(null);
+      loadAll();
+    } catch {
+      toast.error('Failed to disconnect');
+    }
   };
 
   const handleUpdatePurpose = async (branchName: string, purpose: string) => {
@@ -77,209 +108,199 @@ export function GithubPage() {
       if (!prev) return null;
       return {
         ...prev,
-        branches: prev.branches.map((b) => (b.name === branchName ? { ...b, purpose } : b)),
+        branches: prev.branches.map((b) =>
+          b.name === branchName ? { ...b, purpose } : b
+        ),
       };
     });
   };
 
   const handleUpdateRole = async (branchName: string, role: BranchRole) => {
-    const updatedBranches = await githubService.updateBranchRole(roomId, branchName, role);
-    const refreshed = await githubService.getGithubData(roomId);
-    setData(refreshed);
+    await githubService.updateBranchRole(roomId, branchName, role);
+    const updated = await githubService.getGithubData(roomId);
+    setData(updated);
   };
 
-  const handleLinkTask = async (branchName: string, taskKey: string) => {
-    await githubService.linkTaskToBranch(roomId, branchName, taskKey);
-    const refreshed = await githubService.getGithubData(roomId);
-    setData(refreshed);
-  };
-
-  const handleUnlinkTask = async (branchName: string, taskKey: string) => {
-    await githubService.unlinkTaskFromBranch(roomId, branchName, taskKey);
-    const refreshed = await githubService.getGithubData(roomId);
-    setData(refreshed);
-  };
-
-  const handleFreezeConfirm = async (freezeData: {
-    branch: string;
-    tag: string;
-    sha: string;
-    message: string;
-  }) => {
-    await githubService.freezeDemo(roomId, freezeData);
-    const refreshed = await githubService.getGithubData(roomId);
-    setData(refreshed);
-  };
-
-  const handleRecheckHealth = async () => {
-    const refreshed = await githubService.recheckHealth(roomId);
-    setData(refreshed);
-  };
-
-  const handleDismissAttention = async (itemId: string) => {
-    await githubService.dismissAttentionItem(roomId, itemId);
-    setData((prev) => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        attentionItems: prev.attentionItems.filter((i) => i.id !== itemId),
-      };
-    });
-  };
-
-  const handleConnectRepo = async (repoInput: string) => {
-    const res = await githubService.connectRepo(roomId, repoInput);
-    setData(res);
-  };
-
-  const handleDisconnectRepo = async () => {
-    await githubService.disconnectRepo(roomId);
-    setData((prev) => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        repo: { ...prev.repo, connected: false },
-      };
-    });
-  };
-
-  const handleAttentionAction = (item: AttentionItem) => {
-    if (item.actionType === 'open_url' && item.url) {
-      window.open(item.url, '_blank', 'noopener,noreferrer');
-    } else if (item.actionType === 'open_freeze') {
-      setFreezeDialogOpen(true);
-    } else if (item.actionType === 'scroll_branch') {
-      const el = document.getElementById('branch-map-section');
-      el?.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
-  const handleScrollToSection = (sectionId: string) => {
-    const el = document.getElementById(sectionId);
-    el?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  // ── Skeletons / Loading State ──
   if (loading && !data) {
     return (
-      <div className="flex-1 overflow-y-auto bg-background p-6">
-        <div className="max-w-[1280px] mx-auto space-y-4">
-          <div className="h-10 w-64 bg-muted/60 animate-pulse rounded-lg" />
-          <div className="h-32 bg-card border border-border/50 rounded-2xl animate-pulse" />
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-            <div className="lg:col-span-8 h-80 bg-card border border-border/50 rounded-2xl animate-pulse" />
-            <div className="lg:col-span-4 h-80 bg-card border border-border/50 rounded-2xl animate-pulse" />
-          </div>
-          <div className="h-56 bg-card border border-border/50 rounded-2xl animate-pulse" />
+      <div className="max-w-[1120px] mx-auto px-4 py-8 space-y-6">
+        <div className="h-10 w-64 bg-muted/40 rounded-xl animate-pulse" />
+        <div className="h-36 bg-muted/30 rounded-xl animate-pulse" />
+        <div className="grid grid-cols-12 gap-6">
+          <div className="col-span-12 lg:col-span-7 h-96 bg-muted/20 rounded-xl animate-pulse" />
+          <div className="col-span-12 lg:col-span-5 h-96 bg-muted/20 rounded-xl animate-pulse" />
         </div>
       </div>
     );
   }
 
-  // ── Error State with Retry ──
-  if (error && !data) {
+  // Not connected view
+  if (!data || !data.repo?.connected) {
     return (
-      <div className="flex-1 overflow-y-auto bg-background p-6 flex items-center justify-center">
-        <div className="max-w-md w-full p-6 rounded-2xl bg-card border border-border shadow-xs text-center space-y-4 font-[var(--font-inter)]">
-          <div className="size-12 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
-            <AlertCircle className="size-6" />
-          </div>
-          <h2 className="text-lg font-semibold text-foreground">Could not load repository</h2>
-          <p className="text-xs text-muted-foreground">{error}</p>
-          <Button onClick={loadData} size="sm" className="gap-2 cursor-pointer">
-            <RefreshCw className="size-3.5" />
-            <span>Retry</span>
-          </Button>
-        </div>
+      <div className="max-w-[1120px] mx-auto px-4 py-8">
+        <NotConnectedView
+          roomId={roomId}
+          onConnect={async (input) => {
+            await githubService.connectRepo(roomId, input);
+            toast.success('Repository connected');
+            await loadAll();
+          }}
+        />
       </div>
     );
   }
 
-  // ── Not Connected State ──
-  if (!data?.repo?.connected) {
-    return (
-      <div className="flex-1 overflow-y-auto bg-background p-6">
-        <NotConnectedView roomId={roomId} onConnect={handleConnectRepo} />
-      </div>
-    );
-  }
+  const repo = data.repo;
+  const repoName = repo.fullName || 'Repository';
+  const syncDate = repo.lastSyncAt ? new Date(repo.lastSyncAt) : new Date();
+  const minsAgo = Math.max(0, Math.round((Date.now() - syncDate.getTime()) / 60000));
+  const syncLabel = minsAgo === 0 ? 'Synced just now' : `Synced ${minsAgo}m ago`;
 
   return (
-    <div className="flex-1 overflow-y-auto bg-background p-4 sm:p-6 select-none font-[var(--font-inter)]">
-      <div className="max-w-[1280px] mx-auto space-y-4">
-        {/* ── Row 0: Header ── */}
-        <GithubHeader
-          repo={data.repo}
-          isFrozen={Boolean(data.frozenDemo)}
-          onSync={handleSync}
-          onOpenFreeze={() => setFreezeDialogOpen(true)}
-          onChangeRepo={() => handleDisconnectRepo()}
-          onDisconnect={handleDisconnectRepo}
-        />
-
-        {/* ── Row 1: Readiness Band (full width) ── */}
-        <ReadinessBand
-          data={data}
-          onScrollToSection={handleScrollToSection}
-          onOpenFreeze={() => setFreezeDialogOpen(true)}
-        />
-
-        {/* ── Responsive Row 2: Branch Map + Right Stack ── */}
-        {/* On >=1100px (lg): 8/12 and 4/12 columns */}
-        {/* On <1100px: single column order: band, Needs attention, Branch Map, Repo health */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-          {/* Branch Map (8/12 on large, 2nd on small) */}
-          <div id="branch-map-section" className="order-2 lg:order-1 lg:col-span-8 space-y-4">
-            <BranchMap
-              branches={data.branches}
-              commits={data.commits}
-              missingMap={data.branchMissing}
-              repoFullName={data.repo.fullName}
-              onUpdatePurpose={handleUpdatePurpose}
-              onUpdateRole={handleUpdateRole}
-              onLinkTask={handleLinkTask}
-              onUnlinkTask={handleUnlinkTask}
-              onOpenTaskModal={(key) => navigate(`/app/room/${roomId}/board?task=${key}`)}
-            />
-          </div>
-
-          {/* Right Stack: Needs Attention then Repo Health (4/12 on large) */}
-          <div className="order-1 lg:order-2 lg:col-span-4 space-y-4">
-            {/* Needs Attention */}
-            <NeedsAttentionCard
-              items={data.attentionItems}
-              onActionClick={handleAttentionAction}
-              onDismiss={handleDismissAttention}
-            />
-
-            {/* Repo Health */}
-            <div id="repo-health">
-              <RepoHealthCard
-                health={data.health}
-                repoFullName={data.repo.fullName}
-                onRecheck={handleRecheckHealth}
-              />
-            </div>
-          </div>
+    <div className="max-w-[1120px] mx-auto px-4 py-6 space-y-6 font-sans">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/50">
+        <div className="flex items-center gap-3">
+          <a
+            href={repo.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-base sm:text-lg font-bold text-foreground hover:underline inline-flex items-center gap-1.5"
+          >
+            <span>{repoName}</span>
+            <ExternalLink className="size-4 text-muted-foreground" />
+          </a>
+          <span className="font-mono text-xs px-2 py-0.5 rounded-full border border-border/60 bg-muted text-muted-foreground">
+            {repo.visibility || 'public'}
+          </span>
+          <span className="text-xs text-muted-foreground hidden sm:inline">
+            {syncLabel}
+          </span>
         </div>
 
-        {/* ── Row 3: Commit Activity (full width) ── */}
-        <CommitActivityCard
-          commits={data.commits}
-          eventStartIso="2026-10-07T07:00:00+05:30"
-        />
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleSync}
+            disabled={syncing}
+            className="h-8 text-xs px-3 gap-1.5 cursor-pointer"
+          >
+            <RefreshCw className={`size-3.5 ${syncing ? 'animate-spin' : ''}`} />
+            <span>Sync</span>
+          </Button>
+
+          <div className="relative">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowHeaderMenu(!showHeaderMenu)}
+              className="size-8 p-0 cursor-pointer"
+            >
+              <MoreHorizontal className="size-4" />
+            </Button>
+
+            {showHeaderMenu && (
+              <div className="absolute right-0 top-9 z-40 w-48 rounded-xl border border-border bg-popover p-1 shadow-xl text-xs space-y-0.5">
+                <a
+                  href={repo.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-muted flex items-center gap-2 text-foreground cursor-pointer"
+                  onClick={() => setShowHeaderMenu(false)}
+                >
+                  <ExternalLink className="size-3.5 text-muted-foreground" />
+                  <span>Open on GitHub</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowHeaderMenu(false);
+                    setShowConnectModal(true);
+                  }}
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-muted flex items-center gap-2 text-foreground cursor-pointer"
+                >
+                  <FolderGit2 className="size-3.5 text-muted-foreground" />
+                  <span>Change repository</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowHeaderMenu(false);
+                    handleDisconnect();
+                  }}
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center gap-2 cursor-pointer"
+                >
+                  <Trash2 className="size-3.5" />
+                  <span>Disconnect</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* ── Freeze Demo Dialog ── */}
-      <FreezeDemoDialog
-        open={freezeDialogOpen}
-        onOpenChange={setFreezeDialogOpen}
-        branches={data.branches}
-        health={data.health}
-        existingFreeze={data.frozenDemo}
-        repoFullName={data.repo.fullName}
-        onConfirmFreeze={handleFreezeConfirm}
+      {/* Change Repo Modal */}
+      {showConnectModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-4">
+            <h3 className="text-sm font-semibold text-foreground">Change repository</h3>
+            <NotConnectedView
+              roomId={roomId}
+              onConnect={async (input) => {
+                await githubService.connectRepo(roomId, input);
+                setShowConnectModal(false);
+                toast.success('Repository connected');
+                await loadAll();
+              }}
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowConnectModal(false)}
+              className="w-full text-xs"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Before you submit — 8 checks */}
+      <GithubSubmissionChecks
+        checks={checks}
+        loading={loading}
+        onRefresh={loadAll}
       />
+
+      {/* Main Grid: Branches (7/12) + Activity & Demo Marker (5/12) */}
+      <div className="grid grid-cols-12 gap-6">
+        <div className="col-span-12 lg:col-span-7 space-y-6">
+          <GithubBranchesTable
+            branches={data.branches || []}
+            repoFullName={repoName}
+            onUpdatePurpose={handleUpdatePurpose}
+            onUpdateRole={handleUpdateRole}
+          />
+        </div>
+
+        <div className="col-span-12 lg:col-span-5 space-y-6">
+          <GithubDemoMarkerCard
+            roomId={roomId}
+            demoMarker={demoMarker}
+            branches={data.branches || []}
+            isLeader={isLeader}
+            onRefresh={loadAll}
+          />
+
+          <GithubTeamActivity
+            contributors={contributors}
+            commits={data.commits || []}
+            eventStart={(data as any)?.eventStart}
+            loading={loading}
+          />
+        </div>
+      </div>
     </div>
   );
 }

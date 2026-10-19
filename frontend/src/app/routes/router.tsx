@@ -18,7 +18,6 @@ import {
 import { ProtectedRoute } from '@/app/ProtectedRoute';
 import { ResponsiveShell } from '@/app/layout/responsive-shell';
 import { GlobalOverlays } from '@/app/overlays/global-overlays';
-import { LandingPage } from '@/features/landing/landing-page';
 import { SignInPage } from '@/features/auth/sign-in-page';
 import { UnsubscribedPage } from '@/features/auth/unsubscribed-page';
 import { GoodbyePage } from '@/features/auth/goodbye-page';
@@ -42,6 +41,9 @@ import {
 } from '@/features/system-pages/system-pages';
 
 // Lazy-loaded app and room pages
+const LandingPage = lazy(() =>
+  import('@/features/landing/landing-page').then((m) => ({ default: m.LandingPage }))
+);
 const AdminOverviewPage = lazy(() =>
   import('@/features/admin/admin-overview-page').then((m) => ({ default: m.AdminOverviewPage }))
 );
@@ -233,7 +235,7 @@ function RoomShellLayout() {
         <GlobalOverlays />
         <RoomErrorBoundary key={location.pathname}>
           <Suspense fallback={<PageSuspenseFallback />}>
-            <div key={location.pathname} className="page-transition min-h-full">
+            <div key={location.pathname} className="page-transition min-h-full flex-1 flex flex-col bg-page">
               <Outlet context={{ setRightRail }} />
             </div>
           </Suspense>
@@ -278,7 +280,11 @@ const router = createBrowserRouter([
   // ── Public routes (no app shell) ──────────────────────────────
   {
     path: '/',
-    element: <LandingPage />,
+    element: (
+      <Suspense fallback={<PageSuspenseFallback />}>
+        <LandingPage />
+      </Suspense>
+    ),
   },
   {
     path: '/signin',

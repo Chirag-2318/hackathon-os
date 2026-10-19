@@ -58,7 +58,7 @@ export const roomApi = {
       room: isValid
         ? {
             name: raw.roomName || raw.room?.name || 'Hackathon Room',
-            eventName: raw.eventName || raw.room?.eventName || 'Hackathon OS Team',
+            eventName: raw.eventName || raw.room?.eventName || '[brackit] Team',
             leader: raw.room?.leader || {
               name: raw.hostName || 'Team Leader',
               avatarUrl: raw.hostAvatarUrl || '',

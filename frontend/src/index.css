@@ -1128,3 +1128,17 @@ svg[data-muted="true"] .sound-wave {
   transform: scale(0.8);
 }
 
+/* 1.2 second soft accent background fade for live real-time updates */
+@keyframes liveSoftFade {
+  0% {
+    background-color: rgba(99, 102, 241, 0.28);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.live-change-flash {
+  animation: liveSoftFade 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+

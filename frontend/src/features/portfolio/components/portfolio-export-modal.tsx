@@ -18,17 +18,23 @@ export const PortfolioExportModal: React.FC<PortfolioExportModalProps> = ({ data
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-      <div className="relative w-full max-w-2xl rounded-xl border border-neutral-800 bg-neutral-900 shadow-2xl overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--backdrop-fallback,#0a0a0b80)] backdrop-blur-[3px] supports-[backdrop-filter]:bg-[var(--backdrop)] p-4 animate-in fade-in duration-150"
+      style={{
+        backdropFilter: 'var(--backdrop-blur, blur(3px))',
+        WebkitBackdropFilter: 'var(--backdrop-blur, blur(3px))',
+      }}
+    >
+      <div className="relative w-full max-w-2xl rounded-[16px] border border-border bg-card text-foreground shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-800 px-6 py-4 bg-neutral-950/60">
+        <div className="flex items-center justify-between border-b border-border px-6 py-4 bg-surface">
           <div>
-            <h3 className="text-base font-semibold text-neutral-100">Export Builder Passport Card</h3>
-            <p className="text-xs text-neutral-400">Print or save as high-resolution PDF</p>
+            <h3 className="text-base font-semibold text-foreground">Export Builder Passport Card</h3>
+            <p className="text-xs text-muted-foreground">Print or save as high-resolution PDF</p>
           </div>
           <button
             onClick={onClose}
-            className="rounded p-1 text-neutral-400 hover:text-white"
+            className="rounded p-1 text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
@@ -38,76 +44,76 @@ export const PortfolioExportModal: React.FC<PortfolioExportModalProps> = ({ data
         <div className="p-6 overflow-y-auto max-h-[75vh]">
           <div
             id="portfolio-print-card"
-            className="rounded-lg border border-neutral-700 bg-neutral-950 p-6 text-neutral-100 space-y-5"
+            className="rounded-lg border border-border bg-card p-6 text-foreground space-y-5 print:border-none print:shadow-none"
           >
             {/* Passport Card Header */}
-            <div className="flex items-start justify-between border-b border-neutral-800 pb-4">
+            <div className="flex items-start justify-between border-b border-border pb-4">
               <div className="flex items-center gap-4">
                 {avatarSrc ? (
                   <img
                     src={avatarSrc}
                     alt={profile.name}
-                    className="h-14 w-14 rounded-full border border-neutral-700 object-cover"
+                    className="h-14 w-14 rounded-full border border-border object-cover"
                   />
                 ) : (
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-neutral-800 font-bold text-lg">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted text-foreground font-bold text-lg">
                     {profile.name.slice(0, 2).toUpperCase()}
                   </div>
                 )}
                 <div>
-                  <h2 className="text-xl font-bold tracking-tight">{profile.name}</h2>
-                  <div className="font-mono text-xs text-neutral-400">@{profile.username}</div>
+                  <h2 className="text-xl font-bold tracking-tight text-foreground">{profile.name}</h2>
+                  <div className="font-mono text-xs text-muted-foreground">@{profile.username}</div>
                   {profile.builderLine && (
-                    <div className="mt-1 font-mono text-xs text-emerald-400">{profile.builderLine}</div>
+                    <div className="mt-1 font-mono text-xs text-emerald-600 dark:text-emerald-400">{profile.builderLine}</div>
                   )}
                 </div>
               </div>
 
-              <div className="text-right font-mono text-[10px] text-neutral-400 uppercase tracking-widest border border-neutral-800 px-2 py-1 rounded bg-neutral-900">
-                Hackathon OS Passport
+              <div className="text-right font-mono text-[10px] text-muted-foreground tracking-widest border border-border px-2 py-1 rounded bg-muted/50">
+                [brackit] Passport
               </div>
             </div>
 
             {/* Quick Stats Grid */}
-            <div className="grid grid-cols-4 gap-2 border-b border-neutral-800 pb-4 text-center font-mono">
+            <div className="grid grid-cols-4 gap-2 border-b border-border pb-4 text-center font-mono">
               <div>
-                <div className="text-xl font-bold text-neutral-100">{stats.hackathonsJoined}</div>
-                <div className="text-[10px] text-neutral-400 uppercase">Hackathons</div>
+                <div className="text-xl font-bold text-foreground">{stats.hackathonsJoined}</div>
+                <div className="text-[10px] text-muted-foreground uppercase">Hackathons</div>
               </div>
               <div>
-                <div className="text-xl font-bold text-emerald-400">{stats.projectsShipped}</div>
-                <div className="text-[10px] text-neutral-400 uppercase">Shipped</div>
+                <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{stats.projectsShipped}</div>
+                <div className="text-[10px] text-muted-foreground uppercase">Shipped</div>
               </div>
               <div>
-                <div className="text-xl font-bold text-neutral-100">{stats.tasksCompleted}</div>
-                <div className="text-[10px] text-neutral-400 uppercase">Tasks Done</div>
+                <div className="text-xl font-bold text-foreground">{stats.tasksCompleted}</div>
+                <div className="text-[10px] text-muted-foreground uppercase">Tasks Done</div>
               </div>
               <div>
-                <div className="text-xl font-bold text-neutral-100">{stats.teamsLed}</div>
-                <div className="text-[10px] text-neutral-400 uppercase">Teams Led</div>
+                <div className="text-xl font-bold text-foreground">{stats.teamsLed}</div>
+                <div className="text-[10px] text-muted-foreground uppercase">Teams Led</div>
               </div>
             </div>
 
             {/* Featured Projects Highlight */}
             {featuredProjects.length > 0 && (
               <div className="space-y-2">
-                <div className="font-mono text-[11px] text-neutral-400 uppercase tracking-wider">
+                <div className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
                   Featured Projects
                 </div>
                 <div className="space-y-2">
                   {featuredProjects.map((p) => (
                     <div
                       key={p.roomId}
-                      className="rounded border border-neutral-800/80 bg-neutral-900/40 p-3 space-y-1"
+                      className="rounded border border-border bg-surface p-3 space-y-1"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-semibold text-sm text-neutral-200">{p.name}</span>
-                        <span className="font-mono text-[10px] text-neutral-400">{p.dates}</span>
+                        <span className="font-semibold text-sm text-foreground">{p.name}</span>
+                        <span className="font-mono text-[10px] text-muted-foreground">{p.dates}</span>
                       </div>
                       {p.pitch && (
-                        <p className="text-xs text-neutral-400 line-clamp-2">{p.pitch}</p>
+                        <p className="text-xs text-muted-foreground line-clamp-2">{p.pitch}</p>
                       )}
-                      <div className="flex flex-wrap gap-1 pt-1 font-mono text-[10px] text-neutral-400">
+                      <div className="flex flex-wrap gap-1 pt-1 font-mono text-[10px] text-muted-foreground">
                         {p.techStack.slice(0, 5).join(' • ')}
                       </div>
                     </div>
@@ -117,24 +123,24 @@ export const PortfolioExportModal: React.FC<PortfolioExportModalProps> = ({ data
             )}
 
             {/* Card Footer */}
-            <div className="border-t border-neutral-800 pt-3 flex items-center justify-between text-[11px] font-mono text-neutral-400">
-              <span>Verified builder passport on Hackathon OS</span>
+            <div className="border-t border-border pt-3 flex items-center justify-between text-[11px] font-mono text-muted-foreground">
+              <span>Verified builder passport on [brackit]</span>
               <span>{window.location.host}/u/{profile.username}</span>
             </div>
           </div>
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-end gap-3 border-t border-neutral-800 px-6 py-3 bg-neutral-950/60">
+        <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-3 bg-surface">
           <button
             onClick={onClose}
-            className="rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:text-white"
+            className="rounded-full border border-border bg-surface px-4 py-2 text-xs font-medium text-foreground hover:bg-hover transition-colors cursor-pointer"
           >
             Close
           </button>
           <button
             onClick={handlePrint}
-            className="inline-flex items-center gap-1.5 rounded bg-neutral-100 px-3.5 py-1.5 text-xs font-semibold text-neutral-950 hover:bg-white"
+            className="inline-flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 text-xs font-semibold shadow-xs transition-colors cursor-pointer"
           >
             <Printer className="h-3.5 w-3.5" />
             <span>Print / Save PDF</span>

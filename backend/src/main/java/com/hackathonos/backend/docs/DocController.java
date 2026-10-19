@@ -53,7 +53,7 @@ public class DocController {
     ) {
         byte[] zipBytes = docService.downloadAllZip(roomId, resolveUser(user));
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"hackathon-os-docs.zip\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"brackit-docs.zip\"")
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(zipBytes);
     }

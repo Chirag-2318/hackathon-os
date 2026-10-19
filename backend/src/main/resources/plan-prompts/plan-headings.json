@@ -1,6 +1,7 @@
 {
   "PRD.md": {
     "h1Prefix": "PRD:",
+    "minLength": 2500,
     "h2Headings": [
       "Identity",
       "Problem and target user",
@@ -18,6 +19,7 @@
   },
   "MVP.md": {
     "h1Prefix": "MVP:",
+    "minLength": 1500,
     "h2Headings": [
       "Core flow",
       "Wow moment",
@@ -32,6 +34,7 @@
   },
   "TECH_STACK.md": {
     "h1Prefix": "Tech stack:",
+    "minLength": 1200,
     "h2Headings": [
       "Decision summary",
       "New-tech budget",
@@ -45,6 +48,7 @@
   },
   "ARCHITECTURE.md": {
     "h1Prefix": "Architecture:",
+    "minLength": 1800,
     "h2Headings": [
       "Overview",
       "System diagram",
@@ -63,6 +67,7 @@
   },
   "PHASES.md": {
     "h1Prefix": "Phases:",
+    "minLength": 1500,
     "h2Headings": [
       "Clock model",
       "Phases",
@@ -77,6 +82,7 @@
   },
   "DESIGN.md": {
     "h1Prefix": "Design:",
+    "minLength": 2000,
     "h2Headings": [
       "Design intent",
       "Feel and anti-patterns",
@@ -94,6 +100,7 @@
   },
   "TASKS.md": {
     "h1Prefix": "Tasks:",
+    "minLength": 1000,
     "h2Headings": [
       "Tasks",
       "Critical path",
@@ -105,6 +112,7 @@
   },
   "DEMO_SCRIPT.md": {
     "h1Prefix": "Demo script:",
+    "minLength": 1500,
     "h2Headings": [
       "Format and limits",
       "Roles on stage",
@@ -120,6 +128,7 @@
   },
   "QNA.md": {
     "h1Prefix": "Judge Q&A:",
+    "minLength": 2500,
     "h2Headings": [
       "How to use this",
       "Questions",

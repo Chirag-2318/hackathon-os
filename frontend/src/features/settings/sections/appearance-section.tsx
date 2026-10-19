@@ -204,7 +204,7 @@ export function AppearanceSection() {
       <div className="mb-6">
         <h1 className="text-2xl font-serif text-ink tracking-tight">Appearance</h1>
         <p className="text-sm text-ink-2 mt-1">
-          Customize how Hackathon OS looks and behaves across your devices.
+          Customize how [brackit] looks and behaves across your devices.
         </p>
       </div>
 

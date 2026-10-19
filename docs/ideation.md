@@ -2,7 +2,7 @@
 
 **Status:** Step 2 of the project (feature ideation). Follows `problem.md`.
 **Written:** 19 Sep 2026
-**Working title:** "Hackathon OS" (placeholder; rename later)
+**Product name:** [brackit] (originally placeholder "Hackathon OS")
 
 IDs like **P3.2**, **L1**, **W2**, **D4** point back to `problem.md`. Every feature below exists because of at least one of them, so nothing here is "nice to have for its own sake".
 

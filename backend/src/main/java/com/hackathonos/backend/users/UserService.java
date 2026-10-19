@@ -949,7 +949,7 @@ public class UserService {
         }
 
         Set<String> reserved = Set.of(
-                "admin", "root", "support", "system", "hackathonos", "api", "help",
+                "admin", "root", "support", "system", "brackit", "hackathonos", "api", "help",
                 "null", "undefined", "me", "team", "rooms", "auth", "settings",
                 "login", "signup", "user", "users", "bot", "mod", "moderator",
                 "security", "staff", "official"

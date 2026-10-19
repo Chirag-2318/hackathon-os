@@ -117,7 +117,7 @@ public class UserDataExportService {
 
         // 1. README.txt
         String readme = """
-                Hackathon OS - Account Data Export
+                [brackit] - Account Data Export
                 ===================================
                 Export Date: %s
                 Account: @%s

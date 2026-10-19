@@ -286,7 +286,7 @@ export function OnboardingView() {
                       Pick a handle.
                     </h2>
                     <p className="text-xs text-neutral-500 mt-1">
-                      Required. Unique across all Hackathon OS rooms.
+                      Required. Unique across all [brackit] rooms.
                     </p>
                   </div>
                   <HandleField
@@ -471,7 +471,7 @@ export function OnboardingView() {
                         </>
                       ) : (
                         <>
-                          Enter Hackathon OS <ArrowRight className="size-4" />
+                          Enter [brackit] <ArrowRight className="size-4" />
                         </>
                       )}
                     </button>
@@ -498,7 +498,7 @@ export function OnboardingView() {
       </main>
 
       <footer className="h-10 text-center text-[11px] text-neutral-400 font-mono select-none">
-        Hackathon OS · Participant Identity Service
+        [brackit] · Participant Identity Service
       </footer>
     </div>
   );

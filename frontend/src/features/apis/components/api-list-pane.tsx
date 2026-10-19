@@ -60,7 +60,7 @@ export function ApiListPane({
   };
 
   return (
-    <div className="w-80 border-r border-border/60 bg-card flex flex-col h-full overflow-y-auto shrink-0 select-none">
+    <div className="w-80 border-r border-border bg-surface flex flex-col h-full overflow-y-auto shrink-0 select-none">
       <div className="p-4 space-y-6">
         {/* GROUP 1: External APIs */}
         <div>

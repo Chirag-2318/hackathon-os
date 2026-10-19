@@ -15,6 +15,8 @@ import { PhaseGenerationPanel } from './phase-generation-panel';
 import { CarryOverDialog } from './carryover-dialog';
 import type { Task } from '@/services/types';
 
+import { selectTaskCounts } from '../task-selectors';
+
 export interface PhaseHeaderRowProps {
   roomId: string;
   phase: PhaseSummary;
@@ -38,8 +40,17 @@ export function PhaseHeaderRow({
   const [isRegenerateConfirmOpen, setIsRegenerateConfirmOpen] = useState(false);
   const [isCarryOverOpen, setIsCarryOverOpen] = useState(false);
 
-  const confirmedCount = phase.taskCounts?.confirmed ?? 0;
-  const totalCount = phase.taskCounts?.total ?? 0;
+  const counts = React.useMemo(() => selectTaskCounts(tasks), [tasks]);
+  const phaseCounts = counts.byPhase[phase.key.toUpperCase()] || {
+    total: 0,
+    confirmed: 0,
+    inProgress: 0,
+    todo: 0,
+    awaitingLeader: 0,
+    dropped: 0,
+  };
+  const confirmedCount = phaseCounts.confirmed;
+  const totalCount = phaseCounts.total;
 
   // Unfinished tasks in this phase for early advance
   const unfinishedTasks = tasks.filter(
@@ -53,8 +64,8 @@ export function PhaseHeaderRow({
 
   // Can regenerate if no tasks have started (no confirmed, none in progress)
   const canRegenerate =
-    (phase.taskCounts?.confirmed ?? 0) === 0 &&
-    (phase.taskCounts?.inProgress ?? 0) === 0 &&
+    phaseCounts.confirmed === 0 &&
+    phaseCounts.inProgress === 0 &&
     phase.status === 'ACTIVE';
 
   return (

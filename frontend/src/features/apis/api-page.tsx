@@ -201,9 +201,9 @@ export function ApiPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-background">
+    <div className="flex-1 flex flex-col min-h-full h-full bg-page">
       {/* Top Header */}
-      <div className="h-14 border-b border-border/60 flex items-center px-4 sm:px-6 shrink-0 justify-between gap-3">
+      <div className="h-14 border-b border-border bg-page flex items-center px-4 sm:px-6 shrink-0 justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-display font-normal tracking-tight text-foreground">API Hub</h1>
           <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 text-xs">
@@ -255,7 +255,7 @@ export function ApiPage() {
           }}
         />
       ) : (
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 min-h-0 h-full">
           {/* Left List Pane */}
           <ApiListPane
             externals={filteredExternals}
@@ -276,7 +276,7 @@ export function ApiPage() {
           />
 
           {/* Center Detail Pane (Desktop) */}
-          <div className="hidden lg:flex flex-1 overflow-hidden">
+          <div className="hidden lg:flex flex-1 min-h-0 h-full overflow-hidden bg-page">
             <ApiDetailPane
               selectedItem={selectedItem}
               onEdit={(item) => {
@@ -288,7 +288,7 @@ export function ApiPage() {
           </div>
 
           {/* Right Fallbacks Panel */}
-          <div className="w-72 border-l border-border/60 bg-card p-5 overflow-y-auto hidden xl:block shrink-0">
+          <div className="w-72 border-l border-border bg-surface p-5 overflow-y-auto hidden xl:block shrink-0 h-full">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">
               API Fallbacks
             </h3>

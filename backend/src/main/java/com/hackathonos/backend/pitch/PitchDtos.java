@@ -56,8 +56,16 @@ public class PitchDtos {
             int totalSeconds,
             List<PitchSlidePlanDto> slides,
             UUID generatedBy,
-            Instant generatedAt
-    ) {}
+            Instant generatedAt,
+            String source,
+            Integer docVersion
+    ) {
+        public PitchScriptDto(UUID roomId, String type, int speakerCount, List<PitchSpeakerDto> speakers,
+                              String instructions, String hook, String closingLine, int totalSeconds,
+                              List<PitchSlidePlanDto> slides, UUID generatedBy, Instant generatedAt) {
+            this(roomId, type, speakerCount, speakers, instructions, hook, closingLine, totalSeconds, slides, generatedBy, generatedAt, "GENERATED", 1);
+        }
+    }
 
     public record GeneratePitchScriptRequest(
             String type,
@@ -68,8 +76,13 @@ public class PitchDtos {
 
     public record UpdatePitchSlidePlanRequest(
             String say,
-            String show
-    ) {}
+            String show,
+            Long version
+    ) {
+        public UpdatePitchSlidePlanRequest(String say, String show) {
+            this(say, show, null);
+        }
+    }
 
     // ── DECK & SLIDES ────────────────────────────────────────────────
     public record FormatProfileDto(

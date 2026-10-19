@@ -402,7 +402,7 @@ export function RoomSummaryPage() {
                 ))
               ) : (
                 <li className="flex items-start gap-2 text-ink-3 italic">
-                  <span>Collaborative sprint completed on Hackathon OS.</span>
+                  <span>Collaborative sprint completed on [brackit].</span>
                 </li>
               )}
             </ul>

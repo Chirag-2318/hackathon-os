@@ -181,7 +181,7 @@ public class UserController {
         User user = currentUser.get();
         String username = user.getUsername() != null ? user.getUsername() : "user";
         String dateStr = java.time.LocalDate.now().toString();
-        String filename = "hackathon-os-export-" + username + "-" + dateStr + ".zip";
+        String filename = "brackit-export-" + username + "-" + dateStr + ".zip";
 
         org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody responseBody = outputStream -> {
             try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(outputStream)) {

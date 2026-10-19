@@ -4,12 +4,32 @@
 import { apiFetch } from '@/api/client';
 import type {
   GithubState, GithubDataComputed, Branch, BranchRole,
-  FrozenDemo, Commit
+  FrozenDemo, Commit, Repo, RepoVisibility
 } from './types';
 import {
   computeRuleCheck, computeHistoryHealth, computeBranchMissing,
   computeAttentionItems, computeReadinessScore
 } from './githubCalculations';
+
+export interface SectionResponse<T> {
+  state: 'READY' | 'PARTIAL' | 'ERROR';
+  data: T;
+  error?: string | null;
+  notice?: string | null;
+}
+
+export interface RepoSummarySection {
+  name: string;
+  description: string;
+  visibility: string;
+  defaultBranch: string;
+  language: string;
+  stars: number;
+  pushedDate?: string | null;
+  htmlUrl: string;
+  fullName: string;
+  connected: boolean;
+}
 
 function computeAll(state: GithubState, eventStart: string): GithubDataComputed {
   const nowMs = Date.now();
@@ -71,16 +91,39 @@ export const githubService = {
       lastCommitAt: b.lastCommitAt || new Date().toISOString(),
     }));
 
+    const isConnected = Boolean(res.connected ?? res.repo?.connected ?? res.isConnected ?? false);
+    const repoObj: Repo = typeof res.repo === 'string'
+      ? {
+          fullName: res.repo,
+          url: `https://github.com/${res.repo}`,
+          visibility: 'public',
+          defaultBranch: 'main',
+          connected: isConnected,
+          lastSyncAt: new Date().toISOString(),
+          access: 'read-only',
+        }
+      : res.repo
+        ? {
+            fullName: res.repo.fullName || res.repoName || '',
+            url: res.repo.url || (res.repo.fullName ? `https://github.com/${res.repo.fullName}` : ''),
+            visibility: (res.repo.visibility as RepoVisibility) || 'public',
+            defaultBranch: res.repo.defaultBranch || 'main',
+            connected: isConnected,
+            lastSyncAt: res.repo.lastSyncAt || res.lastSyncAt || new Date().toISOString(),
+            access: res.repo.access || 'read-only',
+          }
+        : {
+            fullName: res.repoName || '',
+            url: res.repoUrl || (res.repoName ? `https://github.com/${res.repoName}` : ''),
+            visibility: 'public',
+            defaultBranch: 'main',
+            connected: isConnected,
+            lastSyncAt: res.lastSyncAt || new Date().toISOString(),
+            access: 'read-only',
+          };
+
     const state: GithubState = {
-      repo: res.repo || {
-        fullName: res.repoName || '',
-        url: res.repoUrl || (res.repoName ? `https://github.com/${res.repoName}` : ''),
-        visibility: 'public',
-        defaultBranch: 'main',
-        connected: res.isConnected ?? false,
-        lastSyncAt: res.lastSyncAt || new Date().toISOString(),
-        access: 'read-only',
-      },
+      repo: repoObj,
       branches: normalizedBranches,
       commits: res.commits || [],
       health: res.healthChecklist || res.health || [],
@@ -139,12 +182,37 @@ export const githubService = {
     return res.frozenDemo || null;
   },
 
+  async linkRepo(roomId: string, url: string): Promise<RepoSummarySection> {
+    const raw = url.trim();
+    return apiFetch<RepoSummarySection>(`/api/v1/rooms/${roomId}/github/link`, {
+      method: 'POST',
+      body: JSON.stringify({ url: raw, repo: raw }),
+    });
+  },
+
+  async getSummarySection(roomId: string): Promise<SectionResponse<RepoSummarySection>> {
+    return apiFetch<SectionResponse<RepoSummarySection>>(`/api/v1/rooms/${roomId}/github/summary`);
+  },
+
+  async getBranchesSection(roomId: string): Promise<SectionResponse<any[]>> {
+    return apiFetch<SectionResponse<any[]>>(`/api/v1/rooms/${roomId}/github/branches`);
+  },
+
+  async getCommitsSection(roomId: string): Promise<SectionResponse<any[]>> {
+    return apiFetch<SectionResponse<any[]>>(`/api/v1/rooms/${roomId}/github/commits`);
+  },
+
+  async getPullsSection(roomId: string): Promise<SectionResponse<any[]>> {
+    return apiFetch<SectionResponse<any[]>>(`/api/v1/rooms/${roomId}/github/pulls`);
+  },
+
+  async getHealthSection(roomId: string): Promise<SectionResponse<any[]>> {
+    return apiFetch<SectionResponse<any[]>>(`/api/v1/rooms/${roomId}/github/health`);
+  },
+
   async connectRepo(roomId: string, repoInput: string): Promise<GithubDataComputed> {
     const raw = repoInput.trim();
-    await apiFetch<any>(`/api/v1/rooms/${roomId}/github/connect`, {
-      method: 'POST',
-      body: JSON.stringify({ repo: raw, repoName: raw }),
-    });
+    await this.linkRepo(roomId, raw);
     return this.getGithubData(roomId);
   },
 
@@ -178,4 +246,103 @@ export const githubService = {
   async simulateCommit(roomId: string): Promise<Commit> {
     return apiFetch<Commit>(`/api/v1/dev/rooms/${roomId}/fake-commits`, { method: 'POST' });
   },
+
+  async getChecks(roomId: string): Promise<GithubCheck[]> {
+    return apiFetch<GithubCheck[]>(`/api/v1/rooms/${roomId}/github/checks`);
+  },
+
+  async getContributors(roomId: string): Promise<GithubContributorsResponse> {
+    return apiFetch<GithubContributorsResponse>(`/api/v1/rooms/${roomId}/github/contributors`);
+  },
+
+  async getTaskLinks(roomId: string): Promise<GithubTaskLinksResponse> {
+    return apiFetch<GithubTaskLinksResponse>(`/api/v1/rooms/${roomId}/github/task-links`);
+  },
+
+  async getDemoMarker(roomId: string): Promise<DemoMarker | null> {
+    return apiFetch<DemoMarker | null>(`/api/v1/rooms/${roomId}/github/demo-marker`);
+  },
+
+  async saveDemoMarker(roomId: string, branch?: string): Promise<DemoMarker> {
+    return apiFetch<DemoMarker>(`/api/v1/rooms/${roomId}/github/demo-marker`, {
+      method: 'POST',
+      body: JSON.stringify({ branch }),
+    });
+  },
+
+  async deleteDemoMarker(roomId: string): Promise<void> {
+    await apiFetch<void>(`/api/v1/rooms/${roomId}/github/demo-marker`, { method: 'DELETE' });
+  },
 };
+
+export interface GithubCheck {
+  id: string;
+  label: string;
+  status: 'PASS' | 'WARN' | 'FAIL' | 'UNKNOWN';
+  detail: string;
+  fixUrl?: string | null;
+  fixLabel?: string | null;
+}
+
+export interface GithubContributorItem {
+  userId?: string | null;
+  username?: string | null;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+  githubLogin?: string | null;
+  commitsLast7Days: number;
+  prsOpened: number;
+  prsMerged: number;
+  lastCommitAt?: string | null;
+  isMember: boolean;
+}
+
+export interface GithubContributorsResponse {
+  members: GithubContributorItem[];
+  otherAuthors: GithubContributorItem[];
+}
+
+export interface TaskCommitLink {
+  sha: string;
+  message: string;
+  author?: string;
+  committedAt?: string;
+  url: string;
+}
+
+export interface TaskPrLink {
+  number: number;
+  title: string;
+  status: string;
+  url: string;
+}
+
+export interface TaskBranchLink {
+  name: string;
+  url: string;
+}
+
+export interface TaskLinksItem {
+  taskKey: string;
+  commits: TaskCommitLink[];
+  prs: TaskPrLink[];
+  branches: TaskBranchLink[];
+}
+
+export interface GithubTaskLinksResponse {
+  totalCommits: number;
+  commitsWithTasks: number;
+  headerSummary: string;
+  tasks: TaskLinksItem[];
+}
+
+export interface DemoMarker {
+  branch: string;
+  sha: string;
+  markedBy?: string;
+  markedByName: string;
+  markedAt: string;
+  commitsMoved: number;
+  summary: string;
+}
+

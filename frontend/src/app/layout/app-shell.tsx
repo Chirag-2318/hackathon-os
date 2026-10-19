@@ -35,7 +35,7 @@ export function AppShell({
       <main
         className={cn(
           'flex-1 flex flex-col min-w-0',
-          'mt-2 bg-surface',
+          'mt-2 bg-page',
           'border border-b-0 border-r-0 border-border',
           'rounded-tl-[16px] rounded-tr-[16px]',
           'overflow-y-auto panel-scroll',
@@ -46,8 +46,8 @@ export function AppShell({
         <PanelHeader pageName={pageName} inRoom={inRoom} />
 
         {/* Page content */}
-        <div className="flex-1 flex min-h-0">
-          <div className="flex-1 min-w-0">
+        <div className="flex-1 flex flex-col min-h-0 bg-page">
+          <div className="flex-1 min-w-0 flex flex-col min-h-full bg-page">
             {children}
           </div>
           {/* Right rail slot */}

@@ -14,24 +14,25 @@ export const RoleFingerprint: React.FC<RoleFingerprintProps> = ({ fingerprint })
   const pitchPct = Math.max(0, 100 - builderPct - leaderPct - productPct);
 
   const segments = [
-    { label: 'Building', count: fingerprint.builderTasks, pct: builderPct, color: 'bg-emerald-500', text: 'text-emerald-400' },
-    { label: 'Leadership', count: fingerprint.leaderActions, pct: leaderPct, color: 'bg-amber-500', text: 'text-amber-400' },
-    { label: 'Product & Ideas', count: fingerprint.productIdeas, pct: productPct, color: 'bg-sky-500', text: 'text-sky-400' },
-    { label: 'Pitch & Demo', count: fingerprint.pitchPresence, pct: pitchPct, color: 'bg-indigo-500', text: 'text-indigo-400' },
+    { label: 'Building', count: fingerprint.builderTasks, pct: builderPct, color: 'bg-emerald-500', text: 'text-emerald-500' },
+    { label: 'Leadership', count: fingerprint.leaderActions, pct: leaderPct, color: 'bg-amber-500', text: 'text-amber-500' },
+    { label: 'Product & Ideas', count: fingerprint.productIdeas, pct: productPct, color: 'bg-sky-500', text: 'text-sky-500' },
+    { label: 'Pitch & Demo', count: fingerprint.pitchPresence, pct: pitchPct, color: 'bg-indigo-500', text: 'text-indigo-500' },
   ].filter((s) => s.count > 0 || fingerprint.total === 0);
 
   return (
-    <section className="space-y-3 px-4 sm:px-6 pt-6">
+    <section className="space-y-4 px-4 sm:px-6 pt-6">
       <div>
-        <h2 className="text-base font-semibold tracking-tight text-neutral-100 flex items-center gap-2">
+        <h2 className="text-[22px] font-display font-normal tracking-tight text-foreground flex items-center gap-2">
           <span>Contribution Fingerprint</span>
+          <span className="font-mono text-xs text-muted-foreground">({fingerprint.total} actions)</span>
         </h2>
-        <p className="text-xs text-neutral-400">Distribution of actions taken across development stages</p>
+        <p className="text-xs text-muted-foreground">Distribution of actions taken across development stages</p>
       </div>
 
-      <div className="rounded-lg border border-neutral-800 bg-neutral-900/30 p-4 space-y-4">
-        {/* Stacked percentage bar */}
-        <div className="flex h-3 w-full overflow-hidden rounded-full bg-neutral-950 p-0.5 border border-neutral-800">
+      <div className="rounded-[14px] border border-border bg-transparent p-5 space-y-5">
+        {/* One segmented bar with token colours */}
+        <div className="flex h-3 w-full overflow-hidden rounded-full bg-foreground/[0.06] p-0.5 border border-border">
           {segments.map((s, idx) => (
             <div
               key={idx}
@@ -42,16 +43,16 @@ export const RoleFingerprint: React.FC<RoleFingerprintProps> = ({ fingerprint })
           ))}
         </div>
 
-        {/* Legend / Metrics breakdown */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        {/* Stats in hairline-separated columns (no filled boxes) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-border pt-1">
           {segments.map((s, idx) => (
-            <div key={idx} className="flex flex-col rounded border border-neutral-800/80 bg-neutral-950/40 p-2.5">
-              <div className="flex items-center gap-1.5 font-mono text-[11px] text-neutral-400">
+            <div key={idx} className="flex flex-col py-2 sm:py-0 px-4 first:pl-0 last:pr-0">
+              <div className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
                 <span className={`h-2 w-2 rounded-full ${s.color}`} />
                 <span>{s.label}</span>
               </div>
-              <div className="mt-1 flex items-baseline justify-between font-mono">
-                <span className="text-lg font-semibold text-neutral-100">{s.count}</span>
+              <div className="mt-1 flex items-baseline gap-2 font-mono">
+                <span className="text-2xl font-semibold text-foreground">{s.count}</span>
                 <span className={`text-xs ${s.text}`}>{s.pct}%</span>
               </div>
             </div>

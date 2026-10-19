@@ -1,6 +1,6 @@
 # AI Providers & Bring-Your-Own-Key (BYOK) Architecture
 
-In Hackathon OS, all artificial intelligence capabilities—such as brief field extraction, idea synthesis, plan generation, task generation, Q&A flashcards, diagrams repair, and room naming—are routed exclusively through the centralized Spring Boot `AiService` gateway (`/api/v1/ai/*`).
+In [brackit], all artificial intelligence capabilities—such as brief field extraction, idea synthesis, plan generation, task generation, Q&A flashcards, diagrams repair, and room naming—are routed exclusively through the centralized Spring Boot `AiService` gateway (`/api/v1/ai/*`).
 
 The platform pays for **NO AI usage in production**. Every AI call uses the Groq API key of the acting user who triggered it.
 

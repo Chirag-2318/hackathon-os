@@ -142,7 +142,7 @@ public class RoomExportService {
         String slug = room.getName() != null
                 ? room.getName().toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "")
                 : "room";
-        return "hackathon-os-" + (slug.isBlank() ? "room" : slug) + "-" + java.time.LocalDate.now() + ".zip";
+        return "brackit-" + (slug.isBlank() ? "room" : slug) + "-" + java.time.LocalDate.now() + ".zip";
     }
 
     @Transactional(readOnly = true)

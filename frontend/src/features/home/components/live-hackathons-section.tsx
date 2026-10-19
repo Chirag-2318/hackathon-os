@@ -47,7 +47,7 @@ function downloadIcs(title: string, endsAt: string, url: string) {
   const ics = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//HackathonOS//EN',
+    'PRODID:-//brackit//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',

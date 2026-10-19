@@ -1,4 +1,4 @@
-# Hackathon OS — Operational Runbook
+# [brackit] — Operational Runbook
 
 ## 1. Local Development Quickstart
 

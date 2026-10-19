@@ -11,7 +11,9 @@ import com.hackathonos.backend.github.client.GitHubClient;
 import com.hackathonos.backend.github.client.GitHubClientResolver;
 import com.hackathonos.backend.github.client.GitHubRateLimitException;
 import com.hackathonos.backend.github.dto.GithubDtos.*;
+import com.hackathonos.backend.brief.BriefRepository;
 import com.hackathonos.backend.members.RoomMember;
+import com.hackathonos.backend.members.RoomMemberRepository;
 import com.hackathonos.backend.notifications.NotificationService;
 import com.hackathonos.backend.notifications.NotificationType;
 import com.hackathonos.backend.rooms.Room;
@@ -31,8 +33,10 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
 public class GitHubService {
@@ -40,6 +44,24 @@ public class GitHubService {
     private static final Logger log = LoggerFactory.getLogger(GitHubService.class);
 
     private static final Pattern TAG_PATTERN = Pattern.compile("^[A-Za-z0-9._/-]{1,60}$");
+
+    private final ExecutorService githubExecutor = Executors.newFixedThreadPool(8);
+
+    private static class CacheEntry<T> {
+        final Instant cachedAt;
+        final String etag;
+        final SectionResponse<T> response;
+        final int rateLimitRemaining;
+
+        CacheEntry(Instant cachedAt, String etag, SectionResponse<T> response, int rateLimitRemaining) {
+            this.cachedAt = cachedAt;
+            this.etag = etag;
+            this.response = response;
+            this.rateLimitRemaining = rateLimitRemaining;
+        }
+    }
+
+    private final Map<String, CacheEntry<?>> sectionCache = new ConcurrentHashMap<>();
 
     private final GithubRepoRepository repoRepository;
     private final GithubBranchRepository branchRepository;
@@ -51,6 +73,9 @@ public class GitHubService {
     private final TaskRepository taskRepository;
     private final UserRepository userRepository;
     private final UserOAuthTokenRepository userOAuthTokenRepository;
+    private final RoomMemberRepository roomMemberRepository;
+    private final BriefRepository briefRepository;
+    private final RoomGithubDemoRepository roomGithubDemoRepository;
     private final SecretCipher secretCipher;
     private final RoomAccess roomAccess;
     private final GitHubSyncService syncService;
@@ -70,6 +95,9 @@ public class GitHubService {
                          TaskRepository taskRepository,
                          UserRepository userRepository,
                          UserOAuthTokenRepository userOAuthTokenRepository,
+                         RoomMemberRepository roomMemberRepository,
+                         BriefRepository briefRepository,
+                         RoomGithubDemoRepository roomGithubDemoRepository,
                          SecretCipher secretCipher,
                          RoomAccess roomAccess,
                          GitHubSyncService syncService,
@@ -88,6 +116,9 @@ public class GitHubService {
         this.taskRepository = taskRepository;
         this.userRepository = userRepository;
         this.userOAuthTokenRepository = userOAuthTokenRepository;
+        this.roomMemberRepository = roomMemberRepository;
+        this.briefRepository = briefRepository;
+        this.roomGithubDemoRepository = roomGithubDemoRepository;
         this.secretCipher = secretCipher;
         this.roomAccess = roomAccess;
         this.syncService = syncService;
@@ -123,34 +154,51 @@ public class GitHubService {
         return buildPageResponse(room, repo, user, isLeader);
     }
 
+    @SuppressWarnings("unchecked")
+    private <T> void putCache(UUID roomId, String section, SectionResponse<T> response, int remaining) {
+        String etag = "\"" + Integer.toHexString(Objects.hash(response.data(), response.state(), response.error())) + "\"";
+        sectionCache.put(roomId.toString() + ":" + section, new CacheEntry<>(clock.instant(), etag, response, remaining));
+    }
+
     /**
-     * Connects a repository to the room, verifies existence on GitHub, runs the first sync, and returns page model.
+     * Connects a repository to the room, verifies existence on GitHub, saves it fast, and returns page model.
      */
     @Transactional
     public GithubPageResponse connect(UUID roomId, ConnectRepoRequest request, User user) {
+        String input = request != null ? request.getEffectiveRepo() : null;
+        link(roomId, new LinkRepoRequest(input, input), user);
+        return getPage(roomId, user);
+    }
+
+    /**
+     * Link step validating in under 2s with one GET call to GitHub.
+     */
+    @Transactional
+    public RepoSummarySectionDto link(UUID roomId, LinkRepoRequest request, User user) {
+        long start = System.currentTimeMillis();
+        String rawInput = request != null ? request.getEffectiveUrl() : null;
+        log.info("[GitHub Link] Stage 1 - Parsing URL: {}", rawInput);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
         roomAccess.requireLeader(roomId, user);
 
-        String rawInput = request != null ? request.getEffectiveRepo() : null;
         String parsedFullName = parseRepoInput(rawInput);
         String[] parts = parsedFullName.split("/");
         String owner = parts[0];
         String repoName = parts[1];
 
+        log.info("[GitHub Link] Stage 2 - Resolving auth token (elapsed: {}ms)", System.currentTimeMillis() - start);
         GitHubClient client = clientResolver.resolveClient(parsedFullName);
         GitHubClientResolver.ResolvedToken resolvedToken = clientResolver.resolveToken(user != null ? user.getId() : null);
-
         String currentToken = resolvedToken.token();
         String currentTokenSource = resolvedToken.source();
 
+        log.info("[GitHub Link] Stage 3 - Calling GitHub GET /repos/{}/{} (elapsed: {}ms)", owner, repoName, System.currentTimeMillis() - start);
         GitHubClient.ClientRepo clientRepo = null;
         try {
             clientRepo = client.getRepo(owner, repoName, currentToken).orElse(null);
         } catch (GitHubApiException e) {
             int status = e.getStatusCode();
             if (status == 401 && currentToken != null) {
-                // If a request made WITH a token returns 401, retry once without a token (public data needs none)
-                // and log one WARN line saying which token source failed (user, app)
                 log.warn("GitHub token invalid from source {}: retrying without token for {}/{}", currentTokenSource, owner, repoName);
                 currentToken = null;
                 currentTokenSource = "none";
@@ -172,29 +220,51 @@ public class GitHubService {
             handleConnectFailure(404, currentTokenSource, owner, repoName, null);
         }
 
-        GithubRepo repo = new GithubRepo(
-                roomId, clientRepo.fullName(), clientRepo.url(), clientRepo.visibility(),
-                clientRepo.defaultBranch(), "read-only", user != null ? user.getId() : null, clock.instant(),
-                null, "idle", null, null, currentTokenSource
-        );
+        log.info("[GitHub Link] Stage 4 - Saving repo entity in DB (elapsed: {}ms)", System.currentTimeMillis() - start);
+        GithubRepo repo = repoRepository.findById(roomId).orElse(null);
+        if (repo == null) {
+            repo = new GithubRepo(
+                    roomId, clientRepo.fullName(), clientRepo.url(), clientRepo.visibility(),
+                    clientRepo.defaultBranch(), "read-only", user != null ? user.getId() : null, clock.instant(),
+                    null, "idle", null, null, currentTokenSource
+            );
+        } else {
+            repo.setFullName(clientRepo.fullName());
+            repo.setUrl(clientRepo.url());
+            repo.setVisibility(clientRepo.visibility());
+            repo.setDefaultBranch(clientRepo.defaultBranch());
+            repo.setConnectedBy(user != null ? user.getId() : null);
+            repo.setTokenSource(currentTokenSource);
+            repo.setLastSyncAt(clock.instant());
+        }
         repoRepository.save(repo);
 
-        // Run first sync
-        syncService.sync(room, user != null ? user.getId() : null);
-
         activityLogger.log(room, user, "GITHUB_CONNECTED", "Connected repository " + repo.getFullName());
-        return getPage(roomId, user);
+        log.info("[GitHub Link] Completed in {}ms", System.currentTimeMillis() - start);
+
+        return new RepoSummarySectionDto(
+                clientRepo.name(),
+                clientRepo.description(),
+                clientRepo.visibility(),
+                clientRepo.defaultBranch(),
+                clientRepo.language(),
+                clientRepo.stars(),
+                clientRepo.pushedDate(),
+                clientRepo.htmlUrl(),
+                clientRepo.fullName(),
+                true
+        );
     }
 
     private void handleConnectFailure(int status, String tokenSource, String owner, String repo, Exception cause) {
-        log.warn("GitHub connect failed: status={}, tokenSource={}, repo={}/{}", status, tokenSource, owner, repo);
+        log.warn("GitHub connect/link failed: status={}, tokenSource={}, repo={}/{}", status, tokenSource, owner, repo);
         if (status == 404) {
-            throw new NotFoundException("REPO_NOT_FOUND", "We cannot find that repository. Check the spelling. If it is private, connect your GitHub account with private access.");
+            throw new NotFoundException("REPO_NOT_FOUND", "Repository not found, or it is private. Allow private repositories in Settings, Integrations.");
         }
         if (status == 401) {
-            throw new UnauthenticatedException("GITHUB_TOKEN_INVALID", "The server's GitHub token is invalid. Check APP_GITHUB_TOKEN in .env.");
+            throw new UnauthenticatedException("GITHUB_UNAUTHENTICATED", "Reconnect GitHub");
         }
-        if (cause instanceof GitHubApiException apiEx && apiEx.isRateLimit()) {
+        if (cause instanceof GitHubApiException apiEx && (apiEx.isRateLimit() || apiEx.getStatusCode() == 429)) {
             throw new TooManyRequestsException("GITHUB_RATE_LIMIT", "GitHub API rate limit exceeded. Resets at " + apiEx.getResetInstant());
         }
         if (cause instanceof GitHubRateLimitException rateEx) {
@@ -207,6 +277,369 @@ public class GitHubService {
             throw new ForbiddenException("GITHUB_FORBIDDEN", "GitHub access forbidden. Check permissions for this repository.");
         }
         throw new BadRequestException("GITHUB_ERROR", "GitHub connection failed (" + status + ")");
+    }
+
+    @SuppressWarnings("unchecked")
+    public SectionResponse<RepoSummarySectionDto> getSummarySection(UUID roomId, User user) {
+        GithubRepo repo = repoRepository.findById(roomId).orElse(null);
+        if (repo == null) {
+            return SectionResponse.error("No repository connected");
+        }
+        String cacheKey = roomId + ":summary";
+        CacheEntry<RepoSummarySectionDto> cached = (CacheEntry<RepoSummarySectionDto>) sectionCache.get(cacheKey);
+
+        String[] parts = repo.getFullName().split("/");
+        GitHubClient client = clientResolver.resolveClient(repo.getFullName());
+        int remaining = client.getRateLimitRemaining();
+
+        if (cached != null) {
+            boolean fresh = Duration.between(cached.cachedAt, clock.instant()).toSeconds() < 180;
+            if (fresh) {
+                return remaining < 5
+                        ? SectionResponse.readyWithNotice(cached.response.data(), "Showing saved data")
+                        : cached.response;
+            }
+            if (remaining < 5) {
+                return SectionResponse.readyWithNotice(cached.response.data(), "Showing saved data");
+            }
+        }
+
+        if (remaining < 5) {
+            return SectionResponse.error("GitHub rate limit reached");
+        }
+
+        try {
+            CompletableFuture<RepoSummarySectionDto> future = CompletableFuture.supplyAsync(() -> {
+                GitHubClientResolver.ResolvedToken resolvedToken = clientResolver.resolveToken(user != null ? user.getId() : repo.getConnectedBy());
+                GitHubClient.ClientRepo cr = client.getRepo(parts[0], parts[1], resolvedToken.token()).orElse(null);
+                if (cr == null) return null;
+                return new RepoSummarySectionDto(
+                        cr.name(), cr.description(), cr.visibility(), cr.defaultBranch(),
+                        cr.language(), cr.stars(), cr.pushedDate(), cr.htmlUrl(), cr.fullName(), true
+                );
+            }, githubExecutor);
+
+            RepoSummarySectionDto dto = future.get(8, TimeUnit.SECONDS);
+            if (dto == null) {
+                return cached != null
+                        ? SectionResponse.partial(cached.response.data(), "Repository details unavailable", "Showing saved data")
+                        : SectionResponse.error("Repository not found");
+            }
+            SectionResponse<RepoSummarySectionDto> resp = SectionResponse.ready(dto);
+            putCache(roomId, "summary", resp, client.getRateLimitRemaining());
+            return resp;
+        } catch (Exception e) {
+            log.warn("Summary section fetch failed: {}", e.getMessage());
+            return cached != null
+                    ? SectionResponse.partial(cached.response.data(), "GitHub is slow right now", "Showing saved data")
+                    : SectionResponse.error("GitHub is slow right now. Retry, or open the repository on GitHub.");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public SectionResponse<List<BranchDto>> getBranchesSection(UUID roomId, User user) {
+        GithubRepo repo = repoRepository.findById(roomId).orElse(null);
+        if (repo == null) {
+            return SectionResponse.error("No repository connected");
+        }
+        String cacheKey = roomId + ":branches";
+        CacheEntry<List<BranchDto>> cached = (CacheEntry<List<BranchDto>>) sectionCache.get(cacheKey);
+
+        String[] parts = repo.getFullName().split("/");
+        GitHubClient client = clientResolver.resolveClient(repo.getFullName());
+        int remaining = client.getRateLimitRemaining();
+
+        if (cached != null) {
+            boolean fresh = Duration.between(cached.cachedAt, clock.instant()).toSeconds() < 180;
+            if (fresh) {
+                return remaining < 5
+                        ? SectionResponse.readyWithNotice(cached.response.data(), "Showing saved data")
+                        : cached.response;
+            }
+            if (remaining < 5) {
+                return SectionResponse.readyWithNotice(cached.response.data(), "Showing saved data");
+            }
+        }
+
+        if (remaining < 5) {
+            return SectionResponse.error("GitHub rate limit reached");
+        }
+
+        try {
+            CompletableFuture<List<BranchDto>> future = CompletableFuture.supplyAsync(() -> {
+                GitHubClientResolver.ResolvedToken resolvedToken = clientResolver.resolveToken(user != null ? user.getId() : repo.getConnectedBy());
+                String token = resolvedToken.token();
+                List<GitHubClient.ClientBranch> fetched = client.listBranches(parts[0], parts[1], token);
+                if (fetched == null || fetched.isEmpty()) return Collections.<BranchDto>emptyList();
+
+                List<GithubBranch> dbBranches = branchRepository.findByRoomId(roomId);
+                Map<String, GithubBranch> dbMap = new HashMap<>();
+                for (GithubBranch b : dbBranches) {
+                    dbMap.put(b.getName(), b);
+                }
+
+                List<GitHubClient.ClientBranch> limited = fetched.stream().limit(30).toList();
+
+                List<CompletableFuture<BranchDto>> branchFutures = new ArrayList<>();
+                for (int i = 0; i < limited.size(); i++) {
+                    final int idx = i;
+                    final GitHubClient.ClientBranch fb = limited.get(i);
+                    boolean shouldCompare = idx < 10 && !fb.name().equalsIgnoreCase(repo.getDefaultBranch());
+
+                    branchFutures.add(CompletableFuture.supplyAsync(() -> {
+                        Integer ahead = null;
+                        Integer behind = null;
+                        if (fb.name().equalsIgnoreCase(repo.getDefaultBranch())) {
+                            ahead = 0;
+                            behind = 0;
+                        } else if (shouldCompare) {
+                            try {
+                                GitHubClient.ClientBranchCompare cmp = client.compareBranches(parts[0], parts[1], repo.getDefaultBranch(), fb.name(), token);
+                                ahead = cmp.aheadBy();
+                                behind = cmp.behindBy();
+                            } catch (Exception ignored) {}
+                        }
+                        GithubBranch db = dbMap.get(fb.name());
+                        UUID branchId = db != null ? db.getId() : UUID.randomUUID();
+                        String role = db != null ? db.getRole() : (fb.name().equalsIgnoreCase(repo.getDefaultBranch()) ? "main" : "experiment");
+                        String purpose = db != null ? db.getPurpose() : null;
+                        String url = "https://github.com/" + repo.getFullName() + "/tree/" + fb.name();
+                        return new BranchDto(
+                                branchId, fb.name(), purpose, role, null,
+                                ahead, behind, clock.instant(), fb.sha(), "",
+                                null, Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), url
+                        );
+                    }, githubExecutor));
+                }
+
+                List<BranchDto> results = new ArrayList<>();
+                for (CompletableFuture<BranchDto> bf : branchFutures) {
+                    try {
+                        results.add(bf.get(8, TimeUnit.SECONDS));
+                    } catch (Exception ignored) {}
+                }
+                return results;
+            }, githubExecutor);
+
+            List<BranchDto> dtoList = future.get(15, TimeUnit.SECONDS);
+            SectionResponse<List<BranchDto>> resp = SectionResponse.ready(dtoList);
+            putCache(roomId, "branches", resp, client.getRateLimitRemaining());
+            return resp;
+        } catch (Exception e) {
+            log.warn("Branches section fetch failed: {}", e.getMessage());
+            return cached != null
+                    ? SectionResponse.partial(cached.response.data(), "GitHub is slow right now", "Showing saved data")
+                    : SectionResponse.error("GitHub is slow right now. Retry, or open the repository on GitHub.");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public SectionResponse<List<CommitItemDto>> getCommitsSection(UUID roomId, User user) {
+        GithubRepo repo = repoRepository.findById(roomId).orElse(null);
+        if (repo == null) {
+            return SectionResponse.error("No repository connected");
+        }
+        String cacheKey = roomId + ":commits";
+        CacheEntry<List<CommitItemDto>> cached = (CacheEntry<List<CommitItemDto>>) sectionCache.get(cacheKey);
+
+        String[] parts = repo.getFullName().split("/");
+        GitHubClient client = clientResolver.resolveClient(repo.getFullName());
+        int remaining = client.getRateLimitRemaining();
+
+        if (cached != null) {
+            boolean fresh = Duration.between(cached.cachedAt, clock.instant()).toSeconds() < 180;
+            if (fresh) {
+                return remaining < 5
+                        ? SectionResponse.readyWithNotice(cached.response.data(), "Showing saved data")
+                        : cached.response;
+            }
+            if (remaining < 5) {
+                return SectionResponse.readyWithNotice(cached.response.data(), "Showing saved data");
+            }
+        }
+
+        if (remaining < 5) {
+            return SectionResponse.error("GitHub rate limit reached");
+        }
+
+        try {
+            CompletableFuture<List<CommitItemDto>> future = CompletableFuture.supplyAsync(() -> {
+                GitHubClientResolver.ResolvedToken resolvedToken = clientResolver.resolveToken(user != null ? user.getId() : repo.getConnectedBy());
+                List<GitHubClient.ClientCommit> rawCommits = client.listCommits(parts[0], parts[1], repo.getDefaultBranch(), null, null, resolvedToken.token());
+                if (rawCommits == null) return Collections.<CommitItemDto>emptyList();
+                return rawCommits.stream().limit(30).map(c -> new CommitItemDto(
+                        c.sha(),
+                        c.message(),
+                        c.authorLogin(),
+                        c.authorName(),
+                        c.committedAt(),
+                        "https://github.com/" + repo.getFullName() + "/commit/" + c.sha()
+                )).toList();
+            }, githubExecutor);
+
+            List<CommitItemDto> list = future.get(8, TimeUnit.SECONDS);
+            SectionResponse<List<CommitItemDto>> resp = SectionResponse.ready(list);
+            putCache(roomId, "commits", resp, client.getRateLimitRemaining());
+            return resp;
+        } catch (Exception e) {
+            log.warn("Commits section fetch failed: {}", e.getMessage());
+            return cached != null
+                    ? SectionResponse.partial(cached.response.data(), "GitHub is slow right now", "Showing saved data")
+                    : SectionResponse.error("GitHub is slow right now. Retry, or open the repository on GitHub.");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public SectionResponse<List<PullItemDto>> getPullsSection(UUID roomId, User user) {
+        GithubRepo repo = repoRepository.findById(roomId).orElse(null);
+        if (repo == null) {
+            return SectionResponse.error("No repository connected");
+        }
+        String cacheKey = roomId + ":pulls";
+        CacheEntry<List<PullItemDto>> cached = (CacheEntry<List<PullItemDto>>) sectionCache.get(cacheKey);
+
+        String[] parts = repo.getFullName().split("/");
+        GitHubClient client = clientResolver.resolveClient(repo.getFullName());
+        int remaining = client.getRateLimitRemaining();
+
+        if (cached != null) {
+            boolean fresh = Duration.between(cached.cachedAt, clock.instant()).toSeconds() < 180;
+            if (fresh) {
+                return remaining < 5
+                        ? SectionResponse.readyWithNotice(cached.response.data(), "Showing saved data")
+                        : cached.response;
+            }
+            if (remaining < 5) {
+                return SectionResponse.readyWithNotice(cached.response.data(), "Showing saved data");
+            }
+        }
+
+        if (remaining < 5) {
+            return SectionResponse.error("GitHub rate limit reached");
+        }
+
+        try {
+            CompletableFuture<List<PullItemDto>> future = CompletableFuture.supplyAsync(() -> {
+                GitHubClientResolver.ResolvedToken resolvedToken = clientResolver.resolveToken(user != null ? user.getId() : repo.getConnectedBy());
+                List<GitHubClient.ClientPr> prs = client.listPullRequests(parts[0], parts[1], resolvedToken.token());
+                if (prs == null) return Collections.<PullItemDto>emptyList();
+                return prs.stream().limit(20).map(p -> new PullItemDto(
+                        p.number(),
+                        p.title(),
+                        p.headBranch(),
+                        p.state(),
+                        p.draft(),
+                        p.openedAt(),
+                        "https://github.com/" + repo.getFullName() + "/pull/" + p.number()
+                )).toList();
+            }, githubExecutor);
+
+            List<PullItemDto> list = future.get(8, TimeUnit.SECONDS);
+            SectionResponse<List<PullItemDto>> resp = SectionResponse.ready(list);
+            putCache(roomId, "pulls", resp, client.getRateLimitRemaining());
+            return resp;
+        } catch (Exception e) {
+            log.warn("Pulls section fetch failed: {}", e.getMessage());
+            return cached != null
+                    ? SectionResponse.partial(cached.response.data(), "GitHub is slow right now", "Showing saved data")
+                    : SectionResponse.error("GitHub is slow right now. Retry, or open the repository on GitHub.");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public SectionResponse<List<HealthItemDto>> getHealthSection(UUID roomId, User user) {
+        GithubRepo repo = repoRepository.findById(roomId).orElse(null);
+        if (repo == null) {
+            return SectionResponse.error("No repository connected");
+        }
+        String cacheKey = roomId + ":health";
+        CacheEntry<List<HealthItemDto>> cached = (CacheEntry<List<HealthItemDto>>) sectionCache.get(cacheKey);
+
+        String[] parts = repo.getFullName().split("/");
+        GitHubClient client = clientResolver.resolveClient(repo.getFullName());
+        int remaining = client.getRateLimitRemaining();
+
+        if (cached != null) {
+            boolean fresh = Duration.between(cached.cachedAt, clock.instant()).toSeconds() < 180;
+            if (fresh) {
+                return remaining < 5
+                        ? SectionResponse.readyWithNotice(cached.response.data(), "Showing saved data")
+                        : cached.response;
+            }
+            if (remaining < 5) {
+                return SectionResponse.readyWithNotice(cached.response.data(), "Showing saved data");
+            }
+        }
+
+        if (remaining < 5) {
+            return SectionResponse.error("GitHub rate limit reached");
+        }
+
+        try {
+            CompletableFuture<List<HealthItemDto>> future = CompletableFuture.supplyAsync(() -> {
+                GitHubClientResolver.ResolvedToken resolvedToken = clientResolver.resolveToken(user != null ? user.getId() : repo.getConnectedBy());
+                String token = resolvedToken.token();
+                List<String> treeFiles = client.getTreeFilePaths(parts[0], parts[1], repo.getDefaultBranch(), token);
+                if (treeFiles == null) treeFiles = Collections.emptyList();
+
+                List<HealthItemDto> healthList = new ArrayList<>();
+
+                // 1. README
+                boolean hasReadme = treeFiles.stream().anyMatch(f -> f.equalsIgnoreCase("README.md") || f.equalsIgnoreCase("README"));
+                healthList.add(new HealthItemDto(
+                        "readme", "README file", hasReadme ? "pass" : "fail", true,
+                        "Project README documenting solution and setup",
+                        new HealthActionDto("Create README", "https://github.com/" + repo.getFullName() + "/new/" + repo.getDefaultBranch() + "?filename=README.md")
+                ));
+
+                // 2. license
+                boolean hasLicense = treeFiles.stream().anyMatch(f -> f.equalsIgnoreCase("LICENSE") || f.equalsIgnoreCase("LICENSE.md"));
+                healthList.add(new HealthItemDto(
+                        "license", "Open-source license", hasLicense ? "pass" : "fail", false,
+                        "Permissive license file specifying project rights",
+                        new HealthActionDto("Add license", "https://github.com/" + repo.getFullName() + "/new/" + repo.getDefaultBranch() + "?filename=LICENSE")
+                ));
+
+                // 3. .env.example
+                boolean hasEnvExample = treeFiles.stream().anyMatch(f -> f.endsWith(".env.example") || f.endsWith(".env.sample"));
+                healthList.add(new HealthItemDto(
+                        "env_example", "Environment template (.env.example)", hasEnvExample ? "pass" : "fail", false,
+                        "Sample environment file without live secret credentials",
+                        new HealthActionDto("Add template", "https://github.com/" + repo.getFullName() + "/new/" + repo.getDefaultBranch() + "?filename=.env.example")
+                ));
+
+                // 4. tests folder
+                boolean hasTests = treeFiles.stream().anyMatch(f -> {
+                    String low = f.toLowerCase();
+                    return low.startsWith("test/") || low.startsWith("tests/") || low.contains("/test/") || low.contains("/tests/") || low.contains("__tests__") || low.contains("src/test/");
+                });
+                healthList.add(new HealthItemDto(
+                        "tests_folder", "Tests folder and suites", hasTests ? "pass" : "fail", false,
+                        "Automated test suites or unit tests in test/ directory",
+                        new HealthActionDto("Add tests", "https://github.com/" + repo.getFullName() + "/tree/" + repo.getDefaultBranch())
+                ));
+
+                // 5. CI workflow
+                boolean hasCi = treeFiles.stream().anyMatch(f -> f.startsWith(".github/workflows/") || f.startsWith(".circleci/") || f.startsWith(".travis.yml"));
+                healthList.add(new HealthItemDto(
+                        "ci_workflow", "CI workflow automation", hasCi ? "pass" : "fail", false,
+                        "Continuous integration GitHub Actions workflow",
+                        new HealthActionDto("Add workflow", "https://github.com/" + repo.getFullName() + "/actions/new")
+                ));
+
+                return healthList;
+            }, githubExecutor);
+
+            List<HealthItemDto> list = future.get(8, TimeUnit.SECONDS);
+            SectionResponse<List<HealthItemDto>> resp = SectionResponse.ready(list);
+            putCache(roomId, "health", resp, client.getRateLimitRemaining());
+            return resp;
+        } catch (Exception e) {
+            log.warn("Health section fetch failed: {}", e.getMessage());
+            return cached != null
+                    ? SectionResponse.partial(cached.response.data(), "GitHub is slow right now", "Showing saved data")
+                    : SectionResponse.error("GitHub is slow right now. Retry, or open the repository on GitHub.");
+        }
     }
 
     /**
@@ -275,20 +708,24 @@ public class GitHubService {
             if (!isLeader && !isOwner) {
                 throw new ForbiddenException("FORBIDDEN", "Only leader or branch owner can change branch role");
             }
-            if ("demo-safe".equalsIgnoreCase(request.role())) {
+            String rawRole = request.role().trim();
+            String targetRole;
+            if ("demo-safe".equalsIgnoreCase(rawRole) || "DEMO_SAFE".equalsIgnoreCase(rawRole)) {
+                targetRole = "DEMO_SAFE";
                 List<GithubBranch> otherDemo = branchRepository.findByRoomIdAndRole(roomId, "demo-safe");
+                otherDemo.addAll(branchRepository.findByRoomIdAndRole(roomId, "DEMO_SAFE"));
                 for (GithubBranch other : otherDemo) {
                     if (!other.getId().equals(branchId)) {
-                        if (Boolean.TRUE.equals(request.replace())) {
-                            other.setRole("experiment");
-                            branchRepository.save(other);
-                        } else {
-                            throw new ConflictException("DEMO_BRANCH_EXISTS", "Another demo-safe branch already exists. Confirm replace to proceed.");
-                        }
+                        other.setRole("normal");
+                        branchRepository.save(other);
                     }
                 }
+            } else if ("main".equalsIgnoreCase(rawRole) || "MAIN".equalsIgnoreCase(rawRole)) {
+                targetRole = "MAIN";
+            } else {
+                targetRole = "normal";
             }
-            branch.setRole(request.role());
+            branch.setRole(targetRole);
             branch.setRoleLocked(true);
         }
 
@@ -503,7 +940,9 @@ public class GitHubService {
 
         RepoSummaryDto repoDto = new RepoSummaryDto(
                 repo.getFullName(), repo.getUrl(), repo.getVisibility(), repo.getAccess(),
-                repo.getLastSyncAt(), repo.getSyncStatus(), repo.getSyncError()
+                repo.getLastSyncAt(), repo.getSyncStatus(), repo.getSyncError(),
+                repo.getDefaultBranch() != null ? repo.getDefaultBranch() : "main",
+                true
         );
 
         List<GithubCommit> commits = commitRepository.findByRoomIdOrderByCommittedAtDesc(room.getId());
@@ -739,5 +1178,343 @@ public class GitHubService {
                 || tag.contains("..") || tag.startsWith("-") || tag.endsWith(".lock")) {
             throw new BadRequestException("INVALID_TAG", "Tag must be 1-60 characters and cannot contain '..', start with '-' or end in '.lock'");
         }
+    }
+
+    @Transactional(readOnly = true)
+    public List<GithubCheckDto> getChecks(UUID roomId, User user) {
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        roomAccess.requireMember(roomId, user);
+        GithubRepo repo = repoRepository.findById(roomId).orElse(null);
+        if (repo == null) {
+            return Collections.emptyList();
+        }
+
+        List<GithubCheckDto> checks = new ArrayList<>();
+        List<GithubCommit> commits = commitRepository.findByRoomIdOrderByCommittedAtDesc(roomId);
+        List<GithubHealthItem> healthItems = healthRepository.findByRoomIdOrderByItemKeyAsc(roomId);
+        Map<String, GithubHealthItem> healthMap = healthItems.stream().collect(Collectors.toMap(GithubHealthItem::getItemKey, h -> h, (a, b) -> a));
+
+        // 1. AFTER_KICKOFF
+        Instant kickoff = room.getEventStart();
+        if (kickoff == null) {
+            checks.add(new GithubCheckDto("AFTER_KICKOFF", "Commits after kickoff", "PASS", "All commits pushed after hackathon start", null, null));
+        } else {
+            List<GithubCommit> preKickoff = commits.stream()
+                    .filter(c -> c.getCommittedAt() != null && c.getCommittedAt().isBefore(kickoff))
+                    .toList();
+            if (preKickoff.isEmpty()) {
+                checks.add(new GithubCheckDto("AFTER_KICKOFF", "Commits after kickoff", "PASS", "All commits pushed after hackathon start (" + kickoff + ")", null, null));
+            } else {
+                boolean strictDisqualify = briefRepository.findByRoomId(roomId)
+                        .map(b -> {
+                            String t = ((b.getTechRules() != null ? b.getTechRules() : "") + " " + (b.getRawText() != null ? b.getRawText() : "")).toLowerCase();
+                            return t.contains("fresh") || t.contains("kickoff") || t.contains("pre-existing") || t.contains("disqualif");
+                        }).orElse(false);
+                String status = strictDisqualify ? "FAIL" : "WARN";
+                StringBuilder detail = new StringBuilder(preKickoff.size() + " commit(s) before kickoff. First: ");
+                GithubCommit first = preKickoff.get(preKickoff.size() - 1);
+                String sha7 = first.getSha() != null ? first.getSha().substring(0, Math.min(7, first.getSha().length())) : "";
+                detail.append(sha7).append(" by ").append(first.getAuthorName() != null ? first.getAuthorName() : "Unknown");
+                if (first.getMessage() != null) {
+                    detail.append(" (").append(first.getMessage().length() > 50 ? first.getMessage().substring(0, 50) + "..." : first.getMessage()).append(")");
+                }
+                checks.add(new GithubCheckDto("AFTER_KICKOFF", "Commits after kickoff", status, detail.toString(), repo.getUrl() + "/commits", "Review commits"));
+            }
+        }
+
+        // 2. README
+        GithubHealthItem readmeHealth = healthMap.get("readme");
+        boolean hasReadme = readmeHealth != null && "pass".equalsIgnoreCase(readmeHealth.getStatus());
+        if (hasReadme) {
+            checks.add(new GithubCheckDto("README", "README setup & run instructions", "PASS", "README present with setup instructions", "https://github.com/" + repo.getFullName() + "/blob/" + repo.getDefaultBranch() + "/README.md", "View README"));
+        } else {
+            checks.add(new GithubCheckDto("README", "README setup & run instructions", "FAIL", "README is missing or lacks setup instructions for judges", "https://github.com/" + repo.getFullName() + "/new/" + repo.getDefaultBranch() + "?filename=README.md", "Create README"));
+        }
+
+        // 3. ENV_EXAMPLE
+        GithubHealthItem envHealth = healthMap.get("env_example");
+        GithubHealthItem secretsHealth = healthMap.get("no_secret_files");
+        boolean secretsFailed = secretsHealth != null && "fail".equalsIgnoreCase(secretsHealth.getStatus());
+        boolean hasEnvExample = envHealth != null && "pass".equalsIgnoreCase(envHealth.getStatus());
+        if (secretsFailed) {
+            checks.add(new GithubCheckDto("ENV_EXAMPLE", "Environment template & secret hygiene", "FAIL", "Committed secret files detected (.env, credentials, or private keys)", repo.getUrl(), "Review repository"));
+        } else if (hasEnvExample) {
+            checks.add(new GithubCheckDto("ENV_EXAMPLE", "Environment template & secret hygiene", "PASS", ".env.example is present and no secrets committed", null, null));
+        } else {
+            checks.add(new GithubCheckDto("ENV_EXAMPLE", "Environment template & secret hygiene", "WARN", ".env.example is recommended to help judges configure environment variables", "https://github.com/" + repo.getFullName() + "/new/" + repo.getDefaultBranch() + "?filename=.env.example", "Add .env.example"));
+        }
+
+        // 4. LICENSE
+        GithubHealthItem licenseHealth = healthMap.get("license");
+        boolean hasLicense = licenseHealth != null && "pass".equalsIgnoreCase(licenseHealth.getStatus());
+        if (hasLicense) {
+            checks.add(new GithubCheckDto("LICENSE", "Open source license", "PASS", "License file present", null, null));
+        } else {
+            boolean osRequired = briefRepository.findByRoomId(roomId)
+                    .map(b -> {
+                        String t = ((b.getTechRules() != null ? b.getTechRules() : "") + " " + (b.getRawText() != null ? b.getRawText() : "")).toLowerCase();
+                        return t.contains("open source") || t.contains("mit license") || t.contains("apache");
+                    }).orElse(false);
+            checks.add(new GithubCheckDto("LICENSE", "Open source license", osRequired ? "FAIL" : "WARN", osRequired ? "Open source license required by hackathon rules" : "Open source license recommended for hackathon submissions", "https://github.com/" + repo.getFullName() + "/new/" + repo.getDefaultBranch() + "?filename=LICENSE", "Add LICENSE"));
+        }
+
+        // 5. TESTS_OR_CI
+        GithubHealthItem testsHealth = healthMap.get("tests_folder");
+        GithubHealthItem ciHealth = healthMap.get("ci_workflow");
+        boolean hasTests = testsHealth != null && "pass".equalsIgnoreCase(testsHealth.getStatus());
+        boolean hasCi = ciHealth != null && "pass".equalsIgnoreCase(ciHealth.getStatus());
+        if (hasTests || hasCi) {
+            checks.add(new GithubCheckDto("TESTS_OR_CI", "Tests and CI workflows", "PASS", "Automated tests or continuous integration workflow found", null, null));
+        } else {
+            checks.add(new GithubCheckDto("TESTS_OR_CI", "Tests and CI workflows", "WARN", "No test suites or CI workflows detected", "https://github.com/" + repo.getFullName() + "/actions/new", "Add workflow"));
+        }
+
+        // 6. DEMO_MARKED
+        Optional<RoomGithubDemo> demoOpt = roomGithubDemoRepository.findById(roomId);
+        if (demoOpt.isPresent()) {
+            RoomGithubDemo demo = demoOpt.get();
+            String sha7 = demo.getSha().substring(0, Math.min(7, demo.getSha().length()));
+            checks.add(new GithubCheckDto("DEMO_MARKED", "Demo commit marked", "PASS", "Marked on branch " + demo.getBranch() + " (" + sha7 + ")", null, null));
+        } else {
+            boolean isFrozen = "FROZEN".equalsIgnoreCase(room.getStage()) || "freeze".equalsIgnoreCase(room.getStage());
+            checks.add(new GithubCheckDto("DEMO_MARKED", "Demo commit marked", isFrozen ? "FAIL" : "WARN", isFrozen ? "Room is in Freeze phase but no demo build commit has been marked" : "Mark the commit you will demo before final submission", null, "Mark demo commit"));
+        }
+
+        // 7. DEPLOYED_LINK
+        String deployedLink = repo.getDeployedLink();
+        if (deployedLink != null && !deployedLink.isBlank()) {
+            checks.add(new GithubCheckDto("DEPLOYED_LINK", "Deployed demo link", "PASS", "Live URL verified: " + deployedLink, deployedLink, "Open link"));
+        } else {
+            checks.add(new GithubCheckDto("DEPLOYED_LINK", "Deployed demo link", "WARN", "No live deployed link configured", null, "Add link"));
+        }
+
+        // 8. TEAM_COMMITS
+        List<RoomMember> members = roomMemberRepository.findByRoomId(roomId);
+        int unlinkedCount = 0;
+        int zeroCommitCount = 0;
+        List<String> unlinkedNames = new ArrayList<>();
+        for (RoomMember m : members) {
+            User u = userRepository.findById(m.getUserId()).orElse(null);
+            Optional<UserOAuthToken> tok = userOAuthTokenRepository.findByUserIdAndProvider(m.getUserId(), "GITHUB");
+            if (tok.isEmpty() || tok.get().getGithubLogin() == null) {
+                unlinkedCount++;
+                unlinkedNames.add(u != null ? u.getName() : "Member");
+            } else {
+                String ghLogin = tok.get().getGithubLogin();
+                long userCommits = commits.stream().filter(c -> c.getAuthorLogin() != null && c.getAuthorLogin().equalsIgnoreCase(ghLogin)).count();
+                if (userCommits == 0) {
+                    zeroCommitCount++;
+                }
+            }
+        }
+        if (unlinkedCount > 0) {
+            checks.add(new GithubCheckDto("TEAM_COMMITS", "Team member commits", "UNKNOWN", unlinkedCount + " member(s) haven't connected GitHub in Settings (" + String.join(", ", unlinkedNames) + ")", "/app/settings/integrations", "Connect GitHub"));
+        } else if (zeroCommitCount > 0) {
+            checks.add(new GithubCheckDto("TEAM_COMMITS", "Team member commits", "WARN", zeroCommitCount + " team member(s) have 0 commits in the repository", null, null));
+        } else {
+            checks.add(new GithubCheckDto("TEAM_COMMITS", "Team member commits", "PASS", "All team members have pushed commits to the repository", null, null));
+        }
+
+        return checks;
+    }
+
+    @Transactional(readOnly = true)
+    public GithubContributorsResponse getContributors(UUID roomId, User user) {
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        roomAccess.requireMember(roomId, user);
+
+        Instant now = clock.instant();
+        Instant sevenDaysAgo = now.minus(Duration.ofDays(7));
+        List<GithubCommit> commits = commitRepository.findByRoomIdOrderByCommittedAtDesc(roomId);
+        List<RoomMember> members = roomMemberRepository.findByRoomId(roomId);
+
+        Set<String> memberLogins = new HashSet<>();
+        List<GithubContributorItemDto> memberDtos = new ArrayList<>();
+
+        for (RoomMember m : members) {
+            User u = userRepository.findById(m.getUserId()).orElse(null);
+            Optional<UserOAuthToken> tok = userOAuthTokenRepository.findByUserIdAndProvider(m.getUserId(), "GITHUB");
+            String ghLogin = tok.map(UserOAuthToken::getGithubLogin).orElse(null);
+            if (ghLogin != null && !ghLogin.isBlank()) {
+                memberLogins.add(ghLogin.toLowerCase());
+                List<GithubCommit> memberCommits = commits.stream()
+                        .filter(c -> c.getAuthorLogin() != null && c.getAuthorLogin().equalsIgnoreCase(ghLogin))
+                        .toList();
+                int commits7 = (int) memberCommits.stream().filter(c -> c.getCommittedAt() != null && c.getCommittedAt().isAfter(sevenDaysAgo)).count();
+                Instant lastCommit = memberCommits.stream().map(GithubCommit::getCommittedAt).filter(Objects::nonNull).max(Instant::compareTo).orElse(null);
+                memberDtos.add(new GithubContributorItemDto(
+                        m.getUserId(),
+                        u != null ? u.getUsername() : null,
+                        u != null ? u.getName() : "Member",
+                        u != null ? u.getAvatarUrl() : null,
+                        ghLogin,
+                        commits7,
+                        0,
+                        0,
+                        lastCommit,
+                        true
+                ));
+            } else {
+                memberDtos.add(new GithubContributorItemDto(
+                        m.getUserId(),
+                        u != null ? u.getUsername() : null,
+                        u != null ? u.getName() : "Member",
+                        u != null ? u.getAvatarUrl() : null,
+                        null,
+                        0,
+                        0,
+                        0,
+                        null,
+                        true
+                ));
+            }
+        }
+
+        Map<String, List<GithubCommit>> otherCommitsByAuthor = new HashMap<>();
+        for (GithubCommit c : commits) {
+            String author = c.getAuthorLogin();
+            if (author == null || author.isBlank()) {
+                author = c.getAuthorName();
+            }
+            if (author != null && !memberLogins.contains(author.toLowerCase())) {
+                otherCommitsByAuthor.computeIfAbsent(author, k -> new ArrayList<>()).add(c);
+            }
+        }
+
+        List<GithubContributorItemDto> otherDtos = new ArrayList<>();
+        for (Map.Entry<String, List<GithubCommit>> entry : otherCommitsByAuthor.entrySet()) {
+            List<GithubCommit> cList = entry.getValue();
+            int commits7 = (int) cList.stream().filter(c -> c.getCommittedAt() != null && c.getCommittedAt().isAfter(sevenDaysAgo)).count();
+            Instant lastCommit = cList.stream().map(GithubCommit::getCommittedAt).filter(Objects::nonNull).max(Instant::compareTo).orElse(null);
+            otherDtos.add(new GithubContributorItemDto(
+                    null,
+                    entry.getKey(),
+                    entry.getKey(),
+                    null,
+                    entry.getKey(),
+                    commits7,
+                    0,
+                    0,
+                    lastCommit,
+                    false
+            ));
+        }
+
+        return new GithubContributorsResponse(memberDtos, otherDtos);
+    }
+
+    @Transactional(readOnly = true)
+    public GithubTaskLinksResponse getTaskLinks(UUID roomId, User user) {
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        roomAccess.requireMember(roomId, user);
+        GithubRepo repo = repoRepository.findById(roomId).orElse(null);
+        if (repo == null) {
+            return new GithubTaskLinksResponse(0, 0, "No repository connected", Collections.emptyList());
+        }
+
+        String prefix = room.getKeyPrefix() != null && !room.getKeyPrefix().isBlank() ? room.getKeyPrefix() : "TASK";
+        Pattern pattern = Pattern.compile("(?i)\\b" + Pattern.quote(prefix) + "-(\\d+)\\b");
+
+        List<GithubCommit> commits = commitRepository.findByRoomIdOrderByCommittedAtDesc(roomId);
+        List<GithubBranch> branches = branchRepository.findByRoomId(roomId);
+
+        Map<String, List<TaskCommitLinkDto>> taskCommits = new HashMap<>();
+        Set<String> matchedCommits = new HashSet<>();
+
+        for (GithubCommit c : commits) {
+            if (c.getMessage() == null) continue;
+            Matcher m = pattern.matcher(c.getMessage());
+            boolean matched = false;
+            while (m.find()) {
+                matched = true;
+                String taskKey = m.group(0).toUpperCase();
+                String url = repo.getUrl() + "/commit/" + c.getSha();
+                taskCommits.computeIfAbsent(taskKey, k -> new ArrayList<>())
+                        .add(new TaskCommitLinkDto(c.getSha(), c.getMessage(), c.getAuthorName(), c.getCommittedAt(), url));
+            }
+            if (matched) {
+                matchedCommits.add(c.getSha());
+            }
+        }
+
+        Map<String, List<TaskBranchLinkDto>> taskBranches = new HashMap<>();
+        for (GithubBranch b : branches) {
+            Matcher m = pattern.matcher(b.getName());
+            while (m.find()) {
+                String taskKey = m.group(0).toUpperCase();
+                taskBranches.computeIfAbsent(taskKey, k -> new ArrayList<>())
+                        .add(new TaskBranchLinkDto(b.getName(), b.getUrl()));
+            }
+        }
+
+        Set<String> allKeys = new TreeSet<>();
+        allKeys.addAll(taskCommits.keySet());
+        allKeys.addAll(taskBranches.keySet());
+
+        List<TaskLinksItemDto> items = new ArrayList<>();
+        for (String k : allKeys) {
+            items.add(new TaskLinksItemDto(
+                    k,
+                    taskCommits.getOrDefault(k, Collections.emptyList()),
+                    Collections.emptyList(),
+                    taskBranches.getOrDefault(k, Collections.emptyList())
+            ));
+        }
+
+        int totalCommits = commits.size();
+        int commitsWithTasks = matchedCommits.size();
+        String headerSummary = commitsWithTasks + " of " + totalCommits + " commits reference tasks (" + prefix + "-#)";
+
+        return new GithubTaskLinksResponse(totalCommits, commitsWithTasks, headerSummary, items);
+    }
+
+    @Transactional(readOnly = true)
+    public DemoMarkerDto getDemoMarker(UUID roomId, User user) {
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        roomAccess.requireMember(roomId, user);
+
+        return roomGithubDemoRepository.findById(roomId).map(demo -> {
+            String markedByName = demo.getMarkedBy() != null
+                    ? userRepository.findById(demo.getMarkedBy()).map(User::getName).orElse("Team member")
+                    : "Team member";
+            List<GithubCommit> commits = commitRepository.findByRoomIdOrderByCommittedAtDesc(roomId);
+            long moved = commits.stream().filter(c -> c.getCommittedAt() != null && c.getCommittedAt().isAfter(demo.getMarkedAt())).count();
+            String sha7 = demo.getSha().substring(0, Math.min(7, demo.getSha().length()));
+            String summary = demo.getBranch() + " @ " + sha7 + " (" + moved + " commits since marked)";
+            return new DemoMarkerDto(demo.getBranch(), demo.getSha(), demo.getMarkedBy(), markedByName, demo.getMarkedAt(), (int) moved, summary);
+        }).orElse(null);
+    }
+
+    @Transactional
+    public DemoMarkerDto saveDemoMarker(UUID roomId, SaveDemoMarkerRequest request, User user) {
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        roomAccess.requireLeader(roomId, user);
+        GithubRepo repo = repoRepository.findById(roomId)
+                .orElseThrow(() -> new NotFoundException("REPO_NOT_FOUND", "No repository connected"));
+
+        String branchName = request != null && request.branch() != null && !request.branch().isBlank()
+                ? request.branch().trim()
+                : repo.getDefaultBranch();
+
+        GithubBranch branch = branchRepository.findByRoomIdAndName(roomId, branchName).orElse(null);
+        String sha = branch != null && branch.getLastCommitSha() != null ? branch.getLastCommitSha() : null;
+        if (sha == null) {
+            List<GithubCommit> commits = commitRepository.findByRoomIdOrderByCommittedAtDesc(roomId);
+            sha = !commits.isEmpty() ? commits.get(0).getSha() : "0000000";
+        }
+
+        RoomGithubDemo demo = new RoomGithubDemo(roomId, branchName, sha, user.getId(), clock.instant());
+        roomGithubDemoRepository.save(demo);
+
+        activityLogger.log(room, user, "DEMO_COMMIT_MARKED", "Marked demo build commit on " + branchName + " (" + sha.substring(0, Math.min(7, sha.length())) + ")");
+        return getDemoMarker(roomId, user);
+    }
+
+    @Transactional
+    public void deleteDemoMarker(UUID roomId, User user) {
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        roomAccess.requireLeader(roomId, user);
+        roomGithubDemoRepository.deleteById(roomId);
+        activityLogger.log(room, user, "DEMO_COMMIT_CLEARED", "Cleared marked demo commit");
     }
 }

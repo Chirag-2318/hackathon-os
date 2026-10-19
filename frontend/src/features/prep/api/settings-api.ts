@@ -87,7 +87,7 @@ export async function downloadUserDataExport(): Promise<void> {
   const blob = await res.blob();
   const disposition = res.headers.get('Content-Disposition') || '';
   const match = disposition.match(/filename="?([^";]+)"?/);
-  const filename = match ? match[1] : 'hackathon-os-export.zip';
+  const filename = match ? match[1] : 'brackit-export.zip';
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

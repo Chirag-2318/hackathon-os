@@ -153,7 +153,7 @@ export function PrivacySection() {
       <div className="mb-6">
         <h1 className="text-2xl font-serif text-ink tracking-tight">Privacy</h1>
         <p className="text-sm text-ink-2 mt-1">
-          Review what data Hackathon OS stores, export an archive of your account, or delete your account.
+          Review what data [brackit] stores, export an archive of your account, or delete your account.
         </p>
       </div>
 

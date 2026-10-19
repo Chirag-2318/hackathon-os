@@ -264,7 +264,7 @@ export function PhaseGuideModal({
               onClick={onClose}
               className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold text-xs md:text-sm px-6 h-10 max-md:h-[44px] rounded-full transition-opacity cursor-pointer outline-none shadow-xs"
             >
-              Got it, let's start {currentPhaseKey}
+              Got it
             </button>
           </div>
         </motion.div>

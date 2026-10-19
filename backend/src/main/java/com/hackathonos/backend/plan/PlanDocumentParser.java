@@ -25,8 +25,13 @@ public class PlanDocumentParser {
     public record HeadingConfig(
             String h1Prefix,
             List<String> h2Headings,
-            boolean requiresRealityCheck
-    ) {}
+            boolean requiresRealityCheck,
+            Integer minLength
+    ) {
+        public int getMinLength() {
+            return minLength != null ? minLength : 0;
+        }
+    }
 
     public record ParseResult(
             boolean valid,

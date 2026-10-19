@@ -407,28 +407,41 @@ public class PlanDownstreamSyncService {
         UUID roomId = room.getId();
         if (phasesMd == null || phasesMd.isBlank()) return;
 
-        phaseRepository.deleteByRoomId(roomId);
+        // 1. Parser: only read inside the "Phases" H2 section
+        String phasesSection = "";
+        Matcher sectionMatcher = Pattern.compile("(?im)^##\\s+.*Phases.*$").matcher(phasesMd);
+        if (sectionMatcher.find()) {
+            int start = sectionMatcher.end();
+            Matcher nextH2 = Pattern.compile("(?im)^##\\s+").matcher(phasesMd);
+            int end = phasesMd.length();
+            if (nextH2.find(start)) {
+                end = nextH2.start();
+            }
+            phasesSection = phasesMd.substring(start, end);
+        } else {
+            phasesSection = phasesMd;
+        }
 
-        Pattern phaseHeader = Pattern.compile("(?im)^###\\s*(?:Phase\\s*(\\d+)|([A-Za-z0-9_-]+))\\s*[-:—–]?\\s*(.*)$");
-        Matcher matcher = phaseHeader.matcher(phasesMd);
+        // Only read H3 headings of the form "### P<number> - Name" (also "P1:" and "P1 -" with any dash)
+        Pattern phaseHeader = Pattern.compile("(?im)^###\\s*(?:P|Phase\\s*)(\\d+)\\s*[-:—–.]?\\s*(.*)$");
+        Matcher matcher = phaseHeader.matcher(phasesSection);
 
         List<ParsedPhase> parsedList = new ArrayList<>();
         while (matcher.find()) {
             int headerStart = matcher.start();
-            String pNum = matcher.group(1);
-            String pKey = matcher.group(2);
-            String phaseKey = pKey != null && !pKey.isBlank() ? pKey.trim() : (pNum != null ? "P" + pNum.trim() : "P" + (parsedList.size() + 1));
-            String phaseName = matcher.group(3).replaceAll("[*_]", "").trim();
+            String pNum = matcher.group(1).trim();
+            String phaseKey = "P" + pNum;
+            String phaseName = matcher.group(2).replaceAll("[*_]", "").trim();
             phaseName = DefensiveParserUtils.defensivelyTrim(phaseName, 2000, "PHASES.md", warnConsumer);
 
             int startPos = matcher.end();
-            int endPos = phasesMd.length();
-            Matcher nextMatcher = phaseHeader.matcher(phasesMd);
+            int endPos = phasesSection.length();
+            Matcher nextMatcher = phaseHeader.matcher(phasesSection);
             if (nextMatcher.find(startPos)) {
                 endPos = nextMatcher.start();
             }
-            String block = phasesMd.substring(startPos, endPos);
-            String rawMarkdown = phasesMd.substring(headerStart, endPos).trim();
+            String block = phasesSection.substring(startPos, endPos);
+            String rawMarkdown = phasesSection.substring(headerStart, endPos).trim();
 
             Double sHour = null;
             Double eHour = null;
@@ -501,10 +514,23 @@ public class PlanDownstreamSyncService {
             parsedList.add(new ParsedPhase(phaseKey, phaseName, sHour, eHour, goal, exitCp, owners, deliverables, rawMarkdown));
         }
 
+        // 2. Replace template-default phases in the same transaction, only if old ones have no tasks (otherwise map them by order)
+        List<PlanPhase> existingPhases = phaseRepository.findByRoomIdOrderByPositionAsc(roomId);
+        List<Task> allRoomTasks = taskRepository.findByRoomId(roomId);
+        boolean oldPhasesHaveTasks = allRoomTasks.stream().anyMatch(t -> t.getPhaseId() != null || (t.getPhaseKey() != null && !t.getPhaseKey().isBlank()));
+
+        if (!oldPhasesHaveTasks) {
+            phaseRepository.deleteByRoomId(roomId);
+            phaseRepository.flush();
+            existingPhases = new ArrayList<>();
+        }
+
         double duration = room.getDurationHours() > 0 ? room.getDurationHours() : 36.0;
         boolean hasInvalidHours = parsedList.stream().anyMatch(p -> p.sHour() == null || p.eHour() == null || p.eHour() <= p.sHour());
         int totalPhases = parsedList.size();
         double step = totalPhases > 0 ? duration / totalPhases : duration;
+
+        boolean isBuildStage = "build".equalsIgnoreCase(room.getStage()) || "BUILD".equalsIgnoreCase(room.getWorkflowStage());
 
         for (int pos = 0; pos < totalPhases; pos++) {
             ParsedPhase pp = parsedList.get(pos);
@@ -514,16 +540,28 @@ public class PlanDownstreamSyncService {
             double startPct = duration > 0 ? (sH / duration) * 100.0 : 0.0;
             double endPct = duration > 0 ? (eH / duration) * 100.0 : 100.0;
 
-            PlanPhase phase = new PlanPhase(
-                    roomId,
-                    pp.phaseKey(),
-                    pos,
-                    pp.phaseName(),
-                    BigDecimal.valueOf(startPct),
-                    BigDecimal.valueOf(endPct),
-                    pp.exitCp(),
-                    pp.owners()
-            );
+            PlanPhase phase;
+            if (pos < existingPhases.size()) {
+                phase = existingPhases.get(pos);
+                phase.setPlanKey(pp.phaseKey());
+                phase.setPosition(pos);
+                phase.setName(pp.phaseName());
+                phase.setStartPct(BigDecimal.valueOf(startPct));
+                phase.setEndPct(BigDecimal.valueOf(endPct));
+                phase.setExitCheckpoint(pp.exitCp());
+                phase.setOwners(pp.owners());
+            } else {
+                phase = new PlanPhase(
+                        roomId,
+                        pp.phaseKey(),
+                        pos,
+                        pp.phaseName(),
+                        BigDecimal.valueOf(startPct),
+                        BigDecimal.valueOf(endPct),
+                        pp.exitCp(),
+                        pp.owners()
+                );
+            }
             phase.setStartHour(BigDecimal.valueOf(sH));
             phase.setEndHour(BigDecimal.valueOf(eH));
             phase.setGoal(pp.goal());
@@ -531,14 +569,28 @@ public class PlanDownstreamSyncService {
             phase.setDeliverables(pp.deliverables());
             phase.setRawMarkdown(pp.rawMarkdown());
 
-            boolean isBuildStage = "build".equalsIgnoreCase(room.getStage()) || "BUILD".equalsIgnoreCase(room.getWorkflowStage());
             if (isBuildStage && pos == 0) {
                 phase.setStatus("ACTIVE");
-                phase.setActivatedAt(Instant.now());
-            } else {
+                if (phase.getActivatedAt() == null) {
+                    phase.setActivatedAt(Instant.now());
+                }
+            } else if (phase.getStatus() == null || (!"ACTIVE".equals(phase.getStatus()) && !"COMPLETED".equals(phase.getStatus()))) {
                 phase.setStatus("NOT_STARTED");
             }
             phaseRepository.save(phase);
+        }
+
+        // Delete any excess existing phases that have no tasks
+        if (existingPhases.size() > totalPhases) {
+            for (int i = totalPhases; i < existingPhases.size(); i++) {
+                PlanPhase excess = existingPhases.get(i);
+                boolean hasTasksForPhase = allRoomTasks.stream().anyMatch(t ->
+                        (t.getPhaseId() != null && t.getPhaseId().equals(excess.getId())) ||
+                        (excess.getPlanKey() != null && excess.getPlanKey().equalsIgnoreCase(t.getPhaseKey())));
+                if (!hasTasksForPhase) {
+                    phaseRepository.delete(excess);
+                }
+            }
         }
 
         // Checkpoint evaluation

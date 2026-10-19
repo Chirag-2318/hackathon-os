@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Plus, X } from 'lucide-react';
+import { useDroppable } from '@dnd-kit/core';
 import type { Task, RoomMember, BoardPhase, TaskStatus } from '@/services/types';
 import { JiraCard } from './jira-card';
 
@@ -21,11 +22,7 @@ export interface BoardColumnProps {
   onDeferTask?: (taskId: string) => void;
   onDropTaskLeader?: (taskId: string) => void;
   onInlineCreate: (status: TaskStatus, summary: string) => Promise<void>;
-  onPointerDownDrag?: (e: React.PointerEvent, task: Task) => void;
-  onDropTask?: (taskId: string, targetStatus: TaskStatus) => void;
   onAdvanceTaskStatus?: (taskId: string) => void;
-  onDragStartTask?: (taskId: string) => void;
-  onDragEndTask?: () => void;
 }
 
 export function BoardColumn({
@@ -34,8 +31,6 @@ export function BoardColumn({
   tasks,
   members,
   phases,
-  isDropTarget = false,
-  dropIndex = null,
   draggingTaskId = null,
   isLeader = false,
   onOpenTask,
@@ -45,16 +40,16 @@ export function BoardColumn({
   onDeferTask,
   onDropTaskLeader,
   onInlineCreate,
-  onPointerDownDrag,
-  onDropTask,
   onAdvanceTaskStatus,
-  onDragStartTask,
-  onDragEndTask,
 }: BoardColumnProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [newSummary, setNewSummary] = useState('');
-  const [isNativeDragOver, setIsNativeDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const { setNodeRef, isOver } = useDroppable({
+    id: status,
+    data: { status },
+  });
 
   useEffect(() => {
     if (isCreating) {
@@ -76,31 +71,12 @@ export function BoardColumn({
     }
   };
 
-  const activeDrop = isDropTarget || isNativeDragOver;
-
   return (
     <div
       data-column-status={status}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        setIsNativeDragOver(true);
-      }}
-      onDragLeave={(e) => {
-        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-        setIsNativeDragOver(false);
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        setIsNativeDragOver(false);
-        const droppedId = e.dataTransfer.getData('text/plain') || draggingTaskId;
-        if (droppedId) {
-          onDropTask?.(droppedId, status);
-        }
-      }}
       className={cn(
         'flex flex-col rounded-[16px] p-2 bg-[#F3F3F4] dark:bg-muted/30 min-h-[480px] transition-all duration-150 border-2 border-transparent',
-        activeDrop && 'bg-[#F0F7FF] dark:bg-blue-950/20 border-dashed border-blue-500 shadow-sm'
+        isOver && 'bg-[#F0F7FF] dark:bg-blue-950/20 border-dashed border-blue-500 shadow-sm'
       )}
     >
       {/* Column Header (Sticky inside column) */}
@@ -115,47 +91,39 @@ export function BoardColumn({
         </div>
       </div>
 
-      {/* Cards stack with 8px gaps */}
-      <div className="flex-1 flex flex-col gap-2 relative">
-        {tasks.map((task, idx) => {
+      {/* Column body is the full droppable area with min-height 120px */}
+      <div
+        ref={setNodeRef}
+        className={cn(
+          'flex-1 flex flex-col gap-2 relative min-h-[120px] rounded-xl transition-colors',
+          isOver && 'bg-blue-500/5 ring-2 ring-blue-500/20'
+        )}
+      >
+        {tasks.map((task) => {
           const isDragging = task.id === draggingTaskId;
-          const showDropLineBefore = isDropTarget && dropIndex === idx;
 
           return (
-            <React.Fragment key={task.id}>
-              {/* Insertion Drop Line (2px blue) */}
-              {showDropLineBefore && (
-                <div className="h-0.5 bg-blue-600 rounded-full my-[-2px] z-20 shadow-xs" />
-              )}
-              <JiraCard
-                task={task}
-                members={members}
-                phases={phases}
-                isDragging={isDragging}
-                isLeader={isLeader}
-                onOpen={onOpenTask}
-                onStatusChange={onStatusChange}
-                onAssignToMe={onAssignToMe}
-                onToggleBlock={onToggleBlock}
-                onDeferTask={onDeferTask}
-                onDropTask={onDropTaskLeader}
-                onPointerDownDrag={onPointerDownDrag}
-                onDragStartTask={onDragStartTask}
-                onDragEndTask={onDragEndTask}
-                onAdvanceTaskStatus={onAdvanceTaskStatus}
-              />
-            </React.Fragment>
+            <JiraCard
+              key={task.id}
+              task={task}
+              members={members}
+              phases={phases}
+              isDragging={isDragging}
+              isLeader={isLeader}
+              onOpen={onOpenTask}
+              onStatusChange={onStatusChange}
+              onAssignToMe={onAssignToMe}
+              onToggleBlock={onToggleBlock}
+              onDeferTask={onDeferTask}
+              onDropTask={onDropTaskLeader}
+              onAdvanceTaskStatus={onAdvanceTaskStatus}
+            />
           );
         })}
 
-        {/* Insertion Drop Line at the bottom of the list */}
-        {isDropTarget && dropIndex === tasks.length && (
-          <div className="h-0.5 bg-blue-600 rounded-full my-[-2px] z-20 shadow-xs" />
-        )}
-
         {/* Empty column state */}
         {tasks.length === 0 && !isCreating && (
-          <div className="flex-1 min-h-[140px] rounded-xl border border-dashed border-border/80 flex items-center justify-center text-xs text-muted-foreground select-none">
+          <div className="flex-1 min-h-[120px] rounded-xl border border-dashed border-border/80 flex items-center justify-center text-xs text-muted-foreground select-none">
             Drop tasks here
           </div>
         )}

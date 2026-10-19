@@ -5,6 +5,10 @@ import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.poi.xslf.usermodel.XMLSlideShow;
+import org.apache.poi.xslf.usermodel.XSLFShape;
+import org.apache.poi.xslf.usermodel.XSLFSlide;
+import org.apache.poi.xslf.usermodel.XSLFTextShape;
 import org.apache.poi.xwpf.usermodel.IBodyElement;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
@@ -62,6 +66,13 @@ public class FileTextExtractor {
             boolean truncated,
             String method,
             List<String> warnings
+    ) {}
+
+    public record SlideTextEntry(
+            int pageNo,
+            String title,
+            String text,
+            int chars
     ) {}
 
 
@@ -408,5 +419,136 @@ public class FileTextExtractor {
         // 6. Collapse more than two blank lines
         String result = MULTI_BLANKS_PATTERN.matcher(out.toString()).replaceAll("\n\n");
         return result.trim();
+    }
+
+    public List<SlideTextEntry> extractDeckSlides(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new FileExtractionException("FILE_UNREADABLE", "Uploaded file is empty.", HttpStatus.BAD_REQUEST);
+        }
+        if (file.getSize() > 15 * 1024 * 1024L) {
+            throw new FileExtractionException("FILE_TOO_LARGE", "File size exceeds 15MB limit.", HttpStatus.PAYLOAD_TOO_LARGE);
+        }
+        byte[] bytes;
+        try {
+            bytes = file.getBytes();
+        } catch (IOException e) {
+            throw new FileExtractionException("FILE_UNREADABLE", "Could not read uploaded file.", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        String filename = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
+        return extractDeckSlides(bytes, filename);
+    }
+
+    public List<SlideTextEntry> extractDeckSlides(byte[] bytes, String filename) {
+        if (bytes == null || bytes.length == 0) {
+            throw new FileExtractionException("FILE_UNREADABLE", "File content is empty.", HttpStatus.BAD_REQUEST);
+        }
+        if (bytes.length > 15 * 1024 * 1024L) {
+            throw new FileExtractionException("FILE_TOO_LARGE", "File size exceeds 15MB limit.", HttpStatus.PAYLOAD_TOO_LARGE);
+        }
+
+        if (isPdf(bytes) || filename.endsWith(".pdf")) {
+            return extractPdfSlides(bytes);
+        } else if (isDocx(bytes) || filename.endsWith(".pptx")) {
+            return extractPptxSlides(bytes);
+        } else {
+            throw new FileExtractionException("FILE_TYPE_UNSUPPORTED", "Unsupported deck format. Please upload a PDF or PPTX file.", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    private List<SlideTextEntry> extractPdfSlides(byte[] bytes) {
+        try (PDDocument doc = Loader.loadPDF(bytes)) {
+            if (doc.isEncrypted()) {
+                throw new FileExtractionException("FILE_ENCRYPTED", "Password-protected PDFs cannot be audited.", HttpStatus.UNPROCESSABLE_ENTITY);
+            }
+            int totalPages = doc.getNumberOfPages();
+            int pagesToRead = Math.min(totalPages, 40);
+            List<SlideTextEntry> entries = new ArrayList<>();
+            PDFTextStripper stripper = new PDFTextStripper();
+            int totalChars = 0;
+
+            for (int p = 1; p <= pagesToRead; p++) {
+                stripper.setStartPage(p);
+                stripper.setEndPage(p);
+                String raw = stripper.getText(doc);
+                String cleaned = sanitizeText(raw);
+                String title = extractFirstLineTitle(cleaned, p);
+                int len = cleaned.length();
+                totalChars += len;
+                entries.add(new SlideTextEntry(p, title, cleaned, len));
+            }
+
+            if (totalChars == 0) {
+                throw new FileExtractionException("FILE_NO_TEXT", "This deck has no readable text. Export a PDF with text, or paste the slide text.", HttpStatus.BAD_REQUEST);
+            }
+            return entries;
+        } catch (FileExtractionException fee) {
+            throw fee;
+        } catch (Exception e) {
+            log.warn("Failed to extract PDF slides: {}", e.getMessage());
+            throw new FileExtractionException("FILE_UNREADABLE", "Could not parse PDF slides.", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    private List<SlideTextEntry> extractPptxSlides(byte[] bytes) {
+        try (XMLSlideShow pptx = new XMLSlideShow(new ByteArrayInputStream(bytes))) {
+            List<XSLFSlide> slides = pptx.getSlides();
+            int pagesToRead = Math.min(slides.size(), 40);
+            List<SlideTextEntry> entries = new ArrayList<>();
+            int totalChars = 0;
+
+            for (int i = 0; i < pagesToRead; i++) {
+                XSLFSlide slide = slides.get(i);
+                int pageNo = i + 1;
+                String title = slide.getTitle();
+                StringBuilder sb = new StringBuilder();
+                if (title != null && !title.isBlank()) {
+                    sb.append(title.trim()).append("\n");
+                }
+                for (XSLFShape shape : slide.getShapes()) {
+                    if (shape instanceof XSLFTextShape textShape) {
+                        String st = textShape.getText();
+                        if (st != null && !st.isBlank()) {
+                            String trimmed = st.trim();
+                            if (title == null || !trimmed.equalsIgnoreCase(title.trim())) {
+                                sb.append(trimmed).append("\n");
+                            }
+                        }
+                    }
+                }
+                String text = sanitizeText(sb.toString().trim());
+                if (title == null || title.isBlank()) {
+                    title = extractFirstLineTitle(text, pageNo);
+                }
+                int len = text.length();
+                totalChars += len;
+                entries.add(new SlideTextEntry(pageNo, title.trim(), text, len));
+            }
+
+            if (totalChars == 0) {
+                throw new FileExtractionException("FILE_NO_TEXT", "This deck has no readable text. Export a PDF with text, or paste the slide text.", HttpStatus.BAD_REQUEST);
+            }
+            return entries;
+        } catch (FileExtractionException fee) {
+            throw fee;
+        } catch (Exception e) {
+            log.warn("Failed to extract PPTX slides: {}", e.getMessage());
+            throw new FileExtractionException("FILE_UNREADABLE", "Could not parse PPTX slides.", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    private String extractFirstLineTitle(String text, int pageNo) {
+        if (text == null || text.isBlank()) return "Slide " + pageNo;
+        for (String line : text.split("\n")) {
+            String trimmed = line.replaceAll("^#+\\s*", "").trim();
+            if (!trimmed.isBlank() && trimmed.length() <= 120) {
+                return trimmed;
+            }
+        }
+        return "Slide " + pageNo;
+    }
+
+    private String sanitizeText(String text) {
+        if (text == null) return "";
+        return text.replace("\u0000", "").trim();
     }
 }

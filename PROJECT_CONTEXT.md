@@ -1,4 +1,4 @@
-# Hackathon OS: Complete Project Context & System Reference
+# [brackit]: Complete Project Context & System Reference
 
 > **Document Status:** Authoritative project context dossier.  
 > **Target Audience:** Product design AI agent tasked with creating the marketing & landing page.  
@@ -17,10 +17,10 @@
 
 ## 1. Project Snapshot
 
-- **Project Name:** Hackathon OS `[Verified in code]` (`frontend/src/shared/constants/copy.ts`)
-- **One-Sentence Description:** Hackathon OS is an opinionated execution operating system and real-time team-room platform that carries hackathon teams step-by-step from raw problem statement intake to a complete, rehearsed, and verified submission before the clock expires. `[Verified in code]` (`README.md`)
+- **Project Name:** [brackit] `[Verified in code]` (`frontend/src/shared/constants/copy.ts`)
+- **One-Sentence Description:** [brackit] is an opinionated execution operating system and real-time team-room platform that carries hackathon teams step-by-step from raw problem statement intake to a complete, rehearsed, and verified submission before the clock expires. `[Verified in code]` (`README.md`)
 - **3-4 Sentence Elevator Pitch:**  
-  Most hackathon teams do not lose because they lack coding talent—they lose because of poor sequencing, runaway scope, unread rubrics, and rushing a broken demo in the final minutes. Hackathon OS acts as a structured command center for the entire 24–48 hour sprint, enforcing critical checkpoints (rules confirmation, silent ideation, AI-guided planning, Kanban execution, MVP reality tracking, pitch rehearsal, and submission verification). Backed by real-time Server-Sent Events (SSE) and an automated backend AI gateway with zero client-side keys, it ensures teams spend their finite hours building the right slice of product and pitching it effectively. `[Verified in code & docs]`
+  Most hackathon teams do not lose because they lack coding talent—they lose because of poor sequencing, runaway scope, unread rubrics, and rushing a broken demo in the final minutes. [brackit] acts as a structured command center for the entire 24–48 hour sprint, enforcing critical checkpoints (rules confirmation, silent ideation, AI-guided planning, Kanban execution, MVP reality tracking, pitch rehearsal, and submission verification). Backed by real-time Server-Sent Events (SSE) and an automated backend AI gateway with zero client-side keys, it ensures teams spend their finite hours building the right slice of product and pitching it effectively. `[Verified in code & docs]`
 - **Current Operational Status:**  
   Fully working local full-stack application `[Verified in code]`. Docker Compose multi-container stack, Spring Boot 4.1 / Java 25 backend monolith, PostgreSQL 17 database with 32 Flyway migrations, and React 19 + Vite frontend with real-time SSE live synchronization, Groq Llama-3.3-70B AI integration, GitHub account linking, and comprehensive Playwright end-to-end test coverage.
 - **Platform Type:**  
@@ -237,7 +237,7 @@ The project started with research in `docs/problem.md` (19 Sep 2026) and evolved
 |---|---|---|---|
 | **AI Architecture** | **Prompt Bridge only** on free tier: users had to manually copy-paste prompts into ChatGPT/Claude because API costs were assumed prohibitive. BYOK (paste personal API key in frontend) planned. | **Zero Client Keys Gateway:** All AI is centralized in backend `AiService` / `GroqClient` (Llama-3.3-70B & 8B). Frontend key entry was completely stripped. Automatic AI generation is live for brief extraction, plan generation, naming, and Q&A. Prompt Bridge is kept as a manual fallback. | Major landing page selling point! Users get native one-click AI generation without managing API keys or paying provider bills. |
 | **PRESENT Tools** | Planned as 5 separate, disconnected tools: Deck, Demo Studio, Pitch Studio, Rehearsal Mode, Q&A Studio. | **Consolidated 3-Route PRESENT Group:** Collapsed into `Deck` (`/deck`), `Pitch Kit` (`/pitch-kit` unifying demo vault, pitch teleprompter with live mic waveform, and judge grill), and `Submission` (`/submission`). | Cleaner, faster user experience. Reduces navigation clicks when the clock is ticking down. |
-| **Submission Screen** | `docs/WORK_LOG.md` mentioned 5 editable write-up cards and flight-path breadcrumbs on `/submission`. | **Two-State Launch Pad:** `/submission` renders State A (countdown, submission guidance, leader confirmation dialog) and State B (red-ink `SUBMITTED` stamp, full timeline audit, room stats, reopen action). | Clearer psychological boundary: Hackathon OS does not pretend to submit to external portals; it acts as the team's flight-check and verified archive. |
+| **Submission Screen** | `docs/WORK_LOG.md` mentioned 5 editable write-up cards and flight-path breadcrumbs on `/submission`. | **Two-State Launch Pad:** `/submission` renders State A (countdown, submission guidance, leader confirmation dialog) and State B (red-ink `SUBMITTED` stamp, full timeline audit, room stats, reopen action). | Clearer psychological boundary: [brackit] does not pretend to submit to external portals; it acts as the team's flight-check and verified archive. |
 | **Billing & Payments** | Discussed as active Pro subscriptions with paid tiers. | **Waitlist Interest Model:** Configuration (`plans.json`) defines Free ($0), Pro ($9), and Max ($19), but `paymentsEnabled: false` and `BILLING_ENFORCE: false` in dev. Clicking upgrade opens a waitlist dialog and logs interest to PostgreSQL `plan_interest`. | Do NOT advertise live credit card checkouts or paid subscriptions. Position as Free with upcoming Pro waitlist. |
 | **Real-time Engine** | Early tech stack suggested WebSockets/STOMP. | **SSE + Polling Fallback:** Built on lightweight Server-Sent Events (`/api/v1/rooms/{roomId}/live`) with 20-second polling fallback, presence heartbeats, and optimistic locking. | Simpler, highly resilient over venue Wi-Fi and mobile hotspots. |
 | **Live Cursor Presence** | Considered real-time collaborative typing via Yjs. | **Document Versioning & Conflict Detection:** Deliberately scoped out character-by-character cursors. Uses chunked edits, version history, and conflict banners. | Avoids complex synchronization bugs during high-stress sprint conditions. |
@@ -303,7 +303,7 @@ graph TD
 - **Real-Time Streaming:** Server-Sent Events (SSE) via `SseEmitter` with event broadcast on entity modifications and 20-second heartbeat polling fallback.
 
 ### 6.3 Technical Credibility & Impressive Points (For Landing Page)
-1. **Rule 13 Zero Client Keys Architecture:** Unlike typical AI wrappers that demand users paste private API keys into browser local storage, Hackathon OS routes all inference through an isolated server-side gateway. No API keys ever leak to the browser.
+1. **Rule 13 Zero Client Keys Architecture:** Unlike typical AI wrappers that demand users paste private API keys into browser local storage, [brackit] routes all inference through an isolated server-side gateway. No API keys ever leak to the browser.
 2. **Deterministic Resiliency on Bad Venue Wi-Fi:** Built from day one for chaotic venue conditions: offline banner detection, `localStorage` doc/task snapshotting, SSE with exponential backoff reconnect, and zero-dependency ZIP room exports.
 3. **Optimistic Locking & Concurrency Protection:** Multi-user editing protected by entity versioning and conflict detection banners (`ConflictBanner`), preventing team members from silently overwriting each other's code or docs.
 4. **Sub-second Groq Llama-3.3-70B Pipeline:** Generates comprehensive multi-page PRDs, tech architecture reviews, and 38-task Kanban backlogs in seconds.
@@ -331,8 +331,8 @@ graph TD
 ## 8. Brand and Design Inputs
 
 ### 8.1 Name, Logo & Tagline `[Verified in code]`
-- **Brand Name:** `Hackathon OS` (`frontend/src/shared/constants/copy.ts:90`)
-- **Logo Representation:** Text logo `Hackathon OS` (`font-display` serif or `font-bold` UI) with single-letter monogram `H` in spinner loader.
+- **Brand Name:** `[brackit]` (`frontend/src/shared/constants/copy.ts:90`)
+- **Logo Representation:** Text logo `[brackit]` (`font-display` serif or `font-bold` UI) with single-letter monogram `H` in spinner loader.
 - **Tagline / Hero Hook Options (Derived from code/copy):**
   - *"An opinionated execution operating system and real-time team-room platform for hackathons."* (`README.md`)
   - *"Five ways teams lose: no demo running by the halfway point, scope larger than the clock, rubric never read, submission started last, no fallback if wifi fails."* (`frontend/src/shared/constants/copy.ts:22-44`)
@@ -409,17 +409,17 @@ graph TD
 ### 9.1 Candidate Value Propositions & Headline Angles
 1. **The Anti-Failure Angle (Direct & Empirical):**  
    *Headline:* Stop losing hackathons to bad sequencing.  
-   *Subhead:* Hackathon OS keeps your team focused on the clock, the rubric, and a working demo—from kickoff to the final pitch.
+   *Subhead:* [brackit] keeps your team focused on the clock, the rubric, and a working demo—from kickoff to the final pitch.
 2. **The "Jira is for Work, This is for Sprints" Angle:**  
    *Headline:* Not a ticket tracker. An execution system for 36-hour builds.  
-   *Subhead:* Jira tracks tasks for quarters. Hackathon OS enforces checkpoints, scopes your MVP, syncs your branches, and rehearses your pitch before time runs out.
+   *Subhead:* Jira tracks tasks for quarters. [brackit] enforces checkpoints, scopes your MVP, syncs your branches, and rehearses your pitch before time runs out.
 3. **The Judge-Centric Angle:**  
    *Headline:* Build the project judges actually reward.  
-   *Subhead:* Judges see 50 broken demos a day. Hackathon OS guarantees an end-to-end working flow, a rehearsed pitch, and clear proof of what you actually built this weekend.
+   *Subhead:* Judges see 50 broken demos a day. [brackit] guarantees an end-to-end working flow, a rehearsed pitch, and clear proof of what you actually built this weekend.
 
 ### 9.2 Key Differentiators vs. Alternatives
 
-| Alternative | What They Offer | Where They Fail in Hackathons | How Hackathon OS Wins |
+| Alternative | What They Offer | Where They Fail in Hackathons | How [brackit] Wins |
 |---|---|---|---|
 | **WhatsApp / Discord** | Free-form team chat | Context gets lost; no concept of time, scope, or checkpoints; silent blockers. | Structured room with real-time SSE updates, "I'm blocked" alerts, and automatic clock sync. |
 | **Jira / Linear / Trello** | General-purpose ticket tracking | Heavy setup overhead; no brief ingestion; no rubric awareness; ignores pitch and demo. | Zero setup; templates tailored to SIH/MLH/Devpost; built-in pitch kit, reality ledger, and demo freeze. |
@@ -443,16 +443,16 @@ graph TD
 
 ### 9.4 Likely Objections and Honest FAQs
 
-- **Q: Does Hackathon OS write all my code for me?**  
-  *A:* No. Hackathon OS is an execution operating system, not an autonomous coding agent. It scaffolds your PRD, defines your API contracts, creates your Mermaid architecture, generates your tasks, and structures your pitch. You write and own your code.
+- **Q: Does [brackit] write all my code for me?**  
+  *A:* No. [brackit] is an execution operating system, not an autonomous coding agent. It scaffolds your PRD, defines your API contracts, creates your Mermaid architecture, generates your tasks, and structures your pitch. You write and own your code.
 - **Q: Why should we use this instead of our existing Discord or WhatsApp group?**  
-  *A:* Keep your group chat for banter! Hackathon OS replaces the messy spreadsheets, unread rule PDFs, and scattered Notion docs with a single clock-aware command center that ensures your demo actually runs when judging starts.
+  *A:* Keep your group chat for banter! [brackit] replaces the messy spreadsheets, unread rule PDFs, and scattered Notion docs with a single clock-aware command center that ensures your demo actually runs when judging starts.
 - **Q: Do I have to pay or provide an OpenAI API key?**  
-  *A:* No. Hackathon OS is 100% free to use with 3 rooms per month. All AI generation is powered by a high-speed backend gateway with zero client-side keys required.
+  *A:* No. [brackit] is 100% free to use with 3 rooms per month. All AI generation is powered by a high-speed backend gateway with zero client-side keys required.
 - **Q: Does this submit my project to Devpost or Devfolio automatically?**  
-  *A:* No. External platforms require your personal account login. Hackathon OS prepares all required deliverables (links, write-up answers, video length checks, and repos) and provides a pre-flight checklist so you can submit without panic.
+  *A:* No. External platforms require your personal account login. [brackit] prepares all required deliverables (links, write-up answers, video length checks, and repos) and provides a pre-flight checklist so you can submit without panic.
 - **Q: What happens if the venue Wi-Fi dies?**  
-  *A:* Hackathon OS caches your active room, tasks, and documents locally in your browser. You can export your entire project state as a ZIP file at any time.
+  *A:* [brackit] caches your active room, tasks, and documents locally in your browser. You can export your entire project state as a ZIP file at any time.
 
 ### 9.5 Natural Calls to Action (CTAs)
 - Primary CTA: **"Start a room"** (routes directly to `/signin` → `/app/create-room`).
@@ -498,9 +498,9 @@ graph TD
 
 1. **Target Audience Priority:** Should the marketing copy speak primarily to collegiate participants (SIH / MLH), or should corporate innovation and AI hackathon participants be given equal prominence on the homepage?
 2. **Pricing & Launch Timing:** When paid plans go live, will the pricing remain $0 / $9 / $19 as specified in `plans.json`, or will there be team-based billing (e.g., $15 per room per event)?
-3. **Custom Domain & Deployment:** What will be the public production domain for Hackathon OS, and will self-hosting (via Docker Compose) be advertised as an option for privacy-conscious enterprise hackathons?
+3. **Custom Domain & Deployment:** What will be the public production domain for [brackit], and will self-hosting (via Docker Compose) be advertised as an option for privacy-conscious enterprise hackathons?
 4. **Tone Preference:** Should the landing page adopt the blunt, battle-tested coach voice of `docs/problem.md` ("Stop losing hackathons to bad sequencing"), or a more neutral productivity tone?
-5. **Brand Collateral:** Does Hackathon OS have an official standalone logo/mark beyond the Instrument Serif wordmark and "H" monogram?
+5. **Brand Collateral:** Does [brackit] have an official standalone logo/mark beyond the Instrument Serif wordmark and "H" monogram?
 
 ---
 

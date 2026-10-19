@@ -34,7 +34,7 @@ const OUT = `${SWAP} group-data-ask:pointer-events-none group-data-ask:-translat
 const IN = `pointer-events-none translate-x-2 rtl:-translate-x-2 opacity-0 blur-[2px] delay-100 ${SWAP} group-data-ask:pointer-events-auto group-data-ask:translate-x-0 group-data-ask:opacity-100 group-data-ask:blur-none group-data-sent:pointer-events-none group-data-sent:-translate-x-2 rtl:group-data-sent:translate-x-2 group-data-sent:opacity-0 group-data-sent:blur-[2px] group-data-sent:delay-0`;
 const SENT = `pointer-events-none translate-x-2 rtl:-translate-x-2 opacity-0 blur-[2px] delay-100 ${SWAP} group-data-sent:translate-x-0 group-data-sent:opacity-100 group-data-sent:blur-none`;
 
-const SOURCES = ['groq.com', 'hackathon-os', 'wikipedia.org'];
+const SOURCES = ['groq.com', 'brackit', 'wikipedia.org'];
 
 const STAGES = {
   understanding: { label: 'Understanding document context…', orb: 'S3' },

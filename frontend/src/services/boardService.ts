@@ -155,7 +155,7 @@ export const boardService = {
         version: version ?? null,
       }),
     });
-    return mapBackendTaskToFrontend(res.movedTask || res, roomId);
+    return mapBackendTaskToFrontend(res.task || res.movedTask || res, roomId);
   },
 
   async flagTask(roomId: string, taskId: string, flagged: boolean, blockedReason?: string): Promise<Task> {

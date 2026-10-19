@@ -1,4 +1,4 @@
-# Hackathon OS — Security Architecture & Guidelines
+# [brackit] — Security Architecture & Guidelines
 
 ## 1. Authentication & Session Management
 

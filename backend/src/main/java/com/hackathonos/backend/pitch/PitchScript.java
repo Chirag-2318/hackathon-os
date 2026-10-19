@@ -49,6 +49,19 @@ public class PitchScript {
     @Column(name = "generated_at", nullable = false)
     private Instant generatedAt = Instant.now();
 
+    @Column(name = "source", length = 20)
+    private String source = "GENERATED";
+
+    @Column(name = "doc_version")
+    private Integer docVersion = 1;
+
+    @Version
+    @Column(nullable = false)
+    private long version = 0L;
+
+    @Column(name = "last_edited_by")
+    private UUID lastEditedBy;
+
     public PitchScript() {}
 
     public UUID getRoomId() { return roomId; }
@@ -83,4 +96,16 @@ public class PitchScript {
 
     public Instant getGeneratedAt() { return generatedAt; }
     public void setGeneratedAt(Instant generatedAt) { this.generatedAt = generatedAt; }
+
+    public String getSource() { return source != null ? source : "GENERATED"; }
+    public void setSource(String source) { this.source = source; }
+
+    public Integer getDocVersion() { return docVersion != null ? docVersion : 1; }
+    public void setDocVersion(Integer docVersion) { this.docVersion = docVersion; }
+
+    public long getVersion() { return version; }
+    public void setVersion(long version) { this.version = version; }
+
+    public UUID getLastEditedBy() { return lastEditedBy; }
+    public void setLastEditedBy(UUID lastEditedBy) { this.lastEditedBy = lastEditedBy; }
 }

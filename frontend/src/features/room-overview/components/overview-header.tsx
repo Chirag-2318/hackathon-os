@@ -57,31 +57,6 @@ export function OverviewHeader({
 
   return (
     <div className="space-y-4">
-      {/* 1. Build Phase Live Banner */}
-      {showBanner && (
-        <div className="flex items-center justify-between px-4 py-2.5 rounded-[10px] border border-emerald-500/20 bg-emerald-500/[0.08] text-xs text-foreground">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Check className="size-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="font-normal">
-              Build is live. {totalPhasesCount} phases planned. Next: generate tasks for {firstPhaseKey}.
-            </span>
-            <Link
-              to={`/app/room/${roomId}/board`}
-              className="font-medium underline hover:opacity-80 text-foreground ml-1"
-            >
-              Go to Board &rarr;
-            </Link>
-          </div>
-          <button
-            type="button"
-            onClick={handleDismissBanner}
-            aria-label="Dismiss banner"
-            className="text-muted-foreground hover:text-foreground cursor-pointer p-1"
-          >
-            <X className="size-3.5" />
-          </button>
-        </div>
-      )}
 
       {/* 2. Header Row */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">

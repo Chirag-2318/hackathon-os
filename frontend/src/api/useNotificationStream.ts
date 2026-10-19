@@ -56,6 +56,21 @@ export function useNotificationStream() {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
     });
 
+    es.addEventListener('user', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.topic === 'rooms') {
+          queryClient.invalidateQueries({ queryKey: ['home'] });
+          queryClient.invalidateQueries({ queryKey: ['rooms'] });
+          queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
+        } else {
+          queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        }
+      } catch {
+        queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      }
+    });
+
     es.onmessage = () => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
     };

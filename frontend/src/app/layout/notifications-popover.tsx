@@ -52,7 +52,7 @@ export function NotificationsPopover({ currentRoomId, roomList = [] }: Notificat
   const localUnreadCount = allNotifications.filter((n) => !n.read).length;
   const unreadCount = Math.max(unreadCountServer, localUnreadCount);
 
-  // Sync tab title: e.g. "(3) Hackathon OS"
+  // Sync tab title: e.g. "(3) [brackit]"
   useSyncTabTitleUnread(unreadCount);
 
   const prevCount = useRef(unreadCount);

@@ -5,8 +5,9 @@ import { apiFetch, fetchDemo, fetchRehearse, fetchQa } from '@/api/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { ChevronDown, AlertCircle, RefreshCw, Mic, Play, Square, SkipForward, Sparkles, Check, Flame, WifiOff, Database, Camera, Video, Laptop, Radio } from 'lucide-react';
-import { AiGate, useAiAction } from '@/features/ai-gate';
+import { ChevronDown, AlertCircle, RefreshCw, Mic, Play, Square, SkipForward, Check, WifiOff, Database, Camera, Video, Laptop, Radio } from 'lucide-react';
+import { PitchDocPanel } from './components/pitch-doc-panel';
+import { QnaDocPanel } from './components/qna-doc-panel';
 
 /* ── Helpers ── */
 function fmt(s: number) { return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; }
@@ -214,228 +215,7 @@ function DemoPanel({ roomId, demo }: { roomId: string; demo: any }) {
   );
 }
 
-/* ── PITCH PANEL ── */
-function PitchPanel({ roomId, rehearse, meta }: { roomId: string; rehearse: any; meta: any }) {
-  const [script, setScript] = useState<any>(null);
-  const [loadingScript, setLoadingScript] = useState(true);
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
-  const [rehearsalOpen, setRehearsalOpen] = useState(false);
-  const [genError, setGenError] = useState<string | null>(null);
 
-  // Wizard state
-  const [pitchType, setPitchType] = useState<string>('live_3min');
-  const [speakerCount, setSpeakerCount] = useState(1);
-  const [instructions, setInstructions] = useState('');
-
-  const runs: any[] = rehearse?.runs ?? [];
-  const targetSec: number = rehearse?.targetSeconds ?? 180;
-  const lastRun = runs[runs.length - 1];
-  const rehearsalCount = runs.length;
-  const aiEnabled = meta?.aiEnabled !== false;
-
-  useEffect(() => {
-    apiFetch<any>(`/api/v1/rooms/${roomId}/pitch/script`).then(s => {
-      setScript(s);
-      setLoadingScript(false);
-    }).catch(() => setLoadingScript(false));
-  }, [roomId]);
-
-  const { handleAiError } = useAiAction();
-
-  const handleGenerate = async () => {
-    if (!aiEnabled) return;
-    setGenerating(true); setGenError(null);
-    try {
-      const s = await apiFetch<any>(`/api/v1/rooms/${roomId}/pitch/generate`, {
-        method: 'POST',
-        body: JSON.stringify({ type: pitchType, speakerCount, instructions }),
-      });
-      setScript(s); setWizardOpen(false);
-    } catch (e: any) {
-      handleAiError(e);
-      const code = e?.code ?? '';
-      setGenError(
-        code === 'AI_NOT_CONFIGURED' ? 'AI is not configured on the server.' :
-        code === 'AI_RATE_LIMIT'     ? 'AI rate limit reached. Try again in a moment.' :
-                                       'Could not generate script. Please try again.',
-      );
-    } finally { setGenerating(false); }
-  };
-
-  if (loadingScript) return <div className="p-6"><Skeleton className="h-40 w-full" /></div>;
-
-  /* ── No script: wizard ── */
-  if (!script || wizardOpen) {
-    const pitchTypes = [
-      { id: 'live_3min', label: 'Live pitch', dur: '3 min' },
-      { id: 'demo_90s', label: 'Demo pitch', dur: '90 sec' },
-      { id: 'ppt_first', label: 'Screening deck', dur: '5 min' },
-      { id: 'async_video', label: 'Video pitch', dur: '2 min' },
-    ];
-    const chips = ['Keep it non-technical', 'Lead with the problem', 'Stress the impact numbers', 'Mention the sponsor API', 'Make it a little funny'];
-
-    return (
-      <div className="p-4 space-y-5">
-        <div className="stage-card stage-card-light p-5 space-y-5">
-          <h3 className="font-semibold text-base">Build your pitch</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {pitchTypes.map(t => (
-              <button key={t.id} id={`pitch-type-${t.id}`} type="button"
-                onClick={() => setPitchType(t.id)}
-                className={cn('p-3 rounded-xl border-2 text-left transition-colors', pitchType === t.id ? 'border-[#FF7A1A]' : 'border-slate-200')}>
-                <p className="font-semibold text-sm">{t.label}</p>
-                <p className="text-xs" style={{ color: '#9C9AA3' }}>{t.dur}</p>
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-semibold">Speakers:</span>
-            {[1,2,3,4,5,6].map(n => (
-              <button key={n} type="button" id={`speaker-count-${n}`}
-                onClick={() => setSpeakerCount(n)}
-                className={cn('w-7 h-7 rounded-full text-xs font-bold transition-colors', speakerCount === n ? 'text-white' : 'border border-slate-200')}
-                style={{ background: speakerCount === n ? '#FF7A1A' : 'transparent' }}>
-                {n}
-              </button>
-            ))}
-          </div>
-          <div className="space-y-2">
-            <textarea
-              id="pitch-instructions"
-              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none"
-              rows={2}
-              placeholder="Anything specific for this pitch?"
-              value={instructions}
-              onChange={e => setInstructions(e.target.value.slice(0, 600))}
-            />
-            <div className="flex flex-wrap gap-1.5">
-              {chips.map(c => (
-                <button key={c} type="button" onClick={() => setInstructions(s => (s ? s + ' ' + c : c).slice(0, 600))}
-                  className="text-[10px] px-2 py-0.5 rounded-full border border-slate-200 hover:bg-slate-50 transition-colors">
-                  {c}
-                </button>
-              ))}
-            </div>
-          </div>
-          {genError && <p className="text-xs rounded-lg px-3 py-2" style={{ background: '#fef2f2', color: '#dc2626' }}>{genError}</p>}
-          <AiGate>
-            <button id="generate-pitch-btn" type="button" onClick={handleGenerate} disabled={generating || !aiEnabled}
-              className="stage-pill stage-pill-orange w-full justify-center disabled:opacity-50"
-              title={!aiEnabled ? 'AI is not configured on the server' : undefined}>
-              <Sparkles className="w-4 h-4" />
-              {generating ? 'Generating…' : 'Generate pitch'}
-            </button>
-          </AiGate>
-        </div>
-        {wizardOpen && script && (
-          <button type="button" onClick={() => setWizardOpen(false)} className="text-xs underline" style={{ color: '#737373' }}>
-            Cancel — keep current script
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  /* ── Script ready ── */
-  const slides: any[] = script.slides ?? [];
-  const totalSec: number = script.totalSeconds ?? slides.reduce((s: number, sl: any) => s + (sl.seconds ?? 30), 0);
-  const spkColors = ['#FF7A1A','#FF5C8A','#C9B8F4','#BFEBD3','#BFE3FF','#FFB81C'];
-
-  return (
-    <div className="p-4 space-y-4">
-      {/* Run of show */}
-      <div className="stage-card stage-card-dark p-4 space-y-3">
-        <p className="text-lg font-bold" style={{ color: '#FFB81C' }}>{script.hook ?? 'Hook'}</p>
-        <div className="flex gap-1 rounded-xl overflow-hidden h-8">
-          {slides.map((sl: any, i: number) => {
-            const w = ((sl.seconds ?? 30) / Math.max(1, totalSec)) * 100;
-            const c = spkColors[(sl.speakerIndex ?? 0) % 6];
-            const cardId = sl.id ? String(sl.id) : `slide-${i}`;
-            return (
-              <button key={cardId} type="button" onClick={() => setExpandedCardIds(prev => ({ ...prev, [cardId]: !prev[cardId] }))}
-                title={sl.headline} style={{ width: `${w}%`, background: c, minWidth: 4 }}
-                className="flex items-center justify-center text-[9px] text-white font-bold px-1 transition-opacity hover:opacity-80">
-                <span className="stage-num" style={{ width: 14, height: 14, fontSize: 7, background: '#FFF1D6', color: '#17171A' }}>{i+1}</span>
-              </button>
-            );
-          })}
-        </div>
-        <div className="flex items-center justify-between text-xs" style={{ color: '#9C9AA3' }}>
-          <span>0:00</span>
-          <span>{fmt(totalSec)}</span>
-        </div>
-      </div>
-
-      {/* Script cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
-        {slides.map((sl: any, i: number) => {
-          const cardId = sl.id ? String(sl.id) : `slide-${i}`;
-          const isExpanded = !!expandedCardIds[cardId];
-          const c = spkColors[(sl.speakerIndex ?? 0) % 6];
-          return (
-            <div key={cardId}
-              className={cn('stage-card stage-card-light p-4 space-y-2 cursor-pointer transition-all', isExpanded && 'ring-2')}
-              style={{ '--ring-color': c } as React.CSSProperties}
-              onClick={() => setExpandedCardIds(prev => ({ ...prev, [cardId]: !prev[cardId] }))}>
-              <div className="flex items-center gap-2">
-                <span className="stage-num">{i + 1}</span>
-                <span className="font-semibold text-sm flex-1 truncate">{sl.headline}</span>
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: c + '22', color: c }}>{sl.seconds ?? 30}s</span>
-              </div>
-              {isExpanded && (
-                <div className="space-y-2 pt-1">
-                  {['say','show','cue'].map(f => sl[f] && (
-                    <div key={f}>
-                      <p className="text-[9px] uppercase tracking-wider font-semibold mb-0.5" style={{ color: '#9C9AA3' }}>{f}</p>
-                      <p className="text-xs">{sl[f]}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Actions */}
-      <div className="flex flex-wrap gap-2">
-        <button type="button" id="copy-script-btn"
-          onClick={() => navigator.clipboard.writeText(slides.map((s: any, i: number) => `${i+1}. ${s.headline}\n${s.say ?? ''}`).join('\n\n'))}
-          className="stage-pill text-xs py-1.5 text-zinc-100 bg-white/5 border border-white/20 hover:bg-white/10 hover:border-white/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 transition-colors">Copy script</button>
-        <button type="button" id="download-script-btn"
-          onClick={() => {
-            const blob = new Blob([slides.map((s: any, i: number) => `# ${i+1}. ${s.headline}\n\n**Say:** ${s.say ?? ''}\n\n**Show:** ${s.show ?? ''}\n\n**Cue:** ${s.cue ?? ''}`).join('\n\n')], { type: 'text/markdown' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pitch-script.md'; a.click();
-          }}
-          className="stage-pill text-xs py-1.5 text-zinc-100 bg-white/5 border border-white/20 hover:bg-white/10 hover:border-white/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 transition-colors">Download .md</button>
-        <button type="button" id="regenerate-pitch-btn"
-          onClick={() => { if (confirm('Replace the current script?')) setWizardOpen(true); }}
-          className="stage-pill text-xs py-1.5 text-zinc-100 bg-white/5 border border-white/20 hover:bg-white/10 hover:border-white/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 transition-colors">Regenerate</button>
-      </div>
-
-      {/* Rehearsal sticky bar */}
-      <div className="flex items-center justify-between p-4 rounded-2xl" style={{ background: '#1A1A1D' }}>
-        <div>
-          <p className="text-xs" style={{ color: '#9C9AA3' }}>
-            Rehearsals {rehearsalCount}/3 {lastRun ? `· best ${fmt(lastRun.durationSec ?? lastRun.durationSeconds ?? 0)}` : ''}
-          </p>
-        </div>
-        <button id="start-rehearsal-btn" type="button"
-          onClick={() => setRehearsalOpen(true)}
-          className="stage-pill stage-pill-orange text-sm py-1.5">
-          <Play className="w-3 h-3" /> Start rehearsal
-        </button>
-      </div>
-
-      {/* Rehearsal stage overlay */}
-      {rehearsalOpen && (
-        <RehearsalStage roomId={roomId} slides={slides} targetSec={targetSec} onClose={() => setRehearsalOpen(false)} />
-      )}
-    </div>
-  );
-}
 
 /* ── REHEARSAL STAGE ── */
 function RehearsalStage({ roomId, slides, targetSec, onClose }: {
@@ -587,131 +367,7 @@ function RehearsalStage({ roomId, slides, targetSec, onClose }: {
   );
 }
 
-/* ── Q&A PANEL ── */
-function QaPanel({ roomId, qa, meta }: { roomId: string; qa: any; meta: any }) {
-  const questions: any[] = qa?.questions ?? qa?.items ?? [];
-  const [level, setLevel] = useState<'friendly'|'mixed'|'grill'>('mixed');
-  const [generating, setGenerating] = useState(false);
-  const [qList, setQList] = useState<any[]>(questions);
-  const [filter, setFilter] = useState<string | null>(null);
-  const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
-  const aiEnabled = meta?.aiEnabled !== false;
 
-  const cats = ['Product','Tech','Impact','Team','Risk'];
-  const { handleAiError } = useAiAction();
-
-  const handleGenerate = async () => {
-    if (!aiEnabled) return;
-    setGenerating(true);
-    try {
-      const res = await apiFetch<any[]>(`/api/v1/rooms/${roomId}/pitch/qa/generate`, {
-        method: 'POST', body: JSON.stringify({ level, count: 12 }),
-      });
-      setQList(Array.isArray(res) ? res : []);
-    } catch (err: any) {
-      handleAiError(err);
-    } finally { setGenerating(false); }
-  };
-
-  const displayed = filter ? qList.filter((q: any) => (q.category ?? '').toLowerCase() === filter.toLowerCase()) : qList;
-
-  if (qList.length === 0) {
-    return (
-      <div className="p-4 space-y-4">
-        <div className="stage-card stage-card-warm p-5 flex items-center gap-4">
-          <PaperPlane />
-          <div>
-            <p className="font-semibold text-sm">Judges will ask the hard questions. Get them first.</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold">Grill level:</span>
-          {(['friendly','mixed','grill'] as const).map(l => (
-            <button key={l} id={`grill-${l}`} type="button" onClick={() => setLevel(l)}
-              className={cn('px-3 py-1 text-xs rounded-full border transition-colors', level === l ? 'border-[#FF7A1A] bg-[#FF7A1A]/10 font-semibold' : 'border-slate-200')}>
-              {l.charAt(0).toUpperCase() + l.slice(1)}
-            </button>
-          ))}
-        </div>
-        <AiGate>
-          <button id="generate-qa-btn" type="button" onClick={handleGenerate} disabled={generating || !aiEnabled}
-            className="stage-pill stage-pill-orange w-full justify-center disabled:opacity-50"
-            title={!aiEnabled ? 'AI is not configured on the server' : undefined}>
-            <Sparkles className="w-4 h-4" />
-            {generating ? 'Generating Q&A…' : 'Generate Q&A'}
-          </button>
-        </AiGate>
-      </div>
-    );
-  }
-
-  return (
-    <div className="p-4 space-y-4">
-      <div className="flex flex-wrap gap-2 items-center">
-        <button type="button" onClick={() => setFilter(null)}
-          className={cn('text-xs px-2.5 py-1 rounded-full border transition-colors', !filter ? 'bg-[#FF7A1A] text-white border-transparent' : 'border-slate-200')}>
-          All <span className="stage-badge ml-1" style={{ background: !filter ? 'rgba(255,255,255,0.3)' : '#FF5C8A' }}>{qList.length}</span>
-        </button>
-        {cats.map(cat => {
-          const cnt = qList.filter((q: any) => (q.category ?? '').toLowerCase() === cat.toLowerCase()).length;
-          if (cnt === 0) return null;
-          return (
-            <button key={cat} type="button" onClick={() => setFilter(filter === cat ? null : cat)}
-              className={cn('text-xs px-2.5 py-1 rounded-full border transition-colors', filter === cat ? 'bg-[#FF7A1A] text-white border-transparent' : 'border-slate-200')}>
-              {cat} <span className="stage-badge ml-1">{cnt}</span>
-            </button>
-          );
-        })}
-        <button id="regenerate-qa-btn" type="button"
-          onClick={() => { if (confirm('Regenerate Q&A? Your own questions and practiced ones will be kept.')) handleGenerate(); }}
-          className="ml-auto text-xs text-slate-500 hover:text-slate-800 underline transition-colors">
-          Regenerate
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {displayed.map((q: any, i: number) => {
-          const revealed = revealedIds.has(q.id ?? i);
-          const diff = q.difficulty ?? 1;
-          return (
-            <div key={q.id ?? i} className="stage-card stage-card-light p-4 space-y-2">
-              <div className="flex items-start gap-2">
-                <span className="text-xs px-1.5 py-0.5 rounded font-semibold" style={{ background: '#f3f4f6', color: '#525252' }}>
-                  {q.category}
-                </span>
-                <span className="text-xs" title={`Difficulty ${diff}`}>{'🔥'.repeat(diff)}</span>
-                {q.source === 'MANUAL' && <span className="text-[10px] text-[#C9B8F4] font-semibold">Custom</span>}
-                {q.required && <span className="text-[10px] text-[#C9B8F4] font-semibold border border-[#C9B8F4] rounded px-1">Must prepare</span>}
-              </div>
-              <p className="text-sm font-semibold leading-snug">{q.question ?? q.text}</p>
-              {q.whyAsked && <p className="text-[11px]" style={{ color: '#9C9AA3' }}>{q.whyAsked}</p>}
-              {q.riskPoint && (
-                <div className="text-[11px] px-2 py-1 rounded" style={{ background: '#FEF1D6', color: '#92400e' }}>{q.riskPoint}</div>
-              )}
-              {!revealed ? (
-                <button id={`reveal-${i}`} type="button" onClick={() => setRevealedIds(s => new Set([...s, q.id ?? i]))}
-                  className="text-xs underline" style={{ color: '#FF7A1A' }}>Reveal answer</button>
-              ) : (
-                <p className="text-xs p-2 rounded-lg" style={{ background: '#f8f8f8' }}>{q.counterAnswer ?? q.answer}</p>
-              )}
-              <div className="flex gap-2">
-                <button id={`nailed-${i}`} type="button"
-                  onClick={() => apiFetch(`/api/v1/rooms/${roomId}/pitch/qa/${q.id}/practiced`, { method: 'POST', body: JSON.stringify({ practiced: true }) }).catch(() => {})}
-                  className="text-[10px] px-2 py-0.5 rounded-full border border-slate-200 hover:bg-green-50 transition-colors">
-                  Nailed it ✓
-                </button>
-                <button type="button"
-                  className="text-[10px] px-2 py-0.5 rounded-full border border-slate-200 hover:bg-red-50 transition-colors">
-                  Needs work
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 /* ── MAIN PAGE ── */
 export function PitchKitPage() {
@@ -724,6 +380,9 @@ export function PitchKitPage() {
   const [meta, setMeta] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [rehearsalOpen, setRehearsalOpen] = useState(false);
+  const [rehearsalSlides, setRehearsalSlides] = useState<any[]>([]);
+  const [rehearsalTargetSec, setRehearsalTargetSec] = useState<number>(180);
 
   const openParam = searchParams.get('open') ?? '';
   const [openPanels, setOpenPanels] = useState<Set<string>>(() => {
@@ -820,13 +479,24 @@ export function PitchKitPage() {
             id: 'pitch', title: 'Pitch', artN: 2, artColor: '#C9B8F4',
             status: rehearsalCount === 0 ? 'No rehearsals yet' : `${rehearsalCount} of 3 rehearsals`,
             badge: rehearsalCount, pct: pitchPct,
-            content: roomId && <PitchPanel roomId={roomId} rehearse={rehearse} meta={meta} />,
+            content: roomId && (
+              <PitchDocPanel
+                roomId={roomId}
+                rehearse={rehearse}
+                meta={meta}
+                onStartRehearsal={(slides, target) => {
+                  setRehearsalSlides(slides);
+                  setRehearsalTargetSec(target);
+                  setRehearsalOpen(true);
+                }}
+              />
+            ),
           },
           {
             id: 'qa', title: 'Q&A', artN: 3, artColor: '#FF5C8A',
             status: qQuestions.length === 0 ? 'No questions yet' : `${practicedCount} of ${qQuestions.length} practiced`,
             badge: practicedCount, pct: qaPct,
-            content: roomId && <QaPanel roomId={roomId} qa={qa} meta={meta} />,
+            content: roomId && <QnaDocPanel roomId={roomId} meta={meta} />,
           },
         ].map((panel, idx) => {
           const open = openPanels.has(panel.id);
@@ -851,6 +521,14 @@ export function PitchKitPage() {
             </div>
           );
         })}
+        {rehearsalOpen && roomId && (
+          <RehearsalStage
+            roomId={roomId}
+            slides={rehearsalSlides}
+            targetSec={rehearsalTargetSec}
+            onClose={() => setRehearsalOpen(false)}
+          />
+        )}
       </div>
     </div>
   );

@@ -23,7 +23,7 @@ Q: How do you handle authentication?
 A: OAuth2 session-based auth with HttpOnly cookies and no local storage tokens.
 
 Q: Why not use an existing project management tool like Jira?
-A: Jira has excessive configuration overhead; Hackathon OS generates the whole plan in under two minutes.
+A: Jira has excessive configuration overhead; [brackit] generates the whole plan in under two minutes.
 
 Q: How are task priorities determined?
 A: Tasks with downstream blockers are prioritized as HIGH automatically.

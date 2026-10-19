@@ -84,10 +84,19 @@ public class PhaseController {
     public PhaseTaskImportSummaryDto validateAndImportTasks(
             @PathVariable UUID roomId,
             @PathVariable String phaseKey,
-            @RequestParam("files") MultipartFile[] files,
+            @RequestParam(value = "files", required = false) MultipartFile[] files,
+            @RequestParam(value = "files[]", required = false) MultipartFile[] filesBracket,
+            @RequestParam(value = "file", required = false) MultipartFile file,
             @RequestParam(name = "mode", defaultValue = "FRESH") String mode,
             @RequestParam(name = "confirmRegenerate", defaultValue = "false") boolean confirmRegenerate) {
-        return phaseService.validateAndImportTasks(roomId, phaseKey, files, mode, confirmRegenerate, currentUser.get());
+        MultipartFile[] effectiveFiles = files;
+        if ((effectiveFiles == null || effectiveFiles.length == 0) && filesBracket != null && filesBracket.length > 0) {
+            effectiveFiles = filesBracket;
+        }
+        if ((effectiveFiles == null || effectiveFiles.length == 0) && file != null) {
+            effectiveFiles = new MultipartFile[]{file};
+        }
+        return phaseService.validateAndImportTasks(roomId, phaseKey, effectiveFiles, mode, confirmRegenerate, currentUser.get());
     }
 
     @PostMapping("/phases/{phaseKey}/tasks/generate")

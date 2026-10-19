@@ -151,7 +151,7 @@ public class SafeHttpClient {
         conn.setConnectTimeout(timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS);
         conn.setReadTimeout(timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS);
         conn.setInstanceFollowRedirects(false);
-        conn.setRequestProperty("User-Agent", "HackathonOS-SafeFetcher/1.0");
+        conn.setRequestProperty("User-Agent", "brackit-SafeFetcher/1.0");
 
         int code = conn.getResponseCode();
 

@@ -10,5 +10,18 @@ public record SaveBriefRequest(
         String rawText,
         BriefFieldsDto fields,
         Map<String, Boolean> confirmedFields,
-        List<String> risks
-) {}
+        List<String> risks,
+        Long version
+) {
+    public SaveBriefRequest(
+            String source,
+            String sourceUrl,
+            String fileName,
+            String rawText,
+            BriefFieldsDto fields,
+            Map<String, Boolean> confirmedFields,
+            List<String> risks
+    ) {
+        this(source, sourceUrl, fileName, rawText, fields, confirmedFields, risks, null);
+    }
+}

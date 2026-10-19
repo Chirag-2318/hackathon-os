@@ -102,16 +102,16 @@ export function NotConnectedView({ roomId, onConnect }: NotConnectedViewProps) {
 
       if (code === 'REPO_NOT_FOUND' || err?.status === 404) {
         code = 'REPO_NOT_FOUND';
-        message = 'We cannot find that repository. Check the spelling. If it is private, connect your GitHub account with private access.';
-      } else if (code === 'GITHUB_TOKEN_INVALID' || (err?.status === 401 && code !== 'UNAUTHORIZED')) {
-        code = 'GITHUB_TOKEN_INVALID';
-        message = "The server's GitHub token is invalid. Check APP_GITHUB_TOKEN in .env.";
+        message = 'Repository not found, or it is private. Allow private repositories in Settings, Integrations.';
+      } else if (code === 'GITHUB_UNAUTHENTICATED' || code === 'GITHUB_TOKEN_INVALID' || err?.status === 401) {
+        code = 'GITHUB_UNAUTHENTICATED';
+        message = 'Reconnect GitHub';
       } else if (code === 'GITHUB_RATE_LIMIT' || err?.status === 429) {
         code = 'GITHUB_RATE_LIMIT';
-        message = err?.message || 'GitHub API rate limit reached. Please wait and try again.';
+        message = err?.message || 'GitHub API rate limit exceeded.';
       } else if (code === 'GITHUB_FORBIDDEN' || err?.status === 403) {
         code = 'GITHUB_FORBIDDEN';
-        message = 'GitHub access forbidden. Check permissions for this repository.';
+        message = err?.message || 'GitHub access forbidden. Check permissions for this repository.';
       }
       setErrorInfo({ code, message });
     } finally {

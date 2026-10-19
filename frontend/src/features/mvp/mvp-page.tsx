@@ -83,7 +83,7 @@ export function MvpPage() {
   const { done: healthChecksPassed, total: totalChecks, allPassed: allChecksPassed } = computeMvpHealth(state.health);
 
   return (
-    <div className="flex flex-col gap-4 p-5 max-w-7xl mx-auto">
+    <div className="flex flex-col gap-4 p-5 max-w-7xl mx-auto w-full min-h-full flex-1 bg-page">
       {/* 1. Header: title + chip "3 of 4 checks" */}
       <div className="flex items-center justify-between h-12 shrink-0">
         <div className="flex items-center gap-3">

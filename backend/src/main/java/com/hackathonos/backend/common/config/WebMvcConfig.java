@@ -27,17 +27,21 @@ public class WebMvcConfig implements WebMvcConfigurer {
     private final CurrentUser currentUser;
     private final AppProperties appProperties;
     private final com.hackathonos.backend.common.security.RateLimitInterceptor rateLimitInterceptor;
+    private final com.hackathonos.backend.events.RoomChangeInterceptor roomChangeInterceptor;
 
     public WebMvcConfig(CurrentUser currentUser, AppProperties appProperties,
-                        com.hackathonos.backend.common.security.RateLimitInterceptor rateLimitInterceptor) {
+                        com.hackathonos.backend.common.security.RateLimitInterceptor rateLimitInterceptor,
+                        com.hackathonos.backend.events.RoomChangeInterceptor roomChangeInterceptor) {
         this.currentUser = currentUser;
         this.appProperties = appProperties;
         this.rateLimitInterceptor = rateLimitInterceptor;
+        this.roomChangeInterceptor = roomChangeInterceptor;
     }
 
     @Override
     public void addInterceptors(org.springframework.web.servlet.config.annotation.InterceptorRegistry registry) {
         registry.addInterceptor(rateLimitInterceptor);
+        registry.addInterceptor(roomChangeInterceptor).addPathPatterns("/api/v1/**");
     }
 
     @Override

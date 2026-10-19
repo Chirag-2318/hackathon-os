@@ -32,6 +32,9 @@ public class RoomStageService {
     private final com.hackathonos.backend.events.RoomEventService roomEventService;
     private final com.hackathonos.backend.billing.BillingService billingService;
     private final com.hackathonos.backend.plan.PlanPhaseRepository phaseRepository;
+    private final com.hackathonos.backend.docs.DocRepository docRepository;
+    private final com.hackathonos.backend.docs.DocVersionRepository docVersionRepository;
+    private final com.hackathonos.backend.plan.PlanDownstreamSyncService planDownstreamSyncService;
 
     public RoomStageService(
             BriefRepository briefRepository,
@@ -44,7 +47,13 @@ public class RoomStageService {
             @org.springframework.beans.factory.annotation.Autowired(required = false)
             com.hackathonos.backend.billing.BillingService billingService,
             @org.springframework.beans.factory.annotation.Autowired(required = false)
-            com.hackathonos.backend.plan.PlanPhaseRepository phaseRepository) {
+            com.hackathonos.backend.plan.PlanPhaseRepository phaseRepository,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            com.hackathonos.backend.docs.DocRepository docRepository,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            com.hackathonos.backend.docs.DocVersionRepository docVersionRepository,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            com.hackathonos.backend.plan.PlanDownstreamSyncService planDownstreamSyncService) {
         this.briefRepository = briefRepository;
         this.ideaRepository = ideaRepository;
         this.stepRepository = stepRepository;
@@ -54,6 +63,9 @@ public class RoomStageService {
         this.roomEventService = roomEventService;
         this.billingService = billingService;
         this.phaseRepository = phaseRepository;
+        this.docRepository = docRepository;
+        this.docVersionRepository = docVersionRepository;
+        this.planDownstreamSyncService = planDownstreamSyncService;
     }
 
     /**
@@ -98,8 +110,15 @@ public class RoomStageService {
             throw new BadRequestException("STAGE_LOCKED", "Plan must be validated before moving to BUILD");
         }
 
-        room.setWorkflowStage(normalizedTarget);
         if ("BUILD".equals(normalizedTarget)) {
+            if (docRepository != null && docVersionRepository != null && planDownstreamSyncService != null) {
+                docRepository.findByRoomIdAndFileName(room.getId(), "PHASES.md").ifPresent(doc -> {
+                    docVersionRepository.findByDocIdAndVersion(doc.getId(), doc.getCurrentVersion()).ifPresent(ver -> {
+                        planDownstreamSyncService.syncPhasesFromMarkdown(room, ver.getContent());
+                    });
+                });
+            }
+            room.setWorkflowStage(normalizedTarget);
             room.setStage("build");
             if (room.getBuildStartedAt() == null) {
                 room.setBuildStartedAt(Instant.now());

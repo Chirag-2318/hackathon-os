@@ -19,11 +19,13 @@ import { useMutation } from '@tanstack/react-query';
 import { COPY } from '@/shared/constants/copy';
 import { WifiOff, ServerCrash, ShieldOff, SearchX, Wrench } from 'lucide-react';
 import { cn } from 'cn';
+import { BracketMark } from '@/features/landing/components/bracket-mark';
 
 // ── Shared wrapper ───────────────────────────────────────────────
 
 interface SystemStatePageProps {
-  icon: ReactNode;
+  icon?: ReactNode;
+  mark?: ReactNode;
   headline: string;
   guidance?: string;
   children?: ReactNode;
@@ -31,7 +33,7 @@ interface SystemStatePageProps {
   testId: string;
 }
 
-function SystemStatePage({ icon, headline, guidance, children, testId }: SystemStatePageProps) {
+function SystemStatePage({ icon, mark, headline, guidance, children, testId }: SystemStatePageProps) {
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center bg-canvas px-6 py-12"
@@ -50,9 +52,13 @@ function SystemStatePage({ icon, headline, guidance, children, testId }: SystemS
         className="flex flex-col items-center text-center max-w-sm gap-4"
         style={{ animation: 'fadeIn 160ms ease-out both' }}
       >
-        <div className="flex h-[120px] w-[120px] items-center justify-center rounded-full bg-surface-raised shadow-e1 text-ink-muted [&_svg]:size-12">
-          {icon}
-        </div>
+        {icon && (
+          <div className="flex h-[120px] w-[120px] items-center justify-center rounded-full bg-surface-raised shadow-e1 text-ink-muted [&_svg]:size-12">
+            {icon}
+          </div>
+        )}
+
+        {mark}
 
         <h1 className="text-h3 text-ink">{headline}</h1>
 
@@ -75,15 +81,20 @@ export function NotFoundPage() {
   return (
     <SystemStatePage
       testId="page-404"
-      icon={<SearchX />}
-      headline={COPY.system.notFoundTitle}
+      mark={
+        <div className="flex justify-center text-ink mb-4">
+          <BracketMark size={48} />
+        </div>
+      }
+      headline="This page missed the deadline."
+      guidance="Go back to the room."
     >
       <Button
         id="page-404-action-btn"
         onClick={() => navigate('/app')}
         className="mt-2"
       >
-        {COPY.system.notFoundAction}
+        Back to [brackit]
       </Button>
     </SystemStatePage>
   );
@@ -189,8 +200,12 @@ export function ServerErrorPage() {
   return (
     <SystemStatePage
       testId="page-500"
-      icon={<ServerCrash />}
-      headline={COPY.system.serverErrorTitle}
+      mark={
+        <div className="flex justify-center text-ink mb-4">
+          <BracketMark size={48} />
+        </div>
+      }
+      headline="Something broke. The clock didn’t."
     >
       <Button
         id="page-500-action-btn"
@@ -235,8 +250,13 @@ export function MaintenancePage() {
   return (
     <SystemStatePage
       testId="page-maintenance"
-      icon={<Wrench />}
-      headline={COPY.system.maintenanceTitle}
+      mark={
+        <div className="flex justify-center text-ink mb-4">
+          <BracketMark size={48} />
+        </div>
+      }
+      headline="Back shortly."
+      guidance="We are making a change."
     >
       <Button
         id="page-maintenance-action-btn"

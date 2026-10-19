@@ -1,0 +1,15 @@
+export const WAITLIST_COPY = {
+  titles: { pro: 'Join the Pro waitlist', max: 'Join the Max waitlist' },
+  description: 'Pro and Max are not live yet. Tell us what you need.',
+  noteLabel: 'What do you need? (optional)',
+  notePlaceholder: 'For example: more rooms, a bigger team, a specific event',
+  submit: 'Join the waitlist',
+  sending: 'Sending…',
+  sentTitle: 'You’re on the list.',
+  sentLine: 'Your note is saved.',
+  signinLine: 'Sign in to join the waitlist.',
+  signinLabel: 'Sign in',
+  errorLine: 'Something went wrong. Try again.',
+  close: 'Close',
+  noteMax: 500,
+} as const;

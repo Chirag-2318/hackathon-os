@@ -38,7 +38,7 @@ export function ApiDetailPane({ selectedItem, onEdit, onDelete }: ApiDetailPaneP
 
   if (!selectedItem) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8 text-center bg-background">
+      <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8 text-center bg-page">
         <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4 text-muted-foreground">
           <Code2 className="h-6 w-6" />
         </div>
@@ -82,7 +82,7 @@ export function ApiDetailPane({ selectedItem, onEdit, onDelete }: ApiDetailPaneP
   if (selectedItem.type === 'external') {
     const ext = selectedItem.data;
     return (
-      <div className="flex-1 overflow-y-auto p-6 bg-background space-y-6">
+      <div className="flex-1 overflow-y-auto p-6 bg-page space-y-6">
         {/* Header */}
         <div className="flex items-start justify-between border-b border-border/60 pb-5">
           <div className="space-y-1.5 min-w-0">
@@ -204,7 +204,7 @@ export function ApiDetailPane({ selectedItem, onEdit, onDelete }: ApiDetailPaneP
   const currentRespCode = respCodes.includes(activeRespTab) ? activeRespTab : respCodes[0] || '200';
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 bg-background space-y-6">
+    <div className="flex-1 overflow-y-auto p-6 bg-page space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between border-b border-border/60 pb-5">
         <div className="space-y-2 min-w-0">

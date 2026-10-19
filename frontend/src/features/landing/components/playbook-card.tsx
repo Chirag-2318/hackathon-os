@@ -1,77 +1,93 @@
-/**
- * PlaybookCard — simplified C10a for S01 landing.
- * Source: PRD §3.1 item 6, Q8.
- *
- * Shows only: title, event-type tag (C07), team size, phases meta.
- * Omits progress ring, participants, and author rows (Q8).
- * Links to /playbooks (Phase 1b).
- * Title truncates at 2 lines with tooltip (D§9).
- */
 import { Link } from 'react-router-dom';
-import { cn } from 'cn';
-import { Card } from '@/components/ui/card';
-import { Chip } from '@/components/primitives/chip';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { playbookPath } from '@/shared/constants/routes';
-import { Users, Layers } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
+import type { CSSProperties } from 'react';
+import type { Playbook } from '../data/playbooks';
+import { PLAYBOOK_MAX_HOURS, PLAYBOOKS_COPY } from '../data/playbooks';
+import { useInViewOnce } from '../hooks/use-in-view-once';
+
+const SIZE = 44;
+const STROKE = 4;
+const RADIUS = (SIZE - STROKE) / 2;
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 interface PlaybookCardProps {
-  id: string;
-  slug: string;
-  title: string;
-  eventType: string;
-  teamSize: number | null;
-  phases: string;
-  className?: string;
+  playbook: Playbook;
+  index?: number;
 }
 
-export function PlaybookCard({
-  slug,
-  title,
-  eventType,
-  teamSize,
-  phases,
-  className,
-}: PlaybookCardProps) {
+export function PlaybookCard({ playbook, index = 0 }: PlaybookCardProps) {
+  const { ref, inView } = useInViewOnce<HTMLAnchorElement>();
+  const fraction = playbook.hours != null ? Math.min(1, playbook.hours / PLAYBOOK_MAX_HOURS) : 0;
+  const offset = CIRCUMFERENCE * (1 - fraction);
+  const widthPercent = playbook.hours != null ? `${Math.min(100, (playbook.hours / 36) * 100)}%` : '0%';
+
   return (
-    <Link to={playbookPath(slug)} className="block group">
-      <Card
-        data-slot="playbook-card"
-        className={cn(
-          'flex flex-col rounded-card bg-surface border border-border/50 p-5',
-          'transition-all hover:border-border-strong hover:shadow-e2 cursor-pointer',
-          className,
+    <Link
+      ref={ref}
+      to={PLAYBOOKS_COPY.browseAll.to}
+      className={`l-pb${inView ? ' is-in' : ''}`}
+      style={{ '--w': widthPercent, '--i': index } as CSSProperties}
+    >
+      <div className="l-pb__preview">
+        {playbook.hours != null ? (
+          <>
+            <div className="l-pb__track">
+              <span className="l-pb__ticks" aria-hidden="true" />
+              <span className="l-pb__bar" aria-hidden="true" />
+            </div>
+            <div className="l-pb__scale" aria-hidden="true">
+              <span>0h</span>
+              <span>18h</span>
+              <span>36h</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="l-pb__dashed" />
+            <div className="l-pb__dashedlabel">{playbook.meta}</div>
+          </>
         )}
-      >
-        {/* Top row: tag */}
-        <div className="flex items-start justify-end mb-3">
-          <Chip variant="soft">{eventType}</Chip>
+      </div>
+
+      <div className="l-pb__strip">
+        <div className="l-pb__info">
+          <h3 className="l-pb__title">{playbook.name}</h3>
+          <p className="l-pb__meta">{playbook.meta}</p>
         </div>
-
-        {/* Title — 2-line clamp with tooltip */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <h3 className="text-h3 text-ink line-clamp-2 mb-4 min-h-[48px]">
-              {title}
-            </h3>
-          </TooltipTrigger>
-          <TooltipContent>{title}</TooltipContent>
-        </Tooltip>
-
-        {/* Meta row */}
-        <div className="mt-auto flex items-center gap-4 text-caption text-ink-muted">
-          {teamSize !== null && (
-            <span className="inline-flex items-center gap-1.5">
-              <Users className="size-3.5" strokeWidth={1.5} />
-              {teamSize}
+        <div className="l-pb__right">
+          <span
+            className="l-pb-ring"
+            style={{ '--l-c': CIRCUMFERENCE, '--l-off': offset } as CSSProperties}
+            aria-hidden="true"
+          >
+            <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
+              <circle
+                cx={SIZE / 2}
+                cy={SIZE / 2}
+                r={RADIUS}
+                fill="none"
+                className="l-pb-ring-track"
+                strokeWidth={STROKE}
+              />
+              <circle
+                cx={SIZE / 2}
+                cy={SIZE / 2}
+                r={RADIUS}
+                fill="none"
+                className="l-pb-ring-progress"
+                strokeWidth={STROKE}
+                strokeLinecap="round"
+                strokeDasharray={CIRCUMFERENCE}
+                transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
+              />
+            </svg>
+            <span className="l-pb-ring-text">
+              {playbook.hours != null ? `${playbook.hours}h` : playbook.meta}
             </span>
-          )}
-          <span className="inline-flex items-center gap-1.5">
-            <Layers className="size-3.5" strokeWidth={1.5} />
-            {phases}
           </span>
+          <ArrowRight size={18} className="l-pb__arrow" aria-hidden="true" />
         </div>
-      </Card>
+      </div>
     </Link>
   );
 }

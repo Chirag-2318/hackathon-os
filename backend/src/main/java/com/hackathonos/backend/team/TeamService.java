@@ -93,7 +93,7 @@ public class TeamService {
             List<Task> userTasks = tasksByUser.getOrDefault(m.getUserId(), Collections.emptyList());
 
             MemberStatusCalculator.MemberStatusResult statusResult =
-                    statusCalculator.calculate(m.getUserId(), m.getLastSeenAt(), userTasks);
+                    statusCalculator.calculate(m.getRoomId(), m.getUserId(), m.getLastSeenAt(), userTasks);
 
             long doneCount = 0, openCount = 0;
             for (Task t : userTasks) {

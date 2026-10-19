@@ -229,7 +229,10 @@ public class PlanValidationService {
             if (dotIdx > 0) {
                 boolean validExt = lower.endsWith(".md") || lower.endsWith(".markdown") || lower.endsWith(".mdx")
                         || lower.endsWith(".txt") || lower.endsWith(".md.txt");
-                if (!validExt) {
+                boolean codeOrDocExt = validExt || lower.endsWith(".json") || lower.endsWith(".html") || lower.endsWith(".htm")
+                        || lower.endsWith(".js") || lower.endsWith(".ts") || lower.endsWith(".jsx") || lower.endsWith(".tsx")
+                        || lower.endsWith(".java") || lower.endsWith(".py") || lower.endsWith(".go") || lower.endsWith(".rs");
+                if (!codeOrDocExt) {
                     throw new BadRequestException("INVALID_FILE_TYPE", "File " + name + " must be .md, .markdown, .mdx, or .txt");
                 }
             }
@@ -384,6 +387,14 @@ public class PlanValidationService {
 
         List<ValidationIssueDto> issues = new ArrayList<>();
 
+        // Sanity gates for plan steps 1, 2, 3, 5
+        if (checkNotADocument(rawContent, issues)) {
+            return buildEarlyFailureResponse(stepKey, issues, diagnostics);
+        }
+        if (checkLooksLikePrompt(rawContent, issues)) {
+            return buildEarlyFailureResponse(stepKey, issues, diagnostics);
+        }
+
         // a) Normalise
         String normalized = normalizeInput(rawContent);
         if (normalized.trim().startsWith("[")) {
@@ -397,6 +408,13 @@ public class PlanValidationService {
         if (parsedDocs.isEmpty()) {
             parsedDocs = splitByH1Fallback(stepKey, normalized);
         }
+
+        if (checkWrongStep(stepKey, stepNumber, parsedDocs, rawContent, issues)) {
+            return buildEarlyFailureResponse(stepKey, issues, diagnostics);
+        }
+
+        // Check unrelated content (BLOCK on step 1, WARN on other steps)
+        checkUnrelatedContent(stepNumber, room, rawContent, issues);
 
         List<String> expectedFiles = STEP_EXPECTED_FILES.getOrDefault(stepKey, Collections.emptyList());
 
@@ -417,27 +435,33 @@ public class PlanValidationService {
 
         List<String> foundNames = new ArrayList<>(canonicalDocs.keySet());
 
-        // e) File presence: BLOCK only when expected document absent or under 300 characters
+        // e) Document length / presence: DOCUMENT_TOO_SHORT
         for (String exp : expectedFiles) {
             DocumentSnippet doc = canonicalDocs.get(exp);
+            int minLen = 300;
+            PlanDocumentParser.HeadingConfig cfg = headingConfigs.get(exp);
+            if (cfg != null && cfg.minLength() != null) {
+                minLen = cfg.getMinLength();
+            }
+
             if (doc == null) {
                 issues.add(new ValidationIssueDto(
                         "BLOCK",
-                        "MISSING_FILE",
+                        "DOCUMENT_TOO_SHORT",
                         exp,
                         1,
                         "Missing required document: " + exp + ". Documents found: " + (foundNames.isEmpty() ? "none" : String.join(", ", foundNames)),
-                        exp,
+                        exp + " (>= " + minLen + " characters)",
                         foundNames.isEmpty() ? "none" : String.join(", ", foundNames)
                 ));
-            } else if (doc.content().length() < 300) {
+            } else if (doc.content().length() < minLen) {
                 issues.add(new ValidationIssueDto(
                         "BLOCK",
-                        "FILE_TOO_SHORT",
+                        "DOCUMENT_TOO_SHORT",
                         exp,
                         1,
-                        exp + " is under 300 characters (" + doc.content().length() + " chars). Documents found: " + String.join(", ", foundNames),
-                        ">= 300 characters",
+                        exp + " is under minimum length (" + doc.content().length() + " chars, minimum " + minLen + ")",
+                        ">= " + minLen + " characters",
                         doc.content().length() + " characters"
                 ));
             }
@@ -447,7 +471,12 @@ public class PlanValidationService {
         List<ValidatedFileDto> validatedFiles = new ArrayList<>();
         for (String expFile : expectedFiles) {
             DocumentSnippet doc = canonicalDocs.get(expFile);
-            if (doc == null || doc.content().length() < 300) continue;
+            int minLen = 300;
+            PlanDocumentParser.HeadingConfig cfg = headingConfigs.get(expFile);
+            if (cfg != null && cfg.minLength() != null) {
+                minLen = cfg.getMinLength();
+            }
+            if (doc == null || doc.content().length() < minLen) continue;
 
             List<String> sectionsFound = validateSections(expFile, doc, issues);
             validatedFiles.add(new ValidatedFileDto(expFile, doc.content().length(), expFile, sectionsFound));
@@ -702,6 +731,8 @@ public class PlanValidationService {
         String code = issue.code();
         return "MISSING_FILE".equals(code)
                 || "FILE_TOO_SHORT".equals(code)
+                || "DOCUMENT_TOO_SHORT".equals(code)
+                || "STRUCTURE_MISMATCH".equals(code)
                 || "MISSING_CRITICAL_SECTION".equals(code)
                 || "NO_PRD_REQUIREMENTS".equals(code)
                 || "NO_CORE_FLOW".equals(code)
@@ -914,29 +945,46 @@ public class PlanValidationService {
             }
         }
 
+        int matchedCount = 0;
         for (String exp : expectedH2) {
             String normExp = normalizeHeading(exp);
             boolean isCritical = criticalH2.contains(normExp);
-            boolean matched = false;
+            HeadingOccurrence matchedOccurrence = null;
 
             for (HeadingOccurrence act : actualHeadings) {
                 String normAct = normalizeHeading(act.text);
                 if (matchesHeading(normExp, normAct)) {
-                    matched = true;
+                    matchedOccurrence = act;
                     break;
                 }
             }
 
-            if (!matched) {
+            if (matchedOccurrence != null) {
+                matchedCount++;
+                if (isCritical) {
+                    int bodyLen = extractSectionBodyLength(lines, matchedOccurrence.line);
+                    if (bodyLen < 80) {
+                        issues.add(new ValidationIssueDto(
+                                "BLOCK",
+                                "STRUCTURE_MISMATCH",
+                                fileName,
+                                matchedOccurrence.line,
+                                fileName + " critical section '" + exp + "' has under 80 characters of body (" + bodyLen + " chars)",
+                                ">= 80 characters of body",
+                                bodyLen + " characters"
+                        ));
+                    }
+                }
+            } else {
                 if (isCritical) {
                     issues.add(new ValidationIssueDto(
                             "BLOCK",
-                            "MISSING_CRITICAL_SECTION",
+                            "STRUCTURE_MISMATCH",
                             fileName,
                             1,
                             fileName + " is missing critical section: " + exp,
                             "## " + exp,
-                            null
+                            "missing"
                     ));
                 } else {
                     issues.add(new ValidationIssueDto(
@@ -946,13 +994,258 @@ public class PlanValidationService {
                             1,
                             fileName + " is missing recommended section: " + exp,
                             "## " + exp,
-                            null
+                            "missing"
                     ));
                 }
             }
         }
 
+        int totalExpected = expectedH2.size();
+        if (totalExpected > 0 && ((double) matchedCount / totalExpected) < 0.60) {
+            issues.add(new ValidationIssueDto(
+                    "BLOCK",
+                    "STRUCTURE_MISMATCH",
+                    fileName,
+                    1,
+                    fileName + " has fewer than 60% of expected sections (" + matchedCount + " of " + totalExpected + " found)",
+                    ">= 60% of expected H2 headings (" + (int) Math.ceil(totalExpected * 0.60) + " headings)",
+                    matchedCount + " headings"
+            ));
+        }
+
         return sectionsFound;
+    }
+
+    private int extractSectionBodyLength(String[] lines, int startLine) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = startLine; i < lines.length; i++) {
+            String l = lines[i].trim();
+            if (l.startsWith("## ") || l.startsWith("# ")) {
+                break;
+            }
+            if (!l.isBlank() && !l.startsWith("<!--")) {
+                sb.append(l).append("\n");
+            }
+        }
+        return sb.toString().trim().length();
+    }
+
+    private boolean checkNotADocument(String text, List<ValidationIssueDto> issues) {
+        if (text == null || text.isBlank()) return false;
+        String inspect = text.trim();
+        while (inspect.startsWith("=====") || inspect.startsWith("FILE:") || inspect.startsWith("#") && inspect.toLowerCase().contains("file:")) {
+            int nl = inspect.indexOf('\n');
+            if (nl > 0) {
+                inspect = inspect.substring(nl + 1).trim();
+            } else {
+                break;
+            }
+        }
+        if (inspect.startsWith("{") || inspect.startsWith("[")) {
+            issues.add(new ValidationIssueDto(
+                    "BLOCK",
+                    "NOT_A_DOCUMENT",
+                    null,
+                    1,
+                    "The uploaded file is a JSON document, not a markdown plan document.",
+                    "Markdown plan document",
+                    "JSON document"
+            ));
+            return true;
+        }
+        String lower = inspect.toLowerCase();
+        if (lower.startsWith("<!doctype") || lower.startsWith("<html")) {
+            issues.add(new ValidationIssueDto(
+                    "BLOCK",
+                    "NOT_A_DOCUMENT",
+                    null,
+                    1,
+                    "The uploaded file is an HTML document, not a markdown plan document.",
+                    "Markdown plan document",
+                    "HTML document"
+            ));
+            return true;
+        }
+
+        String[] lines = inspect.split("\n");
+        int totalNonBlank = 0;
+        int codeLines = 0;
+        Pattern codePattern = Pattern.compile("^\\s*(import\\s+|export\\s+|package\\s+|public\\s+|private\\s+|protected\\s+|class\\s+|interface\\s+|function\\s+|const\\s+|let\\s+|var\\s+|def\\s+|return\\s+|if\\s*\\(|for\\s*\\(|while\\s*\\(|switch\\s*\\(|try\\s*\\{|catch\\s*\\(|System\\.out|console\\.log|[{};]\\s*$)");
+        for (String l : lines) {
+            String tl = l.trim();
+            if (tl.isEmpty() || tl.startsWith("=====")) continue;
+            totalNonBlank++;
+            if (codePattern.matcher(tl).find() || tl.endsWith(";") || tl.equals("{") || tl.equals("}")) {
+                codeLines++;
+            }
+        }
+        if (totalNonBlank >= 5 && ((double) codeLines / totalNonBlank) > 0.60) {
+            issues.add(new ValidationIssueDto(
+                    "BLOCK",
+                    "NOT_A_DOCUMENT",
+                    null,
+                    1,
+                    "The uploaded file appears to be source code (" + (int)((codeLines * 100.0) / totalNonBlank) + "% code lines), not a markdown plan document.",
+                    "Markdown plan document",
+                    "Source code"
+            ));
+            return true;
+        }
+        return false;
+    }
+
+    private boolean checkLooksLikePrompt(String text, List<ValidationIssueDto> issues) {
+        if (text == null) return false;
+        boolean hasOutputDelivery = text.contains("OUTPUT DELIVERY");
+        int promptCount = 0;
+        if (text.contains("{{")) promptCount++;
+        if (text.contains("<<<USER_DATA")) promptCount++;
+        if (text.contains("SELF-CHECK")) promptCount++;
+        if (text.contains("You are writing")) promptCount++;
+        if (text.contains("RULES FOR")) promptCount++;
+
+        if (hasOutputDelivery || promptCount >= 2) {
+            issues.add(new ValidationIssueDto(
+                    "BLOCK",
+                    "LOOKS_LIKE_PROMPT",
+                    null,
+                    1,
+                    "This looks like the prompt, not the AI's answer. Paste the prompt into the AI chat and upload the file it creates.",
+                    "AI-generated plan answer",
+                    "Prompt template text"
+            ));
+            return true;
+        }
+        return false;
+    }
+
+    private boolean checkWrongStep(String currentStepKey, int stepNumber, Map<String, DocumentSnippet> parsedDocs, String rawContent, List<ValidationIssueDto> issues) {
+        List<String> currentExpected = STEP_EXPECTED_FILES.getOrDefault(currentStepKey, Collections.emptyList());
+        long currentDocMatches = currentExpected.stream()
+                .filter(exp -> parsedDocs.values().stream().anyMatch(d -> isNameMatch(exp, d.name()) && d.content().length() >= 300))
+                .count();
+
+        List<String> canonicalStepKeys = List.of("prd-mvp", "stack-arch", "phases-design", "demo-qna");
+        for (String otherKey : canonicalStepKeys) {
+            if (otherKey.equalsIgnoreCase(currentStepKey) || PlanPromptService.normalizeStepKey(otherKey).equalsIgnoreCase(PlanPromptService.normalizeStepKey(currentStepKey))) {
+                continue;
+            }
+            List<String> otherExpected = STEP_EXPECTED_FILES.getOrDefault(otherKey, Collections.emptyList());
+            long otherDocMatches = otherExpected.stream()
+                    .filter(exp -> parsedDocs.values().stream().anyMatch(d -> isNameMatch(exp, d.name()) && d.content().length() >= 300)
+                            || rawContent.contains("FILE: " + exp) || rawContent.contains("FILE:" + exp))
+                    .count();
+
+            if (otherDocMatches > currentDocMatches && otherDocMatches >= 1) {
+                String targetStepName = getStepDisplayName(otherKey);
+                String currStepName = getStepDisplayName(currentStepKey);
+                issues.add(new ValidationIssueDto(
+                        "BLOCK",
+                        "WRONG_STEP",
+                        null,
+                        1,
+                        "This file matches " + targetStepName + " better than this step. Upload it to " + targetStepName + " instead.",
+                        "Documents for " + currStepName,
+                        "Documents for " + targetStepName
+                ));
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String getStepDisplayName(String stepKey) {
+        String norm = PlanPromptService.normalizeStepKey(stepKey);
+        return switch (norm) {
+            case "prd-mvp" -> "Step 1 (PRD & MVP)";
+            case "stack-arch" -> "Step 2 (Tech Stack & Architecture)";
+            case "phases-design" -> "Step 3 (Phases & Design)";
+            case "demo-qna" -> "Step 5 (Demo Script & Q&A)";
+            default -> stepKey;
+        };
+    }
+
+    private void checkUnrelatedContent(int stepNumber, Room room, String rawContent, List<ValidationIssueDto> issues) {
+        if (room == null || rawContent == null) return;
+        UUID roomId = room.getId();
+
+        Set<String> keywords = new HashSet<>();
+        if (room.getName() != null && room.getName().trim().length() >= 3) {
+            keywords.add(room.getName().trim().toLowerCase());
+        }
+        briefRepository.findByRoomId(roomId).ifPresent(b -> {
+            rubricRepository.findByBriefIdOrderByPositionAsc(b.getId()).forEach(r -> {
+                if (r.getCriterion() != null && r.getCriterion().trim().length() >= 3) {
+                    keywords.add(r.getCriterion().trim().toLowerCase());
+                }
+            });
+        });
+        ideaRepository.findByRoomIdAndStatus(roomId, "APPROVED").forEach(i -> {
+            if (i.getText() != null && i.getText().trim().length() >= 3) {
+                String t = i.getText().trim();
+                int nl = t.indexOf('\n');
+                if (nl > 0) t = t.substring(0, nl).trim();
+                if (t.length() >= 3) {
+                    keywords.add(t.toLowerCase());
+                }
+            }
+        });
+        memberRepository.findByRoomId(roomId).forEach(m -> {
+            userRepository.findById(m.getUserId()).ifPresent(u -> {
+                String h = planPromptService.getHandle(u);
+                if (h != null && h.length() >= 3) keywords.add(h.toLowerCase());
+                if (u.getUsername() != null && u.getUsername().length() >= 3) keywords.add(u.getUsername().toLowerCase());
+            });
+        });
+
+        if (keywords.isEmpty()) return;
+
+        String lowerContent = rawContent.toLowerCase();
+        boolean matched = keywords.stream().anyMatch(lowerContent::contains);
+        if (!matched) {
+            if (stepNumber == 1) {
+                issues.add(new ValidationIssueDto(
+                        "BLOCK",
+                        "UNRELATED_CONTENT",
+                        null,
+                        1,
+                        "The document shares nothing with this room (no project name, rubric criteria, team handles, or approved ideas found).",
+                        "References to room project name, rubric, team handles, or ideas",
+                        "No matching room context found"
+                ));
+            } else {
+                issues.add(new ValidationIssueDto(
+                        "WARN",
+                        "UNRELATED_CONTENT",
+                        null,
+                        1,
+                        "The document does not appear to reference project-specific keywords.",
+                        "References to room project context",
+                        "No matching room context found"
+                ));
+            }
+        }
+    }
+
+    private ValidatePlanResponse buildEarlyFailureResponse(
+            String stepKey,
+            List<ValidationIssueDto> issues,
+            ValidationDiagnosticsDto diagnostics
+    ) {
+        int stepNumber = resolveStepNumber(stepKey);
+        String repairPrompt = buildRepairPrompt(stepNumber, issues, false);
+        return new ValidatePlanResponse(
+                false,
+                false,
+                List.of(),
+                issues,
+                repairPrompt,
+                null,
+                false,
+                null,
+                diagnostics,
+                false
+        );
     }
 
     private boolean matchesHeading(String expNorm, String actNorm) {

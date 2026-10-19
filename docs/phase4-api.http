@@ -49,7 +49,7 @@ PUT {{baseUrl}}/rooms/{{roomId}}/github/deployed-link
 Content-Type: application/json
 
 {
-  "url": "https://hackathon-os-demo.vercel.app"
+  "url": "https://brackit-demo.vercel.app"
 }
 
 ### 1.7 Get Freeze Checklist
@@ -222,7 +222,7 @@ PUT {{baseUrl}}/rooms/{{roomId}}/submission/draft
 Content-Type: application/json
 
 {
-  "whatItDoes": "Hackathon OS guides teams through rules, ideation, development, and pitching.",
+  "whatItDoes": "[brackit] guides teams through rules, ideation, development, and pitching.",
   "whyItMatters": "Teams lose up to 40% of their build time to coordination friction.",
   "howBuilt": "Spring Boot, React, Vite, PostgreSQL, Flyway.",
   "challenges": "Real-time state synchronization and deterministic freeze detection.",

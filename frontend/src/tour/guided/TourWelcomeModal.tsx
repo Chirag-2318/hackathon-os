@@ -72,7 +72,11 @@ export function TourWelcomeModal({
   return (
     <AnimatePresence>
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-[3px] select-none"
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--backdrop-fallback,#0a0a0b80)] supports-[backdrop-filter]:bg-[var(--backdrop)] backdrop-blur-[3px] select-none"
+        style={{
+          backdropFilter: 'var(--backdrop-blur, blur(3px))',
+          WebkitBackdropFilter: 'var(--backdrop-blur, blur(3px))',
+        }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="welcome-modal-title"

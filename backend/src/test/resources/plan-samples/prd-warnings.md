@@ -7,7 +7,7 @@ Hackathon participants struggle to assemble high-performing teams.
 Hackathon hackers.
 
 ## One-sentence identity
-Hackathon OS is the agile command centre.
+[brackit] is the agile command centre.
 
 ## Core flow
 1. Hacker creates a room.

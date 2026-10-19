@@ -38,6 +38,7 @@ class DeadlineReminderJobTest {
     @Mock private RoomMemberRepository memberRepository;
     @Mock private ReminderLogRepository reminderLogRepository;
     @Mock private NotificationService notificationService;
+    @Mock private com.hackathonos.backend.common.lock.DbAdvisoryLockService advisoryLockService;
 
     @Test
     @DisplayName("Should send notifications for tasks and checkpoints due within the 60 minute window")
@@ -47,7 +48,7 @@ class DeadlineReminderJobTest {
 
         DeadlineReminderJob job = new DeadlineReminderJob(
                 roomRepository, taskRepository, checkpointRepository, memberRepository,
-                reminderLogRepository, notificationService, clock
+                reminderLogRepository, notificationService, clock, advisoryLockService
         );
 
         UUID roomId = UUID.randomUUID();
@@ -100,7 +101,7 @@ class DeadlineReminderJobTest {
 
         DeadlineReminderJob job = new DeadlineReminderJob(
                 roomRepository, taskRepository, checkpointRepository, memberRepository,
-                reminderLogRepository, notificationService, clock
+                reminderLogRepository, notificationService, clock, advisoryLockService
         );
 
         UUID roomId = UUID.randomUUID();

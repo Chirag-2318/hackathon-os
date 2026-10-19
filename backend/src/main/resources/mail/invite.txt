@@ -1,4 +1,4 @@
-HACKATHON OS - BOARDING PASS
+[brackit] - BOARDING PASS
 
 ROOM: {{ROOM_NAME}}
 FROM: @{{INVITER}}
@@ -16,4 +16,4 @@ Valid until {{EXPIRY_DATE}}
 {{FALLBACK_CODE_TEXT}}
 
 --
-Hackathon OS - Collaborative command center for intense hackathons
+[brackit] - Collaborative command center for intense hackathons

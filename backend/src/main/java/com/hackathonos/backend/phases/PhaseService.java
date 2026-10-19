@@ -33,7 +33,6 @@ import com.hackathonos.backend.plan.PlanPromptService;
 import com.hackathonos.backend.plan.dto.ValidationIssueDto;
 import com.hackathonos.backend.rooms.Room;
 import com.hackathonos.backend.rooms.RoomRepository;
-import com.hackathonos.backend.rooms.RoomService;
 import com.hackathonos.backend.tasks.*;
 import com.hackathonos.backend.team.TeamCharterResponse;
 import com.hackathonos.backend.team.TeamCharterResponseRepository;
@@ -63,7 +62,6 @@ public class PhaseService {
 
     private final RoomRepository roomRepository;
     private final RoomAccess roomAccess;
-    private final RoomService roomService;
     private final PlanPhaseRepository phaseRepository;
     private final TaskRepository taskRepository;
     private final TaskDependencyRepository dependencyRepository;
@@ -95,7 +93,6 @@ public class PhaseService {
     public PhaseService(
             RoomRepository roomRepository,
             RoomAccess roomAccess,
-            RoomService roomService,
             PlanPhaseRepository phaseRepository,
             TaskRepository taskRepository,
             TaskDependencyRepository dependencyRepository,
@@ -122,7 +119,6 @@ public class PhaseService {
             ObjectMapper objectMapper) {
         this.roomRepository = roomRepository;
         this.roomAccess = roomAccess;
-        this.roomService = roomService;
         this.phaseRepository = phaseRepository;
         this.taskRepository = taskRepository;
         this.dependencyRepository = dependencyRepository;
@@ -193,7 +189,7 @@ public class PhaseService {
             Instant startTime = buildStart != null ? buildStart.plus(Duration.ofMinutes((long)(startH.doubleValue() * 60))) : null;
             Instant endTime = buildStart != null ? buildStart.plus(Duration.ofMinutes((long)(endH.doubleValue() * 60))) : null;
 
-            boolean overdue = !"COMPLETED".equalsIgnoreCase(p.getStatus()) && endTime != null && clockNow.isAfter(endTime);
+            boolean overdue = "ACTIVE".equalsIgnoreCase(p.getStatus()) && endTime != null && clockNow.isAfter(endTime);
             boolean tasksGen = p.getTasksGeneratedAt() != null;
             boolean isCur = "ACTIVE".equalsIgnoreCase(p.getStatus());
             boolean ready = isCur && tasksGen && !pTasks.isEmpty() && pTasks.stream().allMatch(t -> t.isConfirmedDone() || t.isDropped());
@@ -699,13 +695,18 @@ public class PhaseService {
             boolean confirmRegenerate,
             User user
     ) {
+        String reqId = org.slf4j.MDC.get(com.hackathonos.backend.common.http.RequestIdFilter.MDC_KEY);
+        if (reqId == null || reqId.isBlank()) reqId = UUID.randomUUID().toString();
+
         try {
-            return doValidateAndImportTasks(roomId, phaseKey, files, mode, confirmRegenerate, user);
-        } catch (BadRequestException | ConflictException | NotFoundException e) {
-            throw e;
+            return doValidateAndImportTasks(roomId, phaseKey, files, mode, confirmRegenerate, user, reqId);
         } catch (Exception e) {
             log.error("Failed to validate and import tasks for room {} phase {}: {}", roomId, phaseKey, e.getMessage(), e);
-            throw new BadRequestException("IMPORT_FAILED", "Failed to import tasks: " + e.getMessage());
+            String code = (e instanceof org.springframework.dao.DataAccessException || e instanceof jakarta.persistence.PersistenceException) ? "SAVE_FAILED" : "VALIDATION_ERROR";
+            String msg = "Validation or save error: " + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()) + " (Request ID: " + reqId + ")";
+            List<ValidationIssueDto> errIssues = List.of(new ValidationIssueDto("BLOCK", code, null, null, msg, null, null));
+            com.hackathonos.backend.plan.dto.ValidationDiagnosticsDto diag = new com.hackathonos.backend.plan.dto.ValidationDiagnosticsDto(reqId, List.of(), List.of("exception: " + e.getMessage()));
+            return new PhaseTaskImportSummaryDto(false, false, errIssues, 0, 0.0, 0, Map.of(), List.of(), null, diag, reqId);
         }
     }
 
@@ -715,12 +716,12 @@ public class PhaseService {
             MultipartFile[] files,
             String mode,
             boolean confirmRegenerate,
-            User user
+            User user,
+            String reqId
     ) {
         roomAccess.requireLeader(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
-        PlanPhase phase = phaseRepository.findByRoomIdAndPlanKey(roomId, phaseKey)
-                .orElseThrow(() -> new NotFoundException("PHASE_NOT_FOUND", "Phase not found: " + phaseKey));
+        PlanPhase phase = resolvePhase(roomId, phaseKey);
 
         String rawContent = extractContentFromFiles(files, phase.getPhaseKey());
         if (rawContent == null || rawContent.isBlank()) {
@@ -739,9 +740,19 @@ public class PhaseService {
         // Validation rules
         validateRules(room, phase, parsedTasks, issues);
 
+        com.hackathonos.backend.plan.dto.ValidationDiagnosticsDto diagnostics = new com.hackathonos.backend.plan.dto.ValidationDiagnosticsDto(
+                reqId,
+                List.of(new com.hackathonos.backend.plan.dto.ValidationDiagnosticsDto.FileDiagnosticsDto(
+                        targetDocName, rawContent.length(), "utf-8", docContent.length(),
+                        docContent.length() > 80 ? docContent.substring(0, 80) : docContent,
+                        List.of(), List.of(), Map.of()
+                )),
+                List.of("extract", "unwrap", "parse_tasks", "validate_rules")
+        );
+
         boolean hasBlocking = issues.stream().anyMatch(i -> "BLOCK".equalsIgnoreCase(i.severity()));
         if (hasBlocking) {
-            return new PhaseTaskImportSummaryDto(false, false, issues, 0, 0.0, 0, Map.of(), List.of(), null);
+            return new PhaseTaskImportSummaryDto(false, false, issues, 0, 0.0, 0, Map.of(), List.of(), null, diagnostics, reqId);
         }
 
         boolean isAppend = "APPEND".equalsIgnoreCase(mode);
@@ -754,7 +765,7 @@ public class PhaseService {
                 throw new ConflictException("TASKS_ALREADY_STARTED", "Tasks in this phase have already been started. Add missing tasks instead.");
             }
             if (!confirmRegenerate) {
-                return new PhaseTaskImportSummaryDto(true, true, issues, 0, 0.0, 0, Map.of(), List.of(), null);
+                return new PhaseTaskImportSummaryDto(true, true, issues, 0, 0.0, 0, Map.of(), List.of(), null, diagnostics, reqId);
             }
             // Delete existing tasks in phase
             for (Task t : existingPhaseTasks) {
@@ -775,6 +786,15 @@ public class PhaseService {
             userRepository.findById(m.getUserId()).ifPresent(u -> {
                 String h = planPromptService.getHandle(u).toLowerCase();
                 handleToUserId.put(h, u.getId());
+                if (h.startsWith("@")) {
+                    handleToUserId.put(h.substring(1), u.getId());
+                }
+                if (u.getUsername() != null && !u.getUsername().isBlank()) {
+                    handleToUserId.put(u.getUsername().trim().toLowerCase(), u.getId());
+                }
+                if (u.getName() != null && !u.getName().isBlank()) {
+                    handleToUserId.put(u.getName().trim().toLowerCase(), u.getId());
+                }
                 memberHours.put(h, 0.0);
             });
         }
@@ -792,10 +812,14 @@ public class PhaseService {
 
             UUID assigneeId = null;
             if (pt.assignee() != null && !pt.assignee().isBlank()) {
-                String cleanH = pt.assignee().startsWith("@") ? pt.assignee().toLowerCase() : "@" + pt.assignee().toLowerCase();
-                assigneeId = handleToUserId.get(cleanH);
+                String cleanH = pt.assignee().trim().toLowerCase();
+                String withAt = cleanH.startsWith("@") ? cleanH : "@" + cleanH;
+                String withoutAt = cleanH.startsWith("@") ? cleanH.substring(1) : cleanH;
+                assigneeId = handleToUserId.get(withAt);
+                if (assigneeId == null) assigneeId = handleToUserId.get(withoutAt);
+                if (assigneeId == null) assigneeId = handleToUserId.get(cleanH);
                 if (assigneeId != null) {
-                    memberHours.put(cleanH, memberHours.getOrDefault(cleanH, 0.0) + pt.estimate());
+                    memberHours.put(withAt, memberHours.getOrDefault(withAt, 0.0) + pt.estimate());
                 }
             }
 
@@ -895,7 +919,9 @@ public class PhaseService {
                 members.size(),
                 memberHours,
                 uncovered,
-                nextKey
+                nextKey,
+                diagnostics,
+                reqId
         );
     }
 
@@ -924,6 +950,33 @@ public class PhaseService {
         }
     }
 
+    public PlanPhase resolvePhase(UUID roomId, String phaseKey) {
+        if (phaseKey == null || phaseKey.isBlank()) {
+            return phaseRepository.findByRoomIdAndStatus(roomId, "ACTIVE")
+                    .or(() -> phaseRepository.findByRoomIdOrderByPositionAsc(roomId).stream().findFirst())
+                    .orElseThrow(() -> new NotFoundException("PHASE_NOT_FOUND", "No phases found for room"));
+        }
+        Optional<PlanPhase> exact = phaseRepository.findByRoomIdAndPlanKey(roomId, phaseKey);
+        if (exact.isPresent()) return exact.get();
+
+        List<PlanPhase> allPhases = phaseRepository.findByRoomIdOrderByPositionAsc(roomId);
+        String cleanKey = phaseKey.toLowerCase().replaceAll("[^a-z0-9]", "").replace("phase", "").trim();
+        for (PlanPhase p : allPhases) {
+            String cleanP = p.getPlanKey().toLowerCase().replaceAll("[^a-z0-9]", "").replace("phase", "").trim();
+            if (cleanP.equals(cleanKey) || p.getPlanKey().equalsIgnoreCase(phaseKey) || p.getName().toLowerCase().contains(cleanKey)) {
+                return p;
+            }
+            try {
+                int pos = Integer.parseInt(cleanKey);
+                if (p.getPosition() == pos || p.getPosition() == (pos - 1)) {
+                    return p;
+                }
+            } catch (Exception ignored) {}
+        }
+        if (allPhases.size() == 1) return allPhases.get(0);
+        throw new NotFoundException("PHASE_NOT_FOUND", "Phase not found: " + phaseKey);
+    }
+
     private String extractContentFromFiles(MultipartFile[] files, String phaseKey) {
         if (files == null || files.length == 0) return null;
         String cleanPhase = phaseKey != null ? phaseKey.toLowerCase() : "";
@@ -931,14 +984,14 @@ public class PhaseService {
             String name = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
             if (name.contains(cleanPhase) || name.contains("task") || files.length == 1) {
                 try {
-                    String s = new String(file.getBytes(), StandardCharsets.UTF_8);
+                    String s = com.hackathonos.backend.files.FileTextExtractor.decodeText(file.getBytes()).text();
                     if (!s.isBlank()) return s;
                 } catch (Exception ignored) {}
             }
         }
         for (MultipartFile file : files) {
             try {
-                String s = new String(file.getBytes(), StandardCharsets.UTF_8);
+                String s = com.hackathonos.backend.files.FileTextExtractor.decodeText(file.getBytes()).text();
                 if (!s.isBlank()) return s;
             } catch (Exception ignored) {}
         }
@@ -947,26 +1000,29 @@ public class PhaseService {
 
     private String unwrapFileMarker(String content, String targetFileName) {
         if (content == null) return "";
-        // Match specific target file delimiter first
-        Pattern pattern = Pattern.compile("=====FILE:\\s*" + Pattern.quote(targetFileName) + "\\s*=====\\s*([\\s\\S]*?)(?:=====END FILE=====|$)", Pattern.CASE_INSENSITIVE);
-        Matcher matcher = pattern.matcher(content);
-        if (matcher.find()) {
-            return matcher.group(1).trim();
-        }
-        // Match ANY file block delimiter like =====FILE: ... ===== ... =====END FILE=====
-        Pattern anyPattern = Pattern.compile("=====FILE:\\s*[^\\n=]+=====\\s*([\\s\\S]*?)(?:=====END FILE=====|$)", Pattern.CASE_INSENSITIVE);
-        Matcher anyMatcher = anyPattern.matcher(content);
-        if (anyMatcher.find()) {
-            return anyMatcher.group(1).trim();
-        }
-        // Strip outer code fences if present (```markdown ... ``` or ``` ... ```)
         String trimmed = content.trim();
+        // First strip outer code fences if present (```markdown ... ``` or ``` ... ```)
         if (trimmed.startsWith("```")) {
             int firstNewline = trimmed.indexOf('\n');
             if (firstNewline != -1 && trimmed.endsWith("```")) {
                 trimmed = trimmed.substring(firstNewline + 1, trimmed.length() - 3).trim();
             }
         }
+
+        // Match specific target file delimiter or any task marker
+        Pattern pattern = Pattern.compile("^[#*=\\s]*FILE:\\s*" + Pattern.quote(targetFileName) + "[#*=\\s]*(?:\r?\n)([\\s\\S]*?)(?:^[#*=\\s]*END(?: FILE)?[#*=\\s]*$|\\z)", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
+        Matcher matcher = pattern.matcher(trimmed);
+        if (matcher.find()) {
+            return matcher.group(1).trim();
+        }
+
+        // Match ANY file block delimiter
+        Pattern anyPattern = Pattern.compile("^[#*=\\s]*FILE:\\s*([A-Za-z0-9_.-]+)[#*=\\s]*(?:\r?\n)([\\s\\S]*?)(?:^[#*=\\s]*END(?: FILE)?[#*=\\s]*$|\\z)", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
+        Matcher anyMatcher = anyPattern.matcher(trimmed);
+        if (anyMatcher.find()) {
+            return anyMatcher.group(2).trim();
+        }
+
         return trimmed;
     }
 
@@ -1148,7 +1204,7 @@ public class PhaseService {
                     type = line.substring(line.indexOf(":") + 1).trim();
                 } else if (lower.startsWith("- role:") || lower.startsWith("role:")) {
                     inAcceptance = false;
-                    role = line.substring(line.indexOf(":") + 1).trim();
+                    role = normalizeRole(line.substring(line.indexOf(":") + 1).trim());
                 } else if (lower.startsWith("- assignee:") || lower.startsWith("assignee:")) {
                     inAcceptance = false;
                     assignee = line.substring(line.indexOf(":") + 1).trim();
@@ -1164,9 +1220,12 @@ public class PhaseService {
                 } else if (lower.startsWith("- depends on:") || lower.startsWith("depends on:") || lower.startsWith("- depends_on:") || lower.startsWith("depends_on:")) {
                     inAcceptance = false;
                     String deps = line.substring(line.indexOf(":") + 1).trim();
-                    if (!deps.equalsIgnoreCase("none")) {
+                    if (!deps.equalsIgnoreCase("none") && !deps.equals("-") && !deps.equalsIgnoreCase("n/a") && !deps.equalsIgnoreCase("nil")) {
                         for (String d : deps.split("[,;]")) {
-                            if (!d.trim().isBlank()) dependsOn.add(d.trim());
+                            String trimmedDep = d.trim();
+                            if (!trimmedDep.isBlank() && !trimmedDep.equalsIgnoreCase("none") && !trimmedDep.equals("-")) {
+                                dependsOn.add(trimmedDep);
+                            }
                         }
                     }
                 } else if (lower.startsWith("- requirement:") || lower.startsWith("requirement:")) {
@@ -1175,12 +1234,18 @@ public class PhaseService {
                 } else if (lower.startsWith("- description:") || lower.startsWith("description:")) {
                     inAcceptance = false;
                     desc.append(line.substring(line.indexOf(":") + 1).trim()).append(" ");
-                } else if (lower.startsWith("- acceptance:") || lower.startsWith("acceptance:") || lower.startsWith("acceptance criteria:")) {
+                } else if (lower.startsWith("- acceptance:") || lower.startsWith("acceptance:") || lower.startsWith("acceptance criteria:") || lower.startsWith("- acceptance criteria:")) {
                     inAcceptance = true;
                 } else if (inAcceptance) {
-                    if (line.startsWith("- ") || line.startsWith("* ")) {
+                    if (lower.startsWith("- ") && (lower.contains(":") && (lower.contains("phase") || lower.contains("role") || lower.contains("assignee") || lower.contains("estimate") || lower.contains("depends")))) {
+                        inAcceptance = false;
+                    } else if (line.startsWith("- [ ] ") || line.startsWith("- [x] ") || line.startsWith("- [X] ")) {
+                        acceptance.add(line.substring(6).trim());
+                    } else if (line.startsWith("- ") || line.startsWith("* ")) {
                         acceptance.add(line.substring(2).trim());
-                    } else if (!line.isBlank() && !line.startsWith("-")) {
+                    } else if (line.matches("^\\d+[.)]\\s+.*")) {
+                        acceptance.add(line.replaceFirst("^\\d+[.)]\\s+", "").trim());
+                    } else if (!line.isBlank() && !line.startsWith("-") && !line.startsWith("#")) {
                         acceptance.add(line);
                     } else {
                         inAcceptance = false;
@@ -1199,6 +1264,19 @@ public class PhaseService {
         }
 
         return tasks;
+    }
+
+    private String normalizeRole(String rawRole) {
+        if (rawRole == null || rawRole.isBlank()) return "Backend";
+        String r = rawRole.trim().toLowerCase();
+        if (r.contains("front") || r.equals("fe") || r.equals("ui") || r.equals("client")) return "Frontend";
+        if (r.contains("back") || r.equals("be") || r.equals("server") || r.equals("api")) return "Backend";
+        if (r.contains("full") || r.equals("fs")) return "Fullstack";
+        if (r.contains("design") || r.contains("ux")) return "Design";
+        if (r.contains("devops") || r.contains("infra") || r.contains("cloud")) return "DevOps";
+        if (r.contains("qa") || r.contains("test")) return "QA";
+        String cap = Character.toUpperCase(rawRole.charAt(0)) + (rawRole.length() > 1 ? rawRole.substring(1) : "");
+        return cap.length() > 50 ? cap.substring(0, 50) : cap;
     }
 
     private void validateRules(Room room, PlanPhase phase, List<ParsedTask> tasks, List<ValidationIssueDto> issues) {
@@ -1253,7 +1331,7 @@ public class PhaseService {
     @Transactional
     public String generatePhaseTasks(UUID roomId, String phaseKey, User user) {
         roomAccess.requireLeader(roomId, user);
-        if (!roomService.isAiAllowed(roomId)) {
+        if (!isAiAllowed(roomId)) {
             throw new BadRequestException("AI_RESTRICTED_BY_EVENT", "AI generation is disabled by event rules");
         }
 
@@ -1280,6 +1358,16 @@ public class PhaseService {
 
 
         return buildFallbackPhaseTasksMarkdown(roomId, phaseKey);
+    }
+
+    private boolean isAiAllowed(UUID roomId) {
+        if (roomId == null) return true;
+        return briefRepository.findByRoomId(roomId).map(b -> {
+            String p = b.getAiPolicy();
+            if (p == null || p.isBlank()) return true;
+            String up = p.toUpperCase();
+            return !(up.contains("FORBIDDEN") || up.contains("RESTRICTED") || up.contains("PROHIBITED") || up.contains("NO_AI"));
+        }).orElse(true);
     }
 
     private String buildFallbackPhaseTasksMarkdown(UUID roomId, String phaseKey) {

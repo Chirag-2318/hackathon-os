@@ -119,6 +119,20 @@ public class MvpDtos {
             UpdateHealthRequest health,
             String differentiation,
             String breaksFirst,
-            List<CutItemInput> cutList
-    ) {}
+            List<CutItemInput> cutList,
+            Long version
+    ) {
+        public UpdateFullMvpRequest(
+                String identity,
+                String wow,
+                List<CoreFlowStepInput> coreFlow,
+                List<LedgerRowInput> ledger,
+                UpdateHealthRequest health,
+                String differentiation,
+                String breaksFirst,
+                List<CutItemInput> cutList
+        ) {
+            this(identity, wow, coreFlow, ledger, health, differentiation, breaksFirst, cutList, null);
+        }
+    }
 }

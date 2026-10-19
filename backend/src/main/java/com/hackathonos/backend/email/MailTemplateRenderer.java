@@ -56,7 +56,7 @@ public class MailTemplateRenderer {
         String roleTagsStr = formatRoleTags(vars.get("roleTags"));
 
         String subject = "Badge printed, @" + handle;
-        String preheader = "Your Hackathon OS participant badge is ready.";
+        String preheader = "Your [brackit] participant badge is ready.";
 
         String barcodeCells = renderBarcode(handle);
 
@@ -97,7 +97,7 @@ public class MailTemplateRenderer {
         String joinCode = str(vars.get("joinCode"), null);
 
         String subject = "@" + inviter + " saved you a seat on " + roomName;
-        String preheader = "You were invited to join " + roomName + " on Hackathon OS.";
+        String preheader = "You were invited to join " + roomName + " on [brackit].";
 
         String noteHtml = "";
         String noteTxt = "";
@@ -111,9 +111,9 @@ public class MailTemplateRenderer {
         String fallbackTxt = "";
         if (joinCode != null && !joinCode.isBlank()) {
             fallbackHtml = "<div style=\"margin-top:20px;padding-top:16px;border-top:1px solid #E2DDD3;text-align:center;font-size:13px;color:#6A665E;line-height:18px;\">"
-                    + "Prefer a code? Open Hackathon OS, press <strong>Join with code</strong> and enter <code style=\"font-family:'SFMono-Regular', Menlo, Consolas, monospace;color:#0B0B0C;background:#EFECE3;padding:2px 6px;border-radius:4px;\">"
+                    + "Prefer a code? Open [brackit], press <strong>Join with code</strong> and enter <code style=\"font-family:'SFMono-Regular', Menlo, Consolas, monospace;color:#0B0B0C;background:#EFECE3;padding:2px 6px;border-radius:4px;\">"
                     + escapeHtml(joinCode) + "</code>.</div>";
-            fallbackTxt = "Prefer a code? Open Hackathon OS, press Join with code and enter " + joinCode + ".";
+            fallbackTxt = "Prefer a code? Open [brackit], press Join with code and enter " + joinCode + ".";
         }
 
         String templateHtml = loadResource("classpath:mail/invite.html");
@@ -162,7 +162,7 @@ public class MailTemplateRenderer {
             String roleTags = formatRoleTags(vars.get("roleTags"));
 
             String subject = "@" + handle + " joined " + roomName;
-            String preheader = displayName + " just joined " + roomName + " on Hackathon OS.";
+            String preheader = displayName + " just joined " + roomName + " on [brackit].";
             String headerBadge = "TEAM UPDATE";
             String headline = displayName + " just joined.";
             String detailBlock = "<div style=\"font-family:'SFMono-Regular', Menlo, Consolas, monospace;font-size:13px;color:#6A665E;margin-bottom:12px;\">"
@@ -198,7 +198,7 @@ public class MailTemplateRenderer {
         } else {
             // SELF
             String subject = "You're in " + roomName;
-            String preheader = "You're confirmed for " + roomName + " on Hackathon OS.";
+            String preheader = "You're confirmed for " + roomName + " on [brackit].";
             String headerBadge = "ROOM MEMBERSHIP";
             String headline = "You're in.";
 

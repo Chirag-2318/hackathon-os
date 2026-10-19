@@ -1,5 +1,5 @@
 /**
- * Hackathon OS Shared Design System & Data Layer
+ * [brackit] Shared Design System & Data Layer
  * Strict 8px spacing, neutral default with semantic accents,
  * rich micro-interactions, full keyboard/ARIA accessibility,
  * and unified error/offline states.

@@ -1,6 +1,6 @@
-# Hackathon OS — API Error Codes Catalog
+# [brackit] — API Error Codes Catalog
 
-All error responses from the Hackathon OS backend adhere to RFC 7807 (Problem Details for HTTP APIs) and the standard `ApiError` format:
+All error responses from the [brackit] backend adhere to RFC 7807 (Problem Details for HTTP APIs) and the standard `ApiError` format:
 
 ```json
 {

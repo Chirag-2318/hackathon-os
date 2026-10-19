@@ -130,8 +130,8 @@ export function OnboardingBadge({
           <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
             <div className="flex items-center gap-1.5">
               <div className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-bold tracking-[0.2em] text-neutral-800 uppercase font-mono">
-                HACKATHON OS
+              <span className="text-[10px] font-bold tracking-[0.2em] text-neutral-800 font-mono">
+                [brackit]
               </span>
             </div>
             <span className="text-[9px] font-bold tracking-[0.16em] uppercase px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200">
@@ -217,7 +217,7 @@ export function OnboardingBadge({
             )}
 
             {/* Barcode */}
-            <Barcode value={handle || 'hackathon-os'} width={190} height={28} showText />
+            <Barcode value={handle || 'brackit'} width={190} height={28} showText />
           </div>
         </div>
 
@@ -232,8 +232,8 @@ export function OnboardingBadge({
         >
           {/* Top */}
           <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
-            <span className="text-[10px] font-bold tracking-[0.2em] text-neutral-800 uppercase font-mono">
-              HACKATHON OS
+            <span className="text-[10px] font-bold tracking-[0.2em] text-neutral-800 font-mono">
+              [brackit]
             </span>
             <span className="text-[10px] font-mono text-neutral-400">
               VERIFIED

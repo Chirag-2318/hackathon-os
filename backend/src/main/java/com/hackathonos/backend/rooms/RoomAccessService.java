@@ -66,7 +66,9 @@ public class RoomAccessService {
 
     public RoomMember requireLeader(UUID roomId, UUID userId) {
         RoomMember member = requireMember(roomId, userId);
-        if (!"LEADER".equalsIgnoreCase(member.getRole())) {
+        Room room = getActiveRoomOrThrow(roomId);
+        boolean isOwner = userId != null && userId.equals(room.getOwnerId());
+        if (!isOwner && !"LEADER".equalsIgnoreCase(member.getRole()) && !"OWNER".equalsIgnoreCase(member.getRole())) {
             throw new ForbiddenException("LEADER_REQUIRED", "Only the room leader can perform this action");
         }
         return member;
@@ -84,8 +86,10 @@ public class RoomAccessService {
 
     public boolean isLeader(UUID roomId, UUID userId) {
         if (roomId == null || userId == null) return false;
+        Room room = roomRepository.findById(roomId).orElse(null);
+        if (room != null && userId.equals(room.getOwnerId())) return true;
         return roomMemberRepository.findByRoomIdAndUserId(roomId, userId)
-                .map(m -> "LEADER".equalsIgnoreCase(m.getRole()))
+                .map(m -> "LEADER".equalsIgnoreCase(m.getRole()) || "OWNER".equalsIgnoreCase(m.getRole()))
                 .orElse(false);
     }
 }

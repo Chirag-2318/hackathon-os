@@ -89,7 +89,11 @@ export function CreateTaskModal({
   return (
     <div
       onKeyDown={handleKeyDown}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--backdrop-fallback,#0a0a0b80)] backdrop-blur-[3px] supports-[backdrop-filter]:bg-[var(--backdrop)] animate-in fade-in duration-150"
+      style={{
+        backdropFilter: 'var(--backdrop-blur, blur(3px))',
+        WebkitBackdropFilter: 'var(--backdrop-blur, blur(3px))',
+      }}
     >
       <div className="w-full max-w-[620px] rounded-[24px] bg-card border border-border shadow-2xl overflow-hidden flex flex-col font-sans">
         {/* Header */}

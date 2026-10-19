@@ -12,6 +12,9 @@ function TODO(label: string): string {
   return `[TODO: ${label}]`;
 }
 
+export const BRAND_NAME = '[brackit]';
+export const BRAND_DESCRIPTOR = 'the hackathon OS';
+
 export const TODO_SENTINEL = '[TODO:';
 
 export const COPY = {
@@ -87,7 +90,7 @@ export const COPY = {
   },
 
   // ── Common ──
-  logo: 'Hackathon OS',
+  logo: BRAND_NAME,
   nav: {
     playbooks: 'Playbooks',
     pricing: 'Pricing',

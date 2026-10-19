@@ -635,7 +635,7 @@ public class PortfolioService {
         if (topStack != null && !topStack.isBlank()) {
             sb.append("Mostly builds in ").append(topStack).append(".");
         } else {
-            sb.append("Active builder on Hackathon OS.");
+            sb.append("Active builder on [brackit].");
         }
         return sb.toString();
     }

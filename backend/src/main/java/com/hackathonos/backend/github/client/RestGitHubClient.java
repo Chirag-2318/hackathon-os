@@ -23,9 +23,15 @@ public class RestGitHubClient implements GitHubClient {
     private static final int TIMEOUT_MS = 8000;
 
     private final ObjectMapper objectMapper;
+    private volatile int lastRateLimitRemaining = 60;
 
     public RestGitHubClient(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
+    }
+
+    @Override
+    public int getRateLimitRemaining() {
+        return lastRateLimitRemaining;
     }
 
     private JsonNode request(String path, String token) {
@@ -41,7 +47,7 @@ public class RestGitHubClient implements GitHubClient {
             conn.setReadTimeout(TIMEOUT_MS);
             conn.setRequestProperty("Accept", "application/vnd.github+json");
             conn.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
-            conn.setRequestProperty("User-Agent", "HackathonOS-Server");
+            conn.setRequestProperty("User-Agent", "brackit-Server");
 
             if (token != null && !token.isBlank()) {
                 conn.setRequestProperty("Authorization", "Bearer " + token.trim());
@@ -51,6 +57,11 @@ public class RestGitHubClient implements GitHubClient {
 
             // Check rate limits
             String remaining = conn.getHeaderField("x-ratelimit-remaining");
+            if (remaining != null) {
+                try {
+                    lastRateLimitRemaining = Integer.parseInt(remaining);
+                } catch (NumberFormatException ignored) {}
+            }
             String resetEpoch = conn.getHeaderField("x-ratelimit-reset");
             if ((status == 403 || status == 429) && "0".equals(remaining)) {
                 if (throwOnError) {
@@ -92,12 +103,29 @@ public class RestGitHubClient implements GitHubClient {
         if (node == null) return Optional.empty();
 
         String fullName = node.path("full_name").asText(owner + "/" + repo);
+        String name = node.path("name").asText(repo);
+        String description = node.path("description").asText("");
         String htmlUrl = node.path("html_url").asText("https://github.com/" + fullName);
         boolean isPrivate = node.path("private").asBoolean(false);
         String defaultBranch = node.path("default_branch").asText("main");
+        String language = node.path("language").asText("");
+        int stars = node.path("stargazers_count").asInt(0);
+        String pushedAt = node.path("pushed_at").asText(null);
         String license = node.path("license").path("spdx_id").asText(null);
 
-        return Optional.of(new ClientRepo(fullName, htmlUrl, isPrivate ? "private" : "public", defaultBranch, license));
+        return Optional.of(new ClientRepo(
+                fullName,
+                name,
+                description,
+                htmlUrl,
+                isPrivate ? "private" : "public",
+                defaultBranch,
+                language,
+                stars,
+                pushedAt,
+                htmlUrl,
+                license
+        ));
     }
 
     @Override

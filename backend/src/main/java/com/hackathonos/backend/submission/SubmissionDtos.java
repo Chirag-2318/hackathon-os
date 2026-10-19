@@ -142,8 +142,20 @@ public class SubmissionDtos {
             String howBuilt,
             String howWeBuiltIt,
             String challenges,
-            String whatsNext
+            String whatsNext,
+            Long version
     ) {
+        public UpdateDraftRequest(
+                String whatItDoes,
+                String whyItMatters,
+                String howBuilt,
+                String howWeBuiltIt,
+                String challenges,
+                String whatsNext
+        ) {
+            this(whatItDoes, whyItMatters, howBuilt, howWeBuiltIt, challenges, whatsNext, null);
+        }
+
         public String getEffectiveHowBuilt() {
             if (howBuilt != null) return howBuilt;
             if (howWeBuiltIt != null) return howWeBuiltIt;

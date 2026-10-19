@@ -40,6 +40,7 @@ public class MemberService {
     private final NotificationService notificationService;
     private final com.hackathonos.backend.tasks.TaskRepository taskRepository;
     private final com.hackathonos.backend.events.RoomEventService roomEventService;
+    private final com.hackathonos.backend.events.RoomEventHub eventHub;
 
     public MemberService(RoomMemberRepository memberRepository,
                          RoomMemberSkillRepository skillRepository,
@@ -51,7 +52,8 @@ public class MemberService {
                          ActivityLogger activityLogger,
                          NotificationService notificationService,
                          com.hackathonos.backend.tasks.TaskRepository taskRepository,
-                         com.hackathonos.backend.events.RoomEventService roomEventService) {
+                         com.hackathonos.backend.events.RoomEventService roomEventService,
+                         com.hackathonos.backend.events.RoomEventHub eventHub) {
         this.memberRepository = memberRepository;
         this.skillRepository = skillRepository;
         this.invitationRepository = invitationRepository;
@@ -63,6 +65,7 @@ public class MemberService {
         this.notificationService = notificationService;
         this.taskRepository = taskRepository;
         this.roomEventService = roomEventService;
+        this.eventHub = eventHub;
     }
 
     /**
@@ -119,6 +122,10 @@ public class MemberService {
 
         User targetUser = userRepository.findById(targetUserId).orElse(null);
         notifyRoleChange(caller, targetUser, room, role);
+        eventHub.publish(roomId, "members", caller, targetUserId.toString());
+        eventHub.publish(roomId, "overview", caller, null);
+        eventHub.publishUser(targetUserId, "rooms");
+        eventHub.publishUser(caller.getId(), "rooms");
         List<String> skills = getSkillsForMember(target.getId());
         return memberMapper.toMemberDto(target, targetUser, skills, caller.getId());
     }
@@ -175,6 +182,10 @@ public class MemberService {
         if (targetUser != null) {
             notificationService.notifyUser(targetUser, room, NotificationType.MEMBER_LEFT, "Removed from room", "You were removed from " + room.getName());
         }
+        eventHub.publish(roomId, "members", caller, targetUserId.toString());
+        eventHub.publish(roomId, "overview", caller, null);
+        eventHub.publishUser(targetUserId, "rooms");
+        eventHub.publishUser(caller.getId(), "rooms");
     }
 
     /**
@@ -210,6 +221,9 @@ public class MemberService {
         memberRepository.delete(member);
         activityLogger.log(room, caller, "member_left", caller.getName() + " left the room");
         roomEventService.recordEvent(roomId, "member.left", "room_member", member.getId().toString(), caller.getId());
+        eventHub.publish(roomId, "members", caller, caller.getId().toString());
+        eventHub.publish(roomId, "overview", caller, null);
+        eventHub.publishUser(caller.getId(), "rooms");
     }
 
     /**

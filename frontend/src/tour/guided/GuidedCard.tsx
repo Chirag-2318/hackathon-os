@@ -303,7 +303,7 @@ export function GuidedCard({
               {stop.sidebarTag && (
                 <span
                   className="px-2 py-0.5 rounded-full bg-[var(--tour-surface)] text-[11px] font-mono text-[var(--tour-text-muted)] border border-[var(--tour-border)]"
-                  title="Location in Hackathon OS"
+                  title="Location in [brackit]"
                 >
                   {stop.sidebarTag}
                 </span>

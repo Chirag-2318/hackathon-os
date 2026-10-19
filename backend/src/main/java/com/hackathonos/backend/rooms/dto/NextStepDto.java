@@ -7,5 +7,10 @@ package com.hackathonos.backend.rooms.dto;
 public record NextStepDto(
         String label,
         String route,
-        String reason
-) {}
+        String reason,
+        boolean leaderOnly
+) {
+    public NextStepDto(String label, String route, String reason) {
+        this(label, route, reason, false);
+    }
+}

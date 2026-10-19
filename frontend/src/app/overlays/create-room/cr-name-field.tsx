@@ -49,7 +49,7 @@ export function CrNameField({
       onClick={aiAllowed && !isSuggesting ? onSuggest : undefined}
       disabled={isSuggesting || !aiAllowed}
       className={cn(
-        'absolute right-1.5 h-7 px-2 rounded-lg flex items-center gap-1',
+        'h-7 px-2 rounded-lg flex items-center gap-1',
         'text-[13px] font-medium text-ink',
         'hover:bg-hover transition-colors duration-150',
         'focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2',
@@ -111,20 +111,22 @@ export function CrNameField({
             )}
           />
 
-          {!aiAllowed ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>{suggestButton}</span>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>AI suggestions are restricted or disabled</p>
-              </TooltipContent>
-            </Tooltip>
-          ) : (
-            <AiGate>
-              {suggestButton}
-            </AiGate>
-          )}
+          <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center">
+            {!aiAllowed ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>{suggestButton}</span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>AI suggestions are restricted or disabled</p>
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <AiGate>
+                {suggestButton}
+              </AiGate>
+            )}
+          </div>
         </div>
 
         {/* Alternative name chips */}

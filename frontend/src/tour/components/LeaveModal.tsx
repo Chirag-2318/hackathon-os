@@ -20,7 +20,13 @@ export function LeaveModal({ isOpen, onCancel, onConfirmLeave }: LeaveModalProps
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--backdrop-fallback,#0a0a0b80)] supports-[backdrop-filter]:bg-[var(--backdrop)] backdrop-blur-[3px]"
+          style={{
+            backdropFilter: 'var(--backdrop-blur, blur(3px))',
+            WebkitBackdropFilter: 'var(--backdrop-blur, blur(3px))',
+          }}
+        >
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}

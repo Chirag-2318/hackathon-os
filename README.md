@@ -1,6 +1,6 @@
-# Hackathon OS
+# [brackit]
 
-Hackathon OS is an opinionated execution operating system and real-time team-room platform for hackathons. It guides teams step-by-step through Brief intake, Ideation, 5-step Planning, sprint Building (Kanban board, MVP studio, Docs vault), Tech integration (GitHub syncing, API catalog), Pitch delivery (Deck links, demo video, rehearsal timers, Q&A prep), and final Review and room archiving—backed by real-time Server-Sent Events (SSE), versioned concurrency protection, and a centralized, zero-client-key backend AI gateway.
+[brackit] is an opinionated execution operating system and real-time team-room platform for hackathons. It guides teams step-by-step through Brief intake, Ideation, 5-step Planning, sprint Building (Kanban board, MVP studio, Docs vault), Tech integration (GitHub syncing, API catalog), Pitch delivery (Deck links, demo video, rehearsal timers, Q&A prep), and final Review and room archiving—backed by real-time Server-Sent Events (SSE), versioned concurrency protection, and a centralized, zero-client-key backend AI gateway.
 
 ---
 

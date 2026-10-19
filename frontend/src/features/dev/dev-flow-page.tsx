@@ -48,7 +48,7 @@ export function DevFlowPage() {
     setIsLoading(true);
     try {
       const res = await apiFetch<any>('/api/v1/dev/demo-room', { method: 'POST' });
-      showMsg(`Demo room created: "${res?.name || 'Hackathon OS Demo'}" (${res?.id})`);
+      showMsg(`Demo room created: "${res?.name || '[brackit] Demo'}" (${res?.id})`);
       await loadRooms();
       if (res?.id) {
         setSelectedRoomId(res.id);

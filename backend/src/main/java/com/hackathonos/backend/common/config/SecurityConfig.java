@@ -97,6 +97,8 @@ public class SecurityConfig {
                 })
             )
             .authorizeHttpRequests(auth -> {
+                auth.dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ASYNC).permitAll();
+
                 // Actuator endpoints: strictly only health (liveness, readiness)
                 auth.requestMatchers(
                         "/actuator/health",

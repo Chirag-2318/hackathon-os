@@ -27,7 +27,7 @@ import { isSampleRoomTarget, handleSampleRoomRequest } from '@/tour/guided/sampl
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL !== undefined
   ? import.meta.env.VITE_API_BASE_URL
-  : (import.meta.env.DEV ? 'http://localhost:8080' : '');
+  : (import.meta.env.DEV ? (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' ? 'http://127.0.0.1:8080' : 'http://localhost:8080') : '');
 const BASE_URL = API_BASE_URL;
 
 export async function apiClient<T>(path: string, options: RequestInit = {}): Promise<T> {

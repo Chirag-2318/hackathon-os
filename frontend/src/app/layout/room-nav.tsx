@@ -36,7 +36,6 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
   const queryClient = useQueryClient();
   const clock = useClock();
   const isSampleRoom = roomId === 'sample-room';
-  useRoomEvents(isSampleRoom ? undefined : roomId);
 
   const { data: homeData } = useHome();
   const { data: overviewData } = useRoomOverview(roomId);

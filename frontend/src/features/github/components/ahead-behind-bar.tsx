@@ -3,8 +3,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 
 interface AheadBehindBarProps {
   role: string;
-  ahead: number;
-  behind: number;
+  ahead?: number | null;
+  behind?: number | null;
 }
 
 export function AheadBehindBar({ role, ahead, behind }: AheadBehindBarProps) {
@@ -12,6 +12,14 @@ export function AheadBehindBar({ role, ahead, behind }: AheadBehindBarProps) {
     return (
       <span className="h-5 px-2 rounded-full bg-muted/60 text-muted-foreground text-[11px] font-medium inline-flex items-center">
         Synced
+      </span>
+    );
+  }
+
+  if (ahead == null || behind == null || ahead < 0 || behind < 0) {
+    return (
+      <span className="text-[11px] text-muted-foreground font-mono tabular-nums px-1">
+        —
       </span>
     );
   }
