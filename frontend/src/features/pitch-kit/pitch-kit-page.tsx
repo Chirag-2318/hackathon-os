@@ -135,11 +135,13 @@ export function PitchKitPage() {
     queryFn: () => apiFetch<any>('/api/v1/meta'),
   });
 
-  const { data: members = [] } = useQuery({
+  const { data: membersRaw = [] } = useQuery({
     queryKey: ['room-members', roomId],
     queryFn: () => roomService.getMembers(roomId!),
     enabled: !!roomId,
   });
+  // Guard: always ensure members is a real array regardless of API/cache shape
+  const members = Array.isArray(membersRaw) ? membersRaw : [];
 
   const { data: room = null } = useQuery({
     queryKey: ['room', roomId],

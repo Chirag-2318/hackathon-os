@@ -1,29 +1,26 @@
-/**
- * Wordmark — the [brackit] logotype with coloured brackets.
- * Always renders the product name exactly as [brackit], lowercase with brackets.
- */
-import type { CSSProperties } from 'react';
+import darkLogo from '../../../../images/dark.svg';
+import lightLogo from '../../../../images/light.svg';
 
-interface WordmarkProps {
-  /** Font size in px */
-  size?: number;
-  /** 'light' for light backgrounds, 'dark' for the stage */
-  on?: 'light' | 'dark';
-  className?: string;
-}
+// The real [brackit] logo. `on` is the surface the logo sits on: 'dark' uses dark.svg and 'light' uses light.svg.
+// If the colours turn out inverted for your backgrounds, flip SWAP_LOGOS to true (one place, nothing else changes).
+const SWAP_LOGOS = false;
+const LOGO_ASPECT = 7.2;
 
-export function Wordmark({ size = 22, on = 'light', className }: WordmarkProps) {
+type WordmarkProps = { size?: number; on?: 'light' | 'dark'; className?: string };
+
+export function Wordmark({ size = 24, on = 'light', className = '' }: WordmarkProps) {
+  const useDark = (on === 'dark') !== SWAP_LOGOS;
+  const height = size;
   return (
-    <span
-      className={`l-wordmark${className ? ` ${className}` : ''}`}
-      data-on={on}
-      role="img"
-      aria-label="[brackit]"
-      style={{ '--l-wordmark-size': `${size}px` } as CSSProperties}
-    >
-      <span className="l-wordmark-br" aria-hidden="true">[</span>
-      <span aria-hidden="true">brackit</span>
-      <span className="l-wordmark-br" aria-hidden="true">]</span>
-    </span>
+    <img
+      className={`l-wordmark-img ${className}`.trim()}
+      src={useDark ? darkLogo : lightLogo}
+      alt="[brackit]"
+      style={{ height: `${height}px`, width: 'auto' }}
+      width={Math.round(height * LOGO_ASPECT)}
+      height={height}
+      decoding="async"
+      draggable={false}
+    />
   );
 }

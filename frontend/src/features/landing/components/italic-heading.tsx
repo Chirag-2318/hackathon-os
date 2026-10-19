@@ -26,6 +26,8 @@ interface ItalicHeadingProps {
   align?: 'left' | 'center';
   id?: string;
   className?: string;
+  /** Render the trailing dot (if any) with purple gradient */
+  gradientDot?: boolean;
 }
 
 export function ItalicHeading({
@@ -36,6 +38,7 @@ export function ItalicHeading({
   align = 'left',
   id,
   className,
+  gradientDot,
 }: ItalicHeadingProps) {
   const resolvedSize = size ?? defaultSizeMap[as];
   const sizeClass = `l-${resolvedSize}`;
@@ -43,11 +46,24 @@ export function ItalicHeading({
   const lines = Array.isArray(lead) ? lead : [lead];
   const lastIndex = lines.length - 1;
 
+  const renderEm = () => {
+    if (gradientDot && emText.endsWith('.')) {
+      const base = emText.slice(0, -1);
+      return (
+        <em>
+          {base}
+          <span className="l-gradient-dot">.</span>
+        </em>
+      );
+    }
+    return <em>{emText}</em>;
+  };
+
   const content = lines.map((line, i) => {
     if (i === lastIndex) {
       return (
         <span key={i} className="l-line">
-          {line} <em>{emText}</em>
+          {line} {renderEm()}
         </span>
       );
     }

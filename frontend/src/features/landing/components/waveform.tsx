@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef } from 'react';
 
 // Decorative and deterministic: no randomness, so it looks the same on every visit.
-// With `animate` the bars move on their own (about 30 frames a second) and follow `level`;
-// without it they show one fixed frame.
+// With `animate` the bars move on their own (about 30 frames a second) and follow the loudness;
+// without it they show one fixed frame. `levelRef` (when given) is read every frame instead of `level`.
 type WaveformProps = {
   bars?: number;
-  level?: number; // 0 to 1: how loud
-  phase?: number; // shifts the shape
+  level?: number;                       // 0 to 1: how loud
+  levelRef?: { current: number };       // live loudness, read each frame (no re-render needed)
+  phase?: number;                       // shifts the shape
   animate?: boolean;
   className?: string;
 };
@@ -19,12 +20,12 @@ function heightFor(index: number, level: number, phase: number): number {
   return Math.round(MIN + (MAX - MIN) * level * shape);
 }
 
-export function Waveform({ bars = 48, level = 1, phase = 0, animate = false, className = '' }: WaveformProps) {
+export function Waveform({ bars = 48, level = 1, levelRef, phase = 0, animate = false, className = '' }: WaveformProps) {
   const barRefs = useRef<(HTMLSpanElement | null)[]>([]);
-  const levelRef = useRef(level);
+  const levelValue = useRef(level);
 
   useEffect(() => {
-    levelRef.current = level;
+    levelValue.current = level;
   }, [level]);
 
   const staticHeights = useMemo(
@@ -36,6 +37,7 @@ export function Waveform({ bars = 48, level = 1, phase = 0, animate = false, cla
     if (!animate) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
+    const currentLevel = () => (levelRef ? levelRef.current : levelValue.current);
     let frame = 0;
     let last = 0;
     const tick = (now: number) => {
@@ -43,20 +45,20 @@ export function Waveform({ bars = 48, level = 1, phase = 0, animate = false, cla
       if (now - last < 33) return;
       last = now;
       const livePhase = phase + now * 0.004;
+      const loudness = currentLevel();
       barRefs.current.forEach((element, index) => {
-        if (element) element.style.height = `${heightFor(index, levelRef.current, livePhase)}px`;
+        if (element) element.style.height = `${heightFor(index, loudness, livePhase)}px`;
       });
     };
     frame = window.requestAnimationFrame(tick);
 
     return () => {
       window.cancelAnimationFrame(frame);
-      // put the bars back on the fixed frame when the animation stops
       barRefs.current.forEach((element, index) => {
-        if (element) element.style.height = `${heightFor(index, levelRef.current, phase)}px`;
+        if (element) element.style.height = `${heightFor(index, currentLevel(), phase)}px`;
       });
     };
-  }, [animate, phase]);
+  }, [animate, phase, levelRef]);
 
   return (
     <div className={`l-wave ${className}`.trim()} aria-hidden="true">

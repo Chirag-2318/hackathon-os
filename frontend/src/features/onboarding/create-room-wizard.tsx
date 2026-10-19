@@ -7,6 +7,8 @@ import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/design/api';
 import { toast } from 'sonner';
+import { AiGate, useAiAction } from '@/features/ai-gate';
+import { roomService } from '@/services';
 
 interface EventTemplate {
   id: string;
@@ -49,28 +51,28 @@ export function CreateRoomWizard() {
     ? serverTemplates
     : FALLBACK_TEMPLATES;
 
-  // 2. AI status query to disable naming sparkle button if AI unavailable
-  const { data: aiStatus } = useQuery({
-    queryKey: ['ai-status'],
-    queryFn: () => apiFetch<{ healthy?: boolean; available?: boolean }>('/api/v1/ai/status').catch(() => ({ healthy: false, available: false })),
-  });
-  const isAiDisabled = aiStatus?.healthy === false || aiStatus?.available === false;
+  const { handleAiError } = useAiAction();
 
-  // "Suggest a name" sparkle mutation
+  // "Suggest a name" sparkle mutation using AI service
   const { mutate: suggestName, isPending: isSuggesting } = useMutation({
-    mutationFn: () => apiFetch<{ suggestion: string }>('/api/v1/rooms/suggest-name', { method: 'POST' }),
+    mutationFn: () => roomService.suggestRoomName({
+      templateId: selectedTemplateId || undefined,
+      currentName: name.trim() || undefined,
+    }),
     onSuccess: (data) => {
-      if (data?.suggestion) {
-        setName(data.suggestion);
+      const suggested = data?.names?.[0];
+      if (suggested) {
+        setName(suggested);
         setFieldErrors((prev) => {
           const next = { ...prev };
           delete next.name;
           return next;
         });
-        toast.success(`Suggested: ${data.suggestion}`);
+        toast.success(`Suggested: ${suggested}`);
       }
     },
-    onError: () => {
+    onError: (err: any) => {
+      handleAiError(err);
       toast.error('Could not generate name at this time.');
     },
   });
@@ -137,24 +139,26 @@ export function CreateRoomWizard() {
               <label htmlFor="room-name" className="text-xs font-semibold text-ink">
                 Room Name <span className="text-rose-500">*</span>
               </label>
-              <button
-                type="button"
-                onClick={() => suggestName()}
-                disabled={isSuggesting || isAiDisabled}
-                className={cn(
-                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer',
-                  'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60',
-                  'disabled:opacity-50 disabled:cursor-not-allowed'
-                )}
-                title={isAiDisabled ? 'AI naming assistant currently unavailable' : 'Suggest a project name'}
-              >
-                {isSuggesting ? (
-                  <Loader2 className="size-3 animate-spin" />
-                ) : (
-                  <Sparkles className="size-3 text-blue-600 dark:text-blue-400" />
-                )}
-                <span>Suggest a name</span>
-              </button>
+              <AiGate>
+                <button
+                  type="button"
+                  onClick={() => suggestName()}
+                  disabled={isSuggesting}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer',
+                    'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60',
+                    'disabled:opacity-50 disabled:cursor-not-allowed'
+                  )}
+                  title="Suggest a project name"
+                >
+                  {isSuggesting ? (
+                    <Loader2 className="size-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="size-3 text-blue-600 dark:text-blue-400" />
+                  )}
+                  <span>Suggest a name</span>
+                </button>
+              </AiGate>
             </div>
 
             <input

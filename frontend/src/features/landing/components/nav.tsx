@@ -105,7 +105,7 @@ export function Nav({ tone = 'light', hud, className }: NavProps) {
         >
           {/* Brand */}
           <Link to="/" className="l-nav-brand" aria-label="[brackit] home">
-            <Wordmark size={22} on={tone} />
+            <Wordmark size={45} on={tone} />
           </Link>
 
           {/* Center: links + HUD slot */}

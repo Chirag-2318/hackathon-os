@@ -30,6 +30,7 @@ export function Hero() {
               align="center"
               lead={[...HERO_COPY.headingLead]}
               em={HERO_COPY.headingEm}
+              gradientDot
             />
           </Rise>
 

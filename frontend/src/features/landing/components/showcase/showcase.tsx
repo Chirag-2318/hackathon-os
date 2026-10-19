@@ -59,7 +59,6 @@ export function Showcase() {
         <Blueprint
           verticals={['0px', '100%']}
           horizontals={['0px', '100%']}
-          plus={[['0px', '0px'], ['100%', '0px'], ['0px', '100%'], ['100%', '100%']]}
           reach={72}
         />
         <div className="l-sc-plate">

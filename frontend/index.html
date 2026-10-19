@@ -25,6 +25,17 @@
           if (meta) {
             meta.setAttribute("content", resolved === "dark" ? "#0E0E10" : "#F5F5F5");
           }
+
+          // Preload first frame's 1440 AVIF on sign-in route
+          var p = window.location.pathname;
+          if (p === '/signin' || p === '/login' || p.startsWith('/signin/')) {
+            var link = document.createElement('link');
+            link.rel = 'preload';
+            link.as = 'image';
+            link.href = '/signin/signin-01-first-light-1440.avif';
+            link.type = 'image/avif';
+            document.head.appendChild(link);
+          }
         } catch (e) {}
       })();
     </script>

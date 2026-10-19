@@ -88,6 +88,9 @@ export function RoomOverviewPage() {
     enabled: Boolean(activeRoomId),
   });
 
+  // Must be called unconditionally before any early returns (Rules of Hooks)
+  const taskCounts = useTaskCounts(activeRoomId);
+
   const passCheckpointMutation = useMutation({
     mutationFn: (cpId: string) => checkpointService.passCheckpoint(activeRoomId, cpId),
     onSuccess: () => {
@@ -141,7 +144,6 @@ export function RoomOverviewPage() {
 
   // Stat Strip Data
   const vitals = overview?.vitals;
-  const taskCounts = useTaskCounts(activeRoomId);
   const passedCheckpoints = vitals?.checkpoints?.passed ?? 0;
   const totalCheckpoints = vitals?.checkpoints?.total ?? Math.max(1, overview?.checkpoints?.length ?? 1);
   const openTasksCount = taskCounts.total > 0 ? taskCounts.open : (vitals?.tasks?.open ?? 0);

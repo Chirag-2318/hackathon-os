@@ -1,0 +1,3 @@
+﻿[brackit].
+
+Most teams don't lose because they can't code — they decide late, scope wrong, and run out of time. We built the room that fixes the order: brief, idea, plan, board, pitch, submit. On one clock.

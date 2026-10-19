@@ -1,151 +1,161 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { BracketFrame } from '../components/bracket-frame';
 import { Container } from '../components/container';
 import { Eyebrow } from '../components/eyebrow';
 import { ItalicHeading } from '../components/italic-heading';
-import { JudgeScene } from '../components/scenes/judge-scene';
-import { LaunchScene } from '../components/scenes/launch-scene';
-import { ReadinessScene } from '../components/scenes/readiness-scene';
-import { RehearsalScene } from '../components/scenes/rehearsal-scene';
+import { LazyMount } from '../components/lazy-mount';
 import { Section } from '../components/section';
-import { StageShell } from '../components/stage-shell';
-import { JUDGE, LAUNCH, READINESS, REHEARSAL, STAGE_HEAD } from '../data/stage-act';
-import { HUD_ORDER, useHudSource } from '../hooks/use-hud';
+import { CueRail } from '../components/stage-act/cue-rail';
+import { StageBackdrop } from '../components/stage-act/stage-backdrop';
+import { StageSatellites } from '../components/stage-act/stage-satellites';
+import { StageWindow } from '../components/stage-act/stage-window';
+import { LAUNCH, STAGE_HEAD } from '../data/stage-act';
+import { STAGE_CUES } from '../data/stage-cues';
 import { useInViewOnce } from '../hooks/use-in-view-once';
-import { useStageProgress } from '../hooks/use-stage-progress';
-import { formatClock, parseClock } from '../lib/clock';
-import { noOrphan } from '../lib/no-orphan';
+import { useMediaQuery } from '../hooks/use-media-query';
+import { useStageAct } from '../hooks/use-stage-act';
+import { useStageSubmit } from '../hooks/use-stage-submit';
 
-type LaunchPhase = 'idle' | 'pressed' | 'stamped';
+// The pinned theatre only exists on large screens with room to spare and without reduced motion.
+const PINNED_QUERY = '(min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference)';
 
-// One tree serves both layouts. On desktop (and without reduced motion) the scenes sit on top of each other inside a
-// pinned frame and the scroll position picks the active one. Everywhere else they are stacked, one under another.
-// All four scenes are always in the page, in reading order, so nothing is hidden from screen readers.
-export function StageAct() {
-  const { trackRef, stickyRef, pinned, scene, line, level } = useStageProgress();
-  const [phase, setPhase] = useState<LaunchPhase>('idle');
-  const pressTimeoutRef = useRef<number | null>(null);
-  const { ref: launchRef, inView: launchInView } = useInViewOnce<HTMLDivElement>(0.5);
-  const reportSubmitted = useHudSource(HUD_ORDER.submitted);
-  const stateOf = (index: number) => (scene === index ? 'active' : index < scene ? 'past' : 'future');
+function Heading() {
+  return (
+    <>
+      <Eyebrow index={4}>{STAGE_HEAD.eyebrow}</Eyebrow>
+      <ItalicHeading as="h2" id="stage-heading" size="display-xl" align="center" lead={STAGE_HEAD.headingLead} em={STAGE_HEAD.headingEm} />
+      <p className="l-lead">{STAGE_HEAD.line}</p>
+    </>
+  );
+}
 
-  const triggerSubmit = () => {
-    setPhase((current) => {
-      if (current !== 'idle') return current;
-      if (pressTimeoutRef.current) {
-        window.clearTimeout(pressTimeoutRef.current);
-      }
-      pressTimeoutRef.current = window.setTimeout(() => {
-        setPhase('stamped');
-      }, 140);
-      return 'pressed';
-    });
-  };
+// Screen-reader text: all four cues are described even though only one is on screen at a time.
+function Described({ submitted }: { submitted: boolean }) {
+  return (
+    <>
+      <ol className="l-sr-only">
+        {STAGE_CUES.map((cue) => (
+          <li key={cue.id}>{`${cue.label}. ${cue.line} ${cue.desc}`}</li>
+        ))}
+      </ol>
+      <p className="l-sr-only" aria-live="polite">{submitted ? LAUNCH.result : ''}</p>
+    </>
+  );
+}
 
-  // Not pinned (phones, tablets, reduced motion): the stamp lands once, when the launch card is mostly in view.
+function PinnedStage() {
+  const stage = useStageAct();
+  const { submitted, submit, reset } = useStageSubmit();
+  const viewIndex = Math.max(stage.scene, 0);
+  const previous = useRef(viewIndex);
+  const direction = viewIndex >= previous.current ? 'forward' : 'backward';
   useEffect(() => {
-    if (!pinned && launchInView && phase === 'idle') triggerSubmit();
-  }, [pinned, launchInView, phase]);
+    previous.current = viewIndex;
+  }, [viewIndex]);
 
-  // Pinned: about a second after the launch scene appears the demo cursor presses the button (the visitor can press first).
+  // Scrolling back above the last cue resets it, so the stamp can land again.
   useEffect(() => {
-    if (!pinned || scene !== 3 || phase !== 'idle') return;
-    const id = window.setTimeout(() => triggerSubmit(), 1000);
-    return () => window.clearTimeout(id);
-  }, [pinned, scene, phase]);
+    if (stage.scene < 3 && submitted) reset();
+  }, [stage.scene, submitted, reset]);
 
-  // Pinned: scrolling back above the launch scene resets it, so the stamp can land again.
-  useEffect(() => {
-    if (pinned && scene < 3 && phase !== 'idle') {
-      if (pressTimeoutRef.current) {
-        window.clearTimeout(pressTimeoutRef.current);
-        pressTimeoutRef.current = null;
-      }
-      setPhase('idle');
-    }
-  }, [pinned, scene, phase]);
-
-  // Clear timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (pressTimeoutRef.current) {
-        window.clearTimeout(pressTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // The clock pill freezes on the launch time, then reads SUBMITTED for the rest of the page.
-  useEffect(() => {
-    if (phase === 'idle') {
-      reportSubmitted(null);
-      return;
-    }
-    reportSubmitted({ text: formatClock(parseClock(LAUNCH.time)), tone: 'done' });
-    const id = window.setTimeout(() => reportSubmitted({ text: LAUNCH.stamp, tone: 'done' }), 1600);
-    return () => window.clearTimeout(id);
-  }, [phase, reportSubmitted]);
+  const cue = STAGE_CUES[viewIndex];
 
   return (
-    <Section id="stage-act" tone="dark" grain className="l-stage-act" ariaLabelledBy="stage-heading">
-      <div ref={trackRef} className="l-stage-track">
-        <div ref={stickyRef} className="l-stage-sticky">
-          <div className="l-grid-bg" aria-hidden="true" />
-          <Container>
-            <div className="l-stage-head" data-phase={scene < 0 ? 'curtain' : 'scenes'}>
-              <Eyebrow index={4}>{STAGE_HEAD.eyebrow}</Eyebrow>
-              <ItalicHeading
-                as="h2"
-                id="stage-heading"
-                size="display-xl"
-                align="center"
-                lead={STAGE_HEAD.headingLead}
-                em={STAGE_HEAD.headingEm}
-              />
-              <p className="l-lead">{noOrphan(STAGE_HEAD.line)}</p>
+    <div ref={stage.trackRef} className="l-sg-track">
+      <div ref={stage.stickyRef} className="l-sg-sticky" data-scene={stage.scene}>
+        <StageBackdrop scene={stage.scene} submitted={submitted} />
+        <Container wide>
+          <div ref={stage.headRef} className="l-sg-head">
+            <Heading />
+          </div>
+
+          <div ref={stage.wrapRef} className="l-sg-wrap">
+            <div key={cue.id} className="l-sg-strip l-rise">
+              <span className="l-sg-strip-left">
+                <span className="l-sg-strip-index">{`[ ${cue.index} / 04 ]`}</span>
+                <span className="l-sg-strip-label">{cue.label}</span>
+              </span>
+              <span className="l-sg-strip-line">{cue.line}</span>
             </div>
-
-            <div className="l-stage-scenes">
-              <div className="l-stage-scene" data-state={stateOf(0)}>
-                <StageShell label={REHEARSAL.barLabel}>
-                  <RehearsalScene
-                    current={pinned ? line : undefined}
-                    segment={pinned ? line : undefined}
-                    level={pinned ? level : undefined}
-                    animate={pinned && scene === 0}
-                  />
-                </StageShell>
-                <p className="l-stage-note">{REHEARSAL.caption}</p>
-              </div>
-
-              <div className="l-stage-scene" data-state={stateOf(1)}>
-                <StageShell label={JUDGE.barLabel}>
-                  <JudgeScene />
-                </StageShell>
-                <p className="l-stage-note">{JUDGE.caption}</p>
-              </div>
-
-              <div className="l-stage-scene" data-state={stateOf(2)}>
-                <StageShell
-                  label={READINESS.barLabel}
-                  right={<span className="l-stage-chip" data-tone="plain">{READINESS.exampleChip}</span>}
-                >
-                  <ReadinessScene filled={pinned ? scene >= 2 : undefined} />
-                </StageShell>
-              </div>
-
-              <div ref={launchRef} className="l-stage-scene" data-state={stateOf(3)}>
-                <StageShell label={LAUNCH.barLabel}>
-                  <LaunchScene
-                    phase={phase}
-                    submitted={phase === 'stamped'}
-                    armed={pinned && scene === 3 && phase === 'idle'}
-                    onMark={triggerSubmit}
-                  />
-                </StageShell>
-              </div>
+            <div className="l-sg-stage">
+              <BracketFrame tone="dark" gap={34} arm={16} stroke={2} className="l-sg-frame">
+                <StageWindow
+                  viewIndex={viewIndex}
+                  direction={direction}
+                  line={stage.line}
+                  levelRef={stage.levelRef}
+                  animated
+                  submitted={submitted}
+                  armed={stage.scene === 3}
+                  onPress={submit}
+                />
+              </BracketFrame>
+              <StageSatellites index={viewIndex} submitted={submitted} />
             </div>
-          </Container>
-        </div>
+          </div>
+
+          <div ref={stage.railRef} className="l-sg-rail">
+            <CueRail active={viewIndex} fillRef={stage.fillRef} />
+          </div>
+        </Container>
+        <Described submitted={submitted} />
       </div>
+    </div>
+  );
+}
+
+function StackedStage() {
+  const { submitted, submit } = useStageSubmit();
+  const { ref, inView } = useInViewOnce<HTMLLIElement>(0.5);
+  const noop = useRef({ current: 0 }).current;
+
+  // The stamp lands once, when the last card is mostly on screen.
+  useEffect(() => {
+    if (inView) submit();
+  }, [inView, submit]);
+
+  return (
+    <Container>
+      <div className="l-sgs-head">
+        <Heading />
+      </div>
+      <ol className="l-sgs-list">
+        {STAGE_CUES.map((cue, index) => (
+          <li key={cue.id} ref={index === 3 ? ref : undefined} className="l-sgs-card">
+            <div className="l-sgs-meta">
+              <span>{`[ ${cue.index} / 04 ]`}</span>
+              <span>{cue.label}</span>
+            </div>
+            <p className="l-body">{cue.line}</p>
+            <p className="l-sr-only">{cue.desc}</p>
+            <LazyMount minHeight={300}>
+              <StageWindow
+                viewIndex={index}
+                direction="forward"
+                line={1}
+                levelRef={noop}
+                animated={false}
+                submitted={index === 3 && submitted}
+                armed={false}
+                onPress={submit}
+              />
+            </LazyMount>
+            <div className="l-sgs-sats">
+              <StageSatellites index={index} submitted={index === 3 && submitted} />
+            </div>
+          </li>
+        ))}
+      </ol>
+      <p className="l-sr-only" aria-live="polite">{submitted ? LAUNCH.result : ''}</p>
+    </Container>
+  );
+}
+
+export function StageAct() {
+  const pinned = useMediaQuery(PINNED_QUERY);
+  return (
+    <Section id="stage-act" tone="dark" grain className="l-stage-act" ariaLabelledBy="stage-heading">
+      {pinned ? <PinnedStage /> : <StackedStage />}
     </Section>
   );
 }

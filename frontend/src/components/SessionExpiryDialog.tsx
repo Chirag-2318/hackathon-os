@@ -15,6 +15,16 @@ export function SessionExpiryDialog() {
 
   useEffect(() => {
     const handleExpired = () => {
+      // Don't show the dialog if already on an auth / sign-in page
+      const path = window.location.pathname;
+      if (
+        path.includes('/login') ||
+        path.includes('/signin') ||
+        path.includes('/sign-in') ||
+        path.includes('/auth')
+      ) {
+        return;
+      }
       setIsOpen(true);
     };
 

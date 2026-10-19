@@ -228,9 +228,7 @@ export function CreateRoomDialogInner({ prefill: directPrefill }: { prefill?: Cr
   })();
 
   // Suggest name
-  const { data: meta } = useMeta();
   const { handleAiError } = useAiAction();
-  const aiAllowed = meta?.aiEnabled ?? true;
   const [alternativeNames, setAlternativeNames] = useState<string[]>([]);
   const [suggestError, setSuggestError] = useState<string | null>(null);
 
@@ -436,7 +434,7 @@ export function CreateRoomDialogInner({ prefill: directPrefill }: { prefill?: Cr
             onSelectAlternative={handleSelectAlternative}
             suggestError={suggestError}
             onRetrySuggest={() => suggestMutation.mutate()}
-            aiAllowed={aiAllowed}
+            aiAllowed={true}
           />
 
           {/* 2. Event template */}

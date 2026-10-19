@@ -12,6 +12,7 @@ import { ConfirmDialog } from '@/design/components/confirm-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/design/components/button';
 import { Loader2, ExternalLink, RefreshCw, Trash2, KeyRound } from 'lucide-react';
+import { useAuthStore } from '@/features/auth/useAuthStore';
 
 export function AiKeysSection() {
   const queryClient = useQueryClient();
@@ -56,9 +57,29 @@ export function AiKeysSection() {
       await deleteUserAiKey();
       toast.success('API key removed');
       setShowRemoveConfirm(false);
+
+      const currentUser = useAuthStore.getState().user;
+      const keyInfo = {
+        hasKey: false,
+        status: null,
+        last4: null,
+      };
+
+      if (currentUser) {
+        useAuthStore.getState().setUser({
+          ...currentUser,
+          aiKey: keyInfo,
+        });
+      }
+
+      queryClient.setQueryData(['currentUser'], (prev: any) =>
+        prev ? { ...prev, aiKey: keyInfo } : prev
+      );
+
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['ai-status'] }),
         queryClient.invalidateQueries({ queryKey: ['currentUser'] }),
+        queryClient.invalidateQueries({ queryKey: ['meta'] }),
       ]);
     } catch (err: any) {
       toast.error(err?.message || 'Failed to remove API key');

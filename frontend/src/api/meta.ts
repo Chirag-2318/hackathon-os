@@ -36,3 +36,7 @@ export async function fetchMeta(): Promise<MetaResponse> {
 export function getCachedMeta(): MetaResponse | null {
   return cachedMeta;
 }
+
+export function invalidateMetaCache(): void {
+  cachedMeta = null;
+}

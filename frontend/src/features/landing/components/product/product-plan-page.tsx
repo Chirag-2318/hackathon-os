@@ -1,4 +1,5 @@
-import { Check, Copy, ArrowRight, FileText, CheckCircle2, Download, Layers } from 'lucide-react';
+import type { CSSProperties } from 'react';
+import { Check, Copy, ArrowRight, FileText, CheckCircle2, Download } from 'lucide-react';
 import { PLAN_FIXTURE } from '../../data/product-fixtures';
 
 // Copied and adapted from:
@@ -12,13 +13,16 @@ export function ProductPlanPage() {
 
   return (
     <div className="w-full flex flex-col gap-5 p-7 max-w-[1240px] mx-auto font-sans">
-      {/* Header bar */}
-      <div className="flex items-center justify-between pb-2 border-b border-border/60">
+      {/* 1. Header bar */}
+      <div
+        className="l-ps-rise flex items-center justify-between pb-2 border-b border-border/60"
+        style={{ '--l-i': 0 } as CSSProperties}
+      >
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-display font-normal tracking-tight text-foreground leading-none">
+            <div className="text-3xl font-display font-normal tracking-tight text-foreground leading-none">
               {PLAN_FIXTURE.title}
-            </h1>
+            </div>
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono uppercase tracking-wider font-semibold border shrink-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
               {PLAN_FIXTURE.stepsDone} of {PLAN_FIXTURE.stepsTotal} steps validated
             </span>
@@ -44,10 +48,14 @@ export function ProductPlanPage() {
         </div>
       </div>
 
-      {/* Main Layout: Left Stepper Pipeline, Right Docs Vault */}
+      {/* 2. Main Layout: Left Stepper Pipeline (4 cols), Right Docs Vault (8 cols) */}
       <div className="grid grid-cols-12 gap-5 items-start">
         {/* Left Column: Pipeline Stepper (4 cols) */}
-        <div className="col-span-4 rounded-[20px] bg-card border border-border shadow-xs p-5 space-y-4">
+        <div
+          data-callout="Four steps"
+          className="l-ps-rise col-span-4 rounded-[20px] bg-card border border-border shadow-xs p-5 space-y-4"
+          style={{ '--l-i': 1 } as CSSProperties}
+        >
           <div className="flex items-center justify-between border-b border-border/60 pb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Plan Pipeline
@@ -59,19 +67,23 @@ export function ProductPlanPage() {
 
           <div className="flex flex-col select-none">
             {steps.map((step, idx) => (
-              <div key={step.id} className="flex items-center h-[62px] relative group">
-                {/* Connector line */}
-                {idx < steps.length - 1 && (
-                  <div className="absolute left-3.5 top-8 bottom-0 w-0.5 bg-emerald-500" />
-                )}
-
-                {/* Circle */}
-                <div className="size-7 rounded-full flex items-center justify-center relative z-10 shrink-0 mr-3 bg-emerald-500/10 border-2 border-emerald-500 text-emerald-600">
-                  <Check className="size-3.5 stroke-[3]" />
+              <div
+                key={step.id}
+                className="l-ps-rise flex h-[62px] relative group"
+                style={{ '--l-i': 2 + idx } as CSSProperties}
+              >
+                {/* Left column: circle + connector */}
+                <div className="w-7 relative flex flex-col items-center shrink-0 mr-3">
+                  <div className="size-7 rounded-full flex items-center justify-center relative z-10 shrink-0 bg-emerald-500/10 border-2 border-emerald-500 text-emerald-600">
+                    <Check className="size-3.5 stroke-[3]" />
+                  </div>
+                  {idx < steps.length - 1 && (
+                    <div className="w-0.5 bg-emerald-500 flex-1 min-h-[34px]" />
+                  )}
                 </div>
 
                 {/* Label */}
-                <div className="flex-1 min-w-0 pr-1">
+                <div className="flex-1 min-w-0 pr-1 pt-1">
                   <p className="text-xs font-semibold text-foreground truncate">
                     {step.title}
                   </p>
@@ -98,11 +110,15 @@ export function ProductPlanPage() {
         </div>
 
         {/* Right Column: Generated Documents Vault (8 cols) */}
-        <div className="col-span-8 rounded-[20px] bg-card border border-border shadow-xs overflow-hidden">
+        <div
+          data-callout="Nine docs"
+          className="l-ps-rise col-span-8 rounded-[20px] bg-card border border-border shadow-xs overflow-hidden"
+          style={{ '--l-i': 6 } as CSSProperties}
+        >
           <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-border/60">
             <div className="flex items-center gap-2">
               <FileText className="size-4 text-ink-2" />
-              <h3 className="text-sm font-semibold text-foreground">Generated Documents Vault</h3>
+              <div className="text-sm font-semibold text-foreground">Generated Documents Vault</div>
             </div>
             <span className="text-xs font-mono text-muted-foreground">
               {docs.length} markdown files
@@ -111,10 +127,11 @@ export function ProductPlanPage() {
 
           {/* Docs Table Rows */}
           <div className="divide-y divide-border/50 text-xs">
-            {docs.map((doc) => (
+            {docs.map((doc, idx) => (
               <div
                 key={doc.name}
-                className="w-full h-11 px-4 flex items-center justify-between gap-3 text-left transition-colors hover:bg-surface/60"
+                className="l-ps-rise w-full h-11 px-4 flex items-center justify-between gap-3 text-left transition-colors hover:bg-surface/60"
+                style={{ '--l-i': 7 + Math.min(idx, 6) } as CSSProperties}
               >
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                   <FileText className="size-3.5 text-ink-2 shrink-0" />

@@ -1,0 +1,80 @@
+[
+  {
+    "id": "signin-01-first-light",
+    "caption": "First light",
+    "figure": "FIG. 01",
+    "alt": "Two tall black stone brackets facing each other in a quiet hall, with warm light spilling through the gap between them.",
+    "dominant": "#564639",
+    "focalX": 50,
+    "focalY": 20,
+    "sources": {
+      "avif": {
+        "960": "/signin/signin-01-first-light-960.avif",
+        "1440": "/signin/signin-01-first-light-1440.avif",
+        "2000": "/signin/signin-01-first-light-2000.avif"
+      },
+      "webp": {
+        "960": "/signin/signin-01-first-light-960.webp",
+        "1440": "/signin/signin-01-first-light-1440.webp",
+        "2000": "/signin/signin-01-first-light-2000.webp"
+      },
+      "jpg": {
+        "960": "/signin/signin-01-first-light-960.jpg",
+        "1440": "/signin/signin-01-first-light-1440.jpg",
+        "2000": "/signin/signin-01-first-light-2000.jpg"
+      }
+    }
+  },
+  {
+    "id": "signin-02-long-middle",
+    "caption": "The long middle",
+    "figure": "FIG. 02",
+    "alt": "Two monumental stone brackets under midnight ambient illumination, solitary and steadfast with deep blue-violet shadows.",
+    "dominant": "#080708",
+    "focalX": 50,
+    "focalY": 20,
+    "sources": {
+      "avif": {
+        "960": "/signin/signin-02-long-middle-960.avif",
+        "1440": "/signin/signin-02-long-middle-1440.avif",
+        "2000": "/signin/signin-02-long-middle-2000.avif"
+      },
+      "webp": {
+        "960": "/signin/signin-02-long-middle-960.webp",
+        "1440": "/signin/signin-02-long-middle-1440.webp",
+        "2000": "/signin/signin-02-long-middle-2000.webp"
+      },
+      "jpg": {
+        "960": "/signin/signin-02-long-middle-960.jpg",
+        "1440": "/signin/signin-02-long-middle-1440.jpg",
+        "2000": "/signin/signin-02-long-middle-2000.jpg"
+      }
+    }
+  },
+  {
+    "id": "signin-03-last-hour",
+    "caption": "The last hour",
+    "figure": "FIG. 03",
+    "alt": "Two dramatic monolithic brackets silhouetted against an intense golden-hour sunset, rays piercing through the central opening.",
+    "dominant": "#271A13",
+    "focalX": 50,
+    "focalY": 20,
+    "sources": {
+      "avif": {
+        "960": "/signin/signin-03-last-hour-960.avif",
+        "1440": "/signin/signin-03-last-hour-1440.avif",
+        "2000": "/signin/signin-03-last-hour-2000.avif"
+      },
+      "webp": {
+        "960": "/signin/signin-03-last-hour-960.webp",
+        "1440": "/signin/signin-03-last-hour-1440.webp",
+        "2000": "/signin/signin-03-last-hour-2000.webp"
+      },
+      "jpg": {
+        "960": "/signin/signin-03-last-hour-960.jpg",
+        "1440": "/signin/signin-03-last-hour-1440.jpg",
+        "2000": "/signin/signin-03-last-hour-2000.jpg"
+      }
+    }
+  }
+]

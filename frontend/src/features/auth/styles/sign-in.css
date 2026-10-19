@@ -1,0 +1,177 @@
+/* ==========================================================================
+   Sign In Design Tokens & Styles — S02
+   Quiet, sparse, architectural, and tokens-only for full Light/Dark support.
+   ========================================================================== */
+
+/* Page grain: SVG feTurbulence data URI, 3% opacity */
+.signin-page-grain {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity: 0.03;
+  mix-blend-mode: multiply;
+  z-index: 1;
+}
+
+:is(.dark, [data-theme="dark"]) .signin-page-grain {
+  mix-blend-mode: screen;
+}
+
+/* Hero panel grain: 5% overlay blend */
+.signin-hero-grain {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  z-index: 5;
+}
+
+/* Hero panel vignette */
+.signin-hero-vignette {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 35%, rgba(0, 0, 0, 0.22) 100%);
+  z-index: 6;
+}
+
+/* Breathing warm amber glow centered at (50% x, 50% y) */
+.signin-breathing-glow {
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 420px;
+  height: 420px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, #E8A33D 0%, transparent 70%);
+  filter: blur(80px);
+  z-index: 3;
+  animation: signin-glow-pulse 9s ease-in-out infinite alternate;
+}
+
+@keyframes signin-glow-pulse {
+  0% {
+    opacity: 0.00;
+  }
+  100% {
+    opacity: 0.10;
+  }
+}
+
+/* Heading mask reveal line-by-line */
+.signin-heading-mask {
+  overflow: hidden;
+  display: block;
+}
+
+.signin-heading-reveal {
+  display: inline-block;
+  transform: translateY(0);
+  transition: transform 600ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes signin-mask-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.signin-animate-heading {
+  animation: signin-mask-in 600ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+/* Left column staggered entrance */
+@keyframes signin-fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.signin-rise-1 { animation: signin-fade-rise 420ms ease-out 0ms both; }
+.signin-rise-2 { animation: signin-fade-rise 420ms ease-out 60ms both; }
+.signin-rise-3 { animation: signin-fade-rise 420ms ease-out 120ms both; }
+.signin-rise-4 { animation: signin-fade-rise 420ms ease-out 180ms both; }
+.signin-rise-5 { animation: signin-fade-rise 420ms ease-out 240ms both; }
+.signin-rise-6 { animation: signin-fade-rise 420ms ease-out 300ms both; }
+.signin-rise-7 { animation: signin-fade-rise 420ms ease-out 360ms both; }
+.signin-rise-8 { animation: signin-fade-rise 420ms ease-out 420ms both; }
+
+/* Hero scale/opacity entrance */
+@keyframes signin-hero-in {
+  from {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.signin-hero-entrance {
+  animation: signin-hero-in 1400ms cubic-bezier(0.2, 0.8, 0.2, 1) 150ms both;
+}
+
+/* Provider button running line on click */
+@keyframes signin-line-slide {
+  0% {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  50% {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+  50.1% {
+    transform-origin: right;
+  }
+  100% {
+    transform: scaleX(0);
+    transform-origin: right;
+  }
+}
+
+.signin-btn-progress-line {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  height: 1px;
+  background-color: currentColor;
+  animation: signin-line-slide 1.8s ease-in-out infinite;
+}
+
+/* Reduced motion disables all animations */
+@media (prefers-reduced-motion: reduce) {
+  .signin-page-grain,
+  .signin-hero-grain,
+  .signin-breathing-glow,
+  .signin-rise-1,
+  .signin-rise-2,
+  .signin-rise-3,
+  .signin-rise-4,
+  .signin-rise-5,
+  .signin-rise-6,
+  .signin-rise-7,
+  .signin-rise-8,
+  .signin-hero-entrance,
+  .signin-animate-heading,
+  .signin-btn-progress-line {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}

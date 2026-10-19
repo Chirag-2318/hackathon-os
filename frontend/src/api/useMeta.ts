@@ -1,10 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchMeta, type MetaResponse } from './meta';
+import { fetchMeta, invalidateMetaCache, type MetaResponse } from './meta';
 
 export function useMeta() {
   return useQuery<MetaResponse>({
     queryKey: ['meta'],
-    queryFn: fetchMeta,
-    staleTime: Infinity,
+    queryFn: () => {
+      invalidateMetaCache();
+      return fetchMeta();
+    },
+    staleTime: 5 * 60 * 1000,
   });
 }

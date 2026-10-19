@@ -373,10 +373,15 @@ public class RoomService {
     }
 
     public SuggestNameResponse suggestName(User user) {
-        String[] adjs = {"Quantum", "Hyper", "Stellar", "Cosmic", "Agile", "Apex", "Nexus", "Turbo", "Vivid", "Rapid"};
-        String[] nouns = {"Codefest", "Hacks", "Lab", "Works", "Studio", "Launch", "Sprint", "Challenge"};
-        int year = LocalDate.now().getYear();
-        String candidate = adjs[SECURE_RANDOM.nextInt(adjs.length)] + " " + nouns[SECURE_RANDOM.nextInt(nouns.length)] + " " + year;
+        String[] creativePool = {
+            "Kiteframe", "Midnight Dynamo", "ZeroToShip", "PrismIQ", "Paperclip Labs",
+            "Signal Foundry", "Static Drift", "Velvet Binary", "Neon Horizon", "Turing Engine",
+            "Polymer Fleet", "Quantum Quirk", "Halcyon Grid", "Caffeine Protocol", "Strata Labs",
+            "Ghost Velocity", "Aetheric", "Driftwood Logic", "Sprocket & Quill", "Cobalt Theory",
+            "Arcadia Studio", "MonoStack", "FableCraft", "Beacon Zero", "Lucid Frame",
+            "Alloy Dynamics", "Northstar Collective", "Solaris Vector", "Cipher Shift", "Verge Works"
+        };
+        String candidate = creativePool[SECURE_RANDOM.nextInt(creativePool.length)];
         return new SuggestNameResponse(candidate);
     }
 

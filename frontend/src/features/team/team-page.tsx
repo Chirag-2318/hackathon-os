@@ -144,7 +144,14 @@ export function TeamPage() {
   // 3. Fetch Online Presence
   const { data: onlineMembers = [] } = useQuery<{ id: string }[]>({
     queryKey: ['room-presence', activeRoomId],
-    queryFn: () => apiFetch<{ id: string }[]>(`/api/v1/rooms/${activeRoomId}/presence`),
+    queryFn: async () => {
+      const res = await apiFetch<any>(`/api/v1/rooms/${activeRoomId}/presence`);
+      // Normalize: API may return an array directly, or a wrapped { items: [...] } shape
+      if (Array.isArray(res)) return res as { id: string }[];
+      if (Array.isArray(res?.items)) return res.items as { id: string }[];
+      if (Array.isArray(res?.members)) return res.members as { id: string }[];
+      return [];
+    },
     enabled: Boolean(activeRoomId),
     refetchInterval: 15000,
   });

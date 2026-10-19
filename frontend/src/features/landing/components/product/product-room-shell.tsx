@@ -8,15 +8,13 @@ import {
   BoardIcon,
   MvpStudioIcon,
   DocsIcon,
-  GithubIcon,
-  ApiHubIcon,
   PitchDeckIcon,
   RehearseIcon,
   SubmissionIcon,
   BackArrowIcon,
   SearchIcon,
 } from '@/components/icons';
-import { ChevronRight, Bell, Volume2, Lock, Check } from 'lucide-react';
+import { ChevronRight, Bell, Volume2, Check } from 'lucide-react';
 import { KbdChip } from '@/shared/ui/primitives/KbdChip';
 import { SHELL_FIXTURE } from '../../data/product-fixtures';
 
@@ -32,31 +30,44 @@ export const ROOM_COMPACT_WIDTH = 1040; // 1272 - 232px sidebar
 
 interface ProductRoomShellProps {
   active: string;
-  clock: string;
-  rings: number[];
-  compact: boolean;
+  clock?: string;
+  rings?: number[];
+  compact?: boolean;
+  crumbs?: string[];
   children: ReactNode;
 }
 
 export function ProductRoomShell({
   active,
-  clock,
-  rings,
-  compact,
+  clock = SHELL_FIXTURE.clock,
+  rings = [88, 92, 85],
+  compact = false,
+  crumbs,
   children,
 }: ProductRoomShellProps) {
-  const normActive = active.toLowerCase();
+  const normActive = (active || '').toLowerCase();
 
-  // Active section metadata for breadcrumbs
+  // Active section metadata for default breadcrumbs
   const getBreadcrumbMeta = () => {
     if (normActive.includes('brief')) return { group: 'Plan', label: 'Brief' };
+    if (normActive.includes('team')) return { group: 'Room', label: 'Team' };
+    if (normActive.includes('ideate')) return { group: 'Plan', label: 'Ideate' };
     if (normActive.includes('plan')) return { group: 'Plan', label: 'Plan' };
     if (normActive.includes('board')) return { group: 'Build', label: 'Board' };
     if (normActive.includes('present') || normActive.includes('pitch')) return { group: 'Present', label: 'Pitch kit' };
+    if (normActive.includes('submit') || normActive.includes('submission') || normActive.includes('launch')) return { group: 'Present', label: 'Submission' };
     return { group: 'Plan', label: 'Overview' };
   };
 
   const breadcrumb = getBreadcrumbMeta();
+
+  // Effective breadcrumb trail
+  const breadcrumbTrail = crumbs ?? [
+    'My rooms',
+    SHELL_FIXTURE.roomName,
+    breadcrumb.group,
+    breadcrumb.label,
+  ];
 
   // Derived readiness percentage
   const avgReadiness = Math.round(
@@ -70,14 +81,13 @@ export function ProductRoomShell({
     >
       {/* ── 1. SIDEBAR (232px) — omitted in compact mode ── */}
       {!compact && (
-        <aside
+        <div
           className="flex flex-col bg-shell h-full shrink-0 border-r border-border px-5 pt-6 pb-4 overflow-hidden"
           style={{ width: 232 }}
-          aria-label="Room navigation"
         >
           {/* Brand header */}
           <div className="flex h-9 items-center mb-4 shrink-0 px-1">
-            <span className="flex items-center gap-2 font-display text-xl font-normal tracking-tight text-ink">
+            <span className="flex items-center gap-1.5 font-display text-xl font-normal tracking-tight text-ink">
               <span className="font-mono text-base font-bold text-accent">[</span>
               <span>brackit</span>
               <span className="font-mono text-base font-bold text-accent">]</span>
@@ -97,7 +107,7 @@ export function ProductRoomShell({
             </div>
             <div className="flex items-center gap-2 mt-0.5">
               <span className="size-2 rounded-full bg-amber-500 shrink-0" />
-              <span className="text-[11px] font-medium text-ink-2">Planning</span>
+              <span className="text-[11px] font-medium text-ink-2">{SHELL_FIXTURE.stage}</span>
               <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-surface border border-border text-ink-3 truncate max-w-[110px]">
                 Sprint 2026
               </span>
@@ -106,13 +116,29 @@ export function ProductRoomShell({
 
           {/* Primary pinned items */}
           <div className="flex flex-col gap-0.5 pb-2 mb-2 border-b border-border/70 shrink-0 text-[13px]">
-            <div className="flex items-center h-8 rounded-lg px-2 gap-2 text-ink-2 hover:bg-hover">
+            <div
+              className={`flex items-center h-8 rounded-lg px-2 gap-2 transition-colors ${
+                normActive.includes('overview')
+                  ? 'bg-hover-surface text-ink font-semibold'
+                  : 'text-ink-2 hover:bg-hover'
+              }`}
+            >
               <span className="size-4 shrink-0 flex items-center justify-center">
                 <OverviewIcon size={16} />
               </span>
               <span className="flex-1 truncate">Overview</span>
             </div>
-            <div className="flex items-center h-8 rounded-lg px-2 gap-2 text-ink-2 hover:bg-hover">
+
+            <div
+              className={`relative flex items-center h-8 rounded-lg px-2 gap-2 transition-colors ${
+                normActive.includes('team')
+                  ? 'bg-hover-surface text-ink font-semibold'
+                  : 'text-ink-2 hover:bg-hover'
+              }`}
+            >
+              {normActive.includes('team') && (
+                <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-accent" />
+              )}
               <span className="size-4 shrink-0 flex items-center justify-center">
                 <TeamIcon size={16} />
               </span>
@@ -127,12 +153,12 @@ export function ProductRoomShell({
             <div className="flex flex-col gap-0.5">
               <div className="flex items-center justify-between px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-ink-3">
                 <span>Plan</span>
-                <span className="font-mono text-[10px]">4/4</span>
+                <span className="font-mono text-[10px]">3/3</span>
               </div>
 
               {/* Brief */}
               <div
-                className={`relative flex items-center h-8 rounded-lg px-2 gap-2 cursor-pointer transition-colors ${
+                className={`relative flex items-center h-8 rounded-lg px-2 gap-2 transition-colors ${
                   normActive.includes('brief')
                     ? 'bg-hover-surface text-ink font-semibold'
                     : 'text-ink-2'
@@ -149,7 +175,16 @@ export function ProductRoomShell({
               </div>
 
               {/* Ideate */}
-              <div className="flex items-center h-8 rounded-lg px-2 gap-2 text-ink-2">
+              <div
+                className={`relative flex items-center h-8 rounded-lg px-2 gap-2 transition-colors ${
+                  normActive.includes('ideate')
+                    ? 'bg-hover-surface text-ink font-semibold'
+                    : 'text-ink-2'
+                }`}
+              >
+                {normActive.includes('ideate') && (
+                  <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-accent" />
+                )}
                 <span className="size-4 shrink-0 flex items-center justify-center">
                   <IdeateIcon size={15} />
                 </span>
@@ -161,7 +196,7 @@ export function ProductRoomShell({
 
               {/* Plan */}
               <div
-                className={`relative flex items-center h-8 rounded-lg px-2 gap-2 cursor-pointer transition-colors ${
+                className={`relative flex items-center h-8 rounded-lg px-2 gap-2 transition-colors ${
                   normActive.includes('plan')
                     ? 'bg-hover-surface text-ink font-semibold'
                     : 'text-ink-2'
@@ -187,7 +222,7 @@ export function ProductRoomShell({
 
               {/* Board */}
               <div
-                className={`relative flex items-center h-8 rounded-lg px-2 gap-2 cursor-pointer transition-colors ${
+                className={`relative flex items-center h-8 rounded-lg px-2 gap-2 transition-colors ${
                   normActive.includes('board')
                     ? 'bg-hover-surface text-ink font-semibold'
                     : 'text-ink-2'
@@ -231,7 +266,7 @@ export function ProductRoomShell({
 
               {/* Pitch kit */}
               <div
-                className={`relative flex items-center h-8 rounded-lg px-2 gap-2 cursor-pointer transition-colors ${
+                className={`relative flex items-center h-8 rounded-lg px-2 gap-2 transition-colors ${
                   normActive.includes('present') || normActive.includes('pitch')
                     ? 'bg-hover-surface text-ink font-semibold'
                     : 'text-ink-2'
@@ -246,8 +281,17 @@ export function ProductRoomShell({
                 <span className="flex-1 truncate">Pitch kit</span>
               </div>
 
-              {/* Submission */}
-              <div className="flex items-center h-8 rounded-lg px-2 gap-2 text-ink-2">
+              {/* Submission / Launch Pad */}
+              <div
+                className={`relative flex items-center h-8 rounded-lg px-2 gap-2 transition-colors ${
+                  normActive.includes('submission') || normActive.includes('submit') || normActive.includes('launch')
+                    ? 'bg-hover-surface text-ink font-semibold'
+                    : 'text-ink-2'
+                }`}
+              >
+                {(normActive.includes('submission') || normActive.includes('submit') || normActive.includes('launch')) && (
+                  <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-accent" />
+                )}
                 <span className="size-4 shrink-0 flex items-center justify-center">
                   <SubmissionIcon size={15} />
                 </span>
@@ -264,23 +308,33 @@ export function ProductRoomShell({
             </div>
             <span className="text-[10px] font-mono text-ink-3">IST</span>
           </div>
-        </aside>
+        </div>
       )}
 
       {/* ── 2. INSET MAIN PANEL ── */}
-      <main className="flex-1 flex flex-col min-w-0 bg-surface border border-b-0 border-r-0 border-border rounded-tl-[16px] overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 bg-surface border border-b-0 border-r-0 border-border rounded-tl-[16px] overflow-hidden">
         {/* Sticky Panel Header (72px) */}
-        <header className="flex items-center justify-between h-[72px] px-8 border-b border-border bg-surface shrink-0">
+        <div className="flex items-center justify-between h-[72px] px-8 border-b border-border bg-surface shrink-0">
           {/* Left: breadcrumb */}
-          <nav className="flex items-center gap-1.5 text-[13px] font-medium shrink-0 min-w-0" aria-label="Breadcrumb">
-            <span className="text-ink-2">My rooms</span>
-            <ChevronRight size={12} className="text-ink-3 shrink-0" />
-            <span className="text-ink-2 truncate max-w-[180px]">{SHELL_FIXTURE.roomName}</span>
-            <ChevronRight size={12} className="text-ink-3 shrink-0" />
-            <span className="text-ink-2 shrink-0">{breadcrumb.group}</span>
-            <ChevronRight size={12} className="text-ink-3 shrink-0" />
-            <span className="text-ink font-semibold truncate">{breadcrumb.label}</span>
-          </nav>
+          <div className="flex items-center gap-1.5 text-[13px] font-medium shrink-0 min-w-0">
+            {breadcrumbTrail.map((crumb, idx) => {
+              const isLast = idx === breadcrumbTrail.length - 1;
+              return (
+                <div key={crumb} className="flex items-center gap-1.5 min-w-0">
+                  {idx > 0 && <ChevronRight size={12} className="text-ink-3 shrink-0" />}
+                  <span
+                    className={
+                      isLast
+                        ? 'text-ink font-semibold truncate'
+                        : 'text-ink-2 truncate max-w-[180px]'
+                    }
+                  >
+                    {crumb}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
 
           {/* Center: search bar */}
           <div className="flex items-center justify-center">
@@ -338,13 +392,13 @@ export function ProductRoomShell({
               ))}
             </div>
           </div>
-        </header>
+        </div>
 
         {/* Page content scroll area */}
         <div className="flex-1 overflow-hidden bg-page">
           {children}
         </div>
-      </main>
+      </div>
     </div>
   );
 }

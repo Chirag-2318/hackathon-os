@@ -94,7 +94,7 @@ public class AiProperties {
         String tag = featureTag.toLowerCase();
         if (tag.startsWith("plan.analysis.")) return 0.3;
         if (tag.startsWith("plan.generate.")) return 0.4;
-        if (tag.contains("naming") || tag.contains("suggest")) return 0.7;
+        if (tag.contains("naming") || tag.contains("suggest")) return 0.85;
         if (tag.contains("pitch") && !tag.contains("qa")) return 0.6;
         if (tag.contains("plan") || tag.contains("prd") || tag.contains("tasks") || tag.contains("json")) return 0.2;
         return 0.3;

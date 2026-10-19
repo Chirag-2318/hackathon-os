@@ -177,24 +177,52 @@ public class AiController {
     public SuggestRoomNameResponse suggestRoomName(@RequestBody(required = false) SuggestRoomNameRequest request) {
         User user = currentUser.get();
 
-        String systemPrompt = "You are a creative naming assistant for hackathon teams and project workspaces. " +
-                "Generate exactly 3 short, punchy, original, non-cringe hackathon team or project names. " +
-                "Rules:\n" +
+        String systemPrompt = "You are a world-class creative director and naming expert for high-velocity hackathons, startup incubators, and engineering sprints. " +
+                "Generate exactly 3 short, punchy, distinctly unique, non-cringe hackathon project or team names.\n" +
+                "CRITICAL DIVERSITY REQUIREMENTS:\n" +
+                "Each of the 3 names MUST follow a completely different creative archetype and linguistic structure:\n" +
+                "1. Modern Minimalist / Sharp Tech Brand: A clean, sleek product brand (e.g., 'Kiteframe', 'Verge Labs', 'PrismIQ', 'Aetheric', 'Veloce', 'Strata').\n" +
+                "2. Evocative Hacker / Midnight Builder: A dynamic, metaphorical, or late-night maker concept (e.g., 'Midnight Dynamo', 'ZeroToShip', 'Static Drift', 'Signal Foundry', 'Ghost Protocol').\n" +
+                "3. Bold / Quirky / Thematic Identity: A memorable, high-energy, or clever conceptual name (e.g., 'Quantum Quirk', 'Neon Horizon', 'Paperclip Labs', 'Velvet Binary', 'Caffeine Overclock').\n" +
+                "STRICT RULES:\n" +
                 "- Max 28 characters each.\n" +
-                "- No emojis.\n" +
-                "- No numbering (do not prefix with 1., 2., etc.).\n" +
+                "- Title Case (e.g. 'Midnight Dynamo', not 'MIDNIGHT DYNAMO' or 'midnight dynamo').\n" +
+                "- NO emojis, NO hashtags, NO numbers (unless part of a clever concept like 'ZeroToShip').\n" +
+                "- NO numbering prefixes (do not output 1., 2., 3.).\n" +
+                "- BANNED CLICHES: Never combine generic overused tech buzzwords like 'Hack', 'Sprint', 'Forge', 'Stack', 'Pulse', 'Byte', 'Nova', 'Cyber', 'Vortex', 'Apex'.\n" +
+                "- Lexical variety: All 3 names must use totally distinct words, themes, and roots. No repetition.\n" +
                 "- Valid JSON only: {\"names\": [\"Name One\", \"Name Two\", \"Name Three\"]}";
 
-        StringBuilder userPrompt = new StringBuilder("Suggest 3 hackathon project or team names.");
+        String[] themeFlavors = {
+            "spatial computing, fluid mechanics, and clean architecture",
+            "midnight hacking, deep focus, and high velocity",
+            "ambient intelligence, light refractions, and prism optics",
+            "kinetic energy, overclocked hardware, and bold experiments",
+            "minimalist Scandinavian design, crisp typography, and precision instruments",
+            "orbital mechanics, celestial navigation, and radio signals",
+            "analog warmth, retro-futurism, and tactile engineering",
+            "cryptographic puzzles, secret chambers, and underground lab",
+            "bio-mimicry, botanical growth, and organic circuits",
+            "algorithmic art, sonic waveforms, and electronic pulses"
+        };
+        int flavorIdx = java.util.concurrent.ThreadLocalRandom.current().nextInt(themeFlavors.length);
+        String selectedFlavor = themeFlavors[flavorIdx];
+        long seedNonce = System.currentTimeMillis() % 100000;
+
+        StringBuilder userPrompt = new StringBuilder();
+        userPrompt.append("Generate 3 unique, creative, and memorable hackathon names.");
+        userPrompt.append(" Creative vibe anchor: ").append(selectedFlavor).append(" (Seed #").append(seedNonce).append(").");
+
         if (request != null) {
             if (request.currentName() != null && !request.currentName().isBlank()) {
-                userPrompt.append(" Current name: ").append(request.currentName().trim());
+                userPrompt.append(" User currently has: '").append(request.currentName().trim())
+                          .append("'. Do NOT repeat or make simple variations of this; offer fresh, distinct alternatives.");
             }
             if (request.description() != null && !request.description().isBlank()) {
-                userPrompt.append(" Description: ").append(request.description().trim());
+                userPrompt.append(" Project brief / context: ").append(request.description().trim());
             }
             if (request.templateId() != null && !request.templateId().isBlank()) {
-                userPrompt.append(" Event type/template: ").append(request.templateId().trim());
+                userPrompt.append(" Event format: ").append(request.templateId().trim());
             }
         }
 
@@ -202,24 +230,40 @@ public class AiController {
 
         java.util.List<String> rawNames = result != null ? result.names() : null;
         java.util.List<String> cleanedNames = new java.util.ArrayList<>();
+        String currentName = (request != null && request.currentName() != null) ? request.currentName().trim() : "";
+
         if (rawNames != null) {
             for (String raw : rawNames) {
                 if (raw == null) continue;
-                String cleaned = raw.replaceAll("^[0-9]+[.\\-\\s]+", "").replaceAll("[\\p{So}\\p{Cn}]", "").trim();
+                String cleaned = raw.replaceAll("^[0-9]+[.\\-\\s]+", "")
+                                    .replaceAll("[\"'\\[\\]]", "")
+                                    .replaceAll("[\\p{So}\\p{Cn}]", "")
+                                    .trim();
                 if (cleaned.length() > 28) {
                     cleaned = cleaned.substring(0, 28).trim();
                 }
-                if (!cleaned.isBlank() && !cleanedNames.contains(cleaned)) {
+                if (!cleaned.isBlank() 
+                        && !cleanedNames.contains(cleaned) 
+                        && !cleaned.equalsIgnoreCase(currentName)) {
                     cleanedNames.add(cleaned);
                 }
                 if (cleanedNames.size() == 3) break;
             }
         }
 
-        java.util.List<String> fallbacks = java.util.List.of("HyperSprint", "NovaForge", "PulseStack", "CyberCanvas", "VortexLab", "ApexFlow");
-        for (String fb : fallbacks) {
+        java.util.List<String> curatedFallbacks = new java.util.ArrayList<>(java.util.List.of(
+            "Kiteframe", "Midnight Dynamo", "ZeroToShip", "PrismIQ", "Paperclip Labs",
+            "Signal Foundry", "Static Drift", "Velvet Binary", "Neon Horizon", "Turing Engine",
+            "Polymer Fleet", "Quantum Quirk", "Halcyon Grid", "Caffeine Protocol", "Strata Labs",
+            "Ghost Velocity", "Aetheric", "Driftwood Logic", "Sprocket & Quill", "Cobalt Theory",
+            "Arcadia Sprint", "MonoStack", "FableCraft", "Beacon Zero", "Lucid Frame",
+            "Alloy Dynamics", "Northstar Collective", "Solaris Vector", "Cipher Shift", "Verge Works"
+        ));
+        java.util.Collections.shuffle(curatedFallbacks, java.util.concurrent.ThreadLocalRandom.current());
+
+        for (String fb : curatedFallbacks) {
             if (cleanedNames.size() >= 3) break;
-            if (!cleanedNames.contains(fb)) {
+            if (!cleanedNames.contains(fb) && !fb.equalsIgnoreCase(currentName)) {
                 cleanedNames.add(fb);
             }
         }

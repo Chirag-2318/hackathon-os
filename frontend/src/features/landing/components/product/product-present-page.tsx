@@ -1,4 +1,5 @@
-import { Mic, Play, ChevronDown, CheckCircle2 } from 'lucide-react';
+import type { CSSProperties } from 'react';
+import { Mic, Play } from 'lucide-react';
 import { PRESENT_FIXTURE } from '../../data/product-fixtures';
 import { Waveform } from '../waveform';
 
@@ -8,18 +9,29 @@ import { Waveform } from '../waveform';
 
 const SPK_COLORS = ['var(--chart-4)', 'var(--chart-1)', 'var(--chart-2)', 'var(--chart-5)', 'var(--brand-from)'];
 
-export function ProductPresentPage() {
+type ProductPresentPageProps = {
+  current?: number;
+  levelRef?: { current: number };
+  animate?: boolean;
+};
+
+export function ProductPresentPage({ current, levelRef, animate = false }: ProductPresentPageProps = {}) {
   const { lines, currentLineIndex, segments, readout, readinessPct, targetTime } = PRESENT_FIXTURE;
+  const activeLineIndex = current ?? currentLineIndex;
+  const activeSegmentIndex = Math.min(segments.length - 1, Math.max(0, activeLineIndex));
 
   return (
     <div className="w-full flex flex-col gap-4 p-7 max-w-[1240px] mx-auto font-sans">
-      {/* Page Header */}
-      <div className="flex items-center justify-between pb-2 border-b border-border/60">
+      {/* 1. Page Header */}
+      <div
+        className="l-ps-rise flex items-center justify-between pb-2 border-b border-border/60"
+        style={{ '--l-i': 0 } as CSSProperties}
+      >
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-display font-normal tracking-tight text-foreground leading-none">
+            <div className="text-3xl font-display font-normal tracking-tight text-foreground leading-none">
               {PRESENT_FIXTURE.title}
-            </h1>
+            </div>
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold border bg-surface border-border text-ink-2">
               {PRESENT_FIXTURE.rehearsalSub}
             </span>
@@ -59,10 +71,13 @@ export function ProductPresentPage() {
         </div>
       </div>
 
-      {/* Main Pitch Rehearsal Layout: Left Teleprompter, Right Mic & Waveform Card */}
+      {/* 2. Main Pitch Rehearsal Layout: Left Teleprompter, Right Mic & Waveform Card */}
       <div className="grid grid-cols-12 gap-5 items-start">
         {/* Left Column: Teleprompter & Run of Show (7 cols) */}
-        <div className="col-span-7 rounded-[20px] bg-card border border-border shadow-xs p-5 space-y-4">
+        <div
+          className="l-ps-rise col-span-7 rounded-[20px] bg-card border border-border shadow-xs p-5 space-y-4"
+          style={{ '--l-i': 1 } as CSSProperties}
+        >
           <div className="flex items-center justify-between border-b border-border/60 pb-3">
             <div className="space-y-0.5">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -76,9 +91,12 @@ export function ProductPresentPage() {
           </div>
 
           {/* Run of show colored strip */}
-          <div className="flex rounded-xl overflow-hidden h-7 border border-border/40">
+          <div
+            data-callout="Run of show"
+            className="flex rounded-xl overflow-hidden h-7 border border-border/40"
+          >
             {segments.map((seg, i) => {
-              const isCurrent = i === currentLineIndex;
+              const isCurrent = i === activeSegmentIndex;
               const color = SPK_COLORS[i % SPK_COLORS.length];
               return (
                 <div
@@ -102,15 +120,16 @@ export function ProductPresentPage() {
             </span>
             <div className="space-y-2 text-sm leading-relaxed">
               {lines.map((line, idx) => {
-                const isCurrent = idx === currentLineIndex;
+                const isCurrent = idx === activeLineIndex;
                 return (
                   <div
                     key={line}
-                    className={`p-2.5 rounded-xl border transition-all ${
+                    className={`l-ps-rise p-2.5 rounded-xl border transition-all ${
                       isCurrent
                         ? 'bg-hover-surface border-border-strong text-ink font-semibold ring-1 ring-border-strong'
                         : 'bg-surface/50 border-transparent text-ink-2'
                     }`}
+                    style={{ '--l-i': 2 + idx } as CSSProperties}
                   >
                     <div className="flex items-start gap-2.5">
                       <span className="font-mono text-[11px] text-ink-3 size-4 shrink-0 flex items-center justify-center mt-0.5">
@@ -131,7 +150,11 @@ export function ProductPresentPage() {
         </div>
 
         {/* Right Column: Simulated Microphone & Waveform (5 cols) */}
-        <div className="col-span-5 rounded-[20px] bg-card border border-border shadow-xs p-5 space-y-4">
+        <div
+          data-callout="Waveform"
+          className="l-ps-rise col-span-5 rounded-[20px] bg-card border border-border shadow-xs p-5 space-y-4"
+          style={{ '--l-i': 7 } as CSSProperties}
+        >
           <div className="flex items-center justify-between border-b border-border/60 pb-3">
             <div className="flex items-center gap-2">
               <Mic className="size-4 text-accent" />
@@ -147,7 +170,7 @@ export function ProductPresentPage() {
           {/* Waveform card */}
           <div className="p-4 rounded-xl bg-surface border border-border flex flex-col items-center justify-center gap-4 text-center">
             <div className="w-full flex items-center justify-center h-16">
-              <Waveform bars={PRESENT_FIXTURE.audioBars} level={PRESENT_FIXTURE.audioLevel} animate />
+              <Waveform bars={PRESENT_FIXTURE.audioBars} level={PRESENT_FIXTURE.audioLevel} levelRef={levelRef} animate={animate} />
             </div>
 
             <div className="space-y-1">
@@ -167,7 +190,7 @@ export function ProductPresentPage() {
             </div>
           </div>
 
-          {/* Judge's Chair Teaser */}
+          {/* Judge’s Chair Teaser */}
           <div className="p-3.5 rounded-xl bg-surface border border-border space-y-2">
             <div className="flex items-center justify-between text-xs">
               <span className="font-semibold text-foreground">Judge’s Chair Q&A</span>

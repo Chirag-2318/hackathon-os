@@ -12,7 +12,6 @@ import { DOORS, DOORS_COPY } from '../data/doors';
 // Gutter lines sit in the middle of the gaps between the three columns (equal columns, 24px gap).
 const VERTICALS = ['-16px', 'calc((100% - 48px) / 3 + 12px)', 'calc((100% - 48px) * 2 / 3 + 36px)', 'calc(100% + 16px)'];
 const HORIZONTALS = ['-32px', 'calc(100% + 32px)'];
-const PLUS = VERTICALS.flatMap((left) => HORIZONTALS.map((top) => [left, top] as [string, string]));
 
 export function Doors() {
   return (
@@ -24,7 +23,7 @@ export function Doors() {
           <p className="l-lead">{DOORS_COPY.lead}</p>
         </div>
         <div className="l-paths-wrap">
-          <Blueprint verticals={VERTICALS} horizontals={HORIZONTALS} plus={PLUS} />
+          <Blueprint verticals={VERTICALS} horizontals={HORIZONTALS} reach={64} />
           <ul className="l-paths-grid">
             {DOORS.map((door, index) => (
               <Reveal as="li" key={door.id} index={index}>

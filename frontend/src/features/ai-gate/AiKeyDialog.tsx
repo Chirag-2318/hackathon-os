@@ -134,11 +134,33 @@ export function AiKeyDialog() {
     setError(null);
 
     try {
-      await saveUserAiKey(trimmed);
+      const savedRes = await saveUserAiKey(trimmed);
       recordSkipOrDone();
       setIsSuccess(true);
-      await queryClient.invalidateQueries({ queryKey: ['currentUser'] });
-      await queryClient.invalidateQueries({ queryKey: ['ai-status'] });
+
+      const keyInfo = {
+        hasKey: true,
+        status: savedRes.status || 'VALID',
+        last4: savedRes.last4 || trimmed.slice(-4),
+      };
+
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser) {
+        useAuthStore.getState().setUser({
+          ...currentUser,
+          aiKey: keyInfo,
+        });
+      }
+
+      queryClient.setQueryData(['currentUser'], (prev: any) =>
+        prev ? { ...prev, aiKey: keyInfo } : prev
+      );
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['currentUser'] }),
+        queryClient.invalidateQueries({ queryKey: ['ai-status'] }),
+        queryClient.invalidateQueries({ queryKey: ['meta'] }),
+      ]);
 
       setTimeout(() => {
         closeDialog();

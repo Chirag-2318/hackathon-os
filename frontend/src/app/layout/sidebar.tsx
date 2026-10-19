@@ -30,9 +30,8 @@ import { Copy, Plus } from 'lucide-react';
 import { UserName } from '@/components/ui/user-name';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { useTheme } from '@/components/theme-provider';
+import { BrandLogo, BRAND } from '@/brand';
 import goproImg from '../../../images/gopro.png';
-import darkLogo from '../../../images/dark.svg';
-import lightLogo from '../../../images/light.svg';
 
 // ── Nav configuration ──────────────────────────────────────────────
 interface NavItem {
@@ -178,9 +177,6 @@ function NavRow({
 // ── Sidebar ──────────────────────────────────────────────────────────
 export function AppSidebar() {
   const { isCollapsed, toggleCollapsed } = useSidebarStore();
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === 'dark';
-  const logoSrc = isDark ? darkLogo : lightLogo;
   const { data: user } = useCurrentUser();
   const { data: homeData } = useHome();
   const createRoomModal = useOverlay('create-room-dialog');
@@ -233,35 +229,22 @@ export function AppSidebar() {
           <NavLink
             to="/app/home"
             className="flex items-center focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2 rounded"
-            aria-label="bracket"
+            aria-label={BRAND.name}
             data-testid="brand-logo"
           >
             {isCollapsed ? (
               <Tooltip delayDuration={100}>
                 <TooltipTrigger asChild>
-                  <div className="w-10 h-10 overflow-hidden flex items-center justify-start shrink-0">
-                    <img
-                      key={isDark ? 'dark' : 'light'}
-                      src={logoSrc}
-                      alt="bracket"
-                      className="h-10 max-w-none object-cover object-left"
-                      style={{ width: '128px' }}
-                      data-testid="brand-glyph"
-                    />
+                  <div>
+                    <BrandLogo collapsed size={40} />
                   </div>
                 </TooltipTrigger>
                 <TooltipContent side="right" sideOffset={12} className="rounded-[8px] text-[14px]">
-                  bracket
+                  {BRAND.name}
                 </TooltipContent>
               </Tooltip>
             ) : (
-              <img
-                key={isDark ? 'dark' : 'light'}
-                src={logoSrc}
-                alt="bracket"
-                className="h-10 w-auto max-w-[180px] object-contain"
-                data-testid="brand-glyph"
-              />
+              <BrandLogo size={40} className="max-w-[180px]" />
             )}
           </NavLink>
         </div>

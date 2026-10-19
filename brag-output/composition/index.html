@@ -1,0 +1,853 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>[brackit] — Launch Video</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-dark:     #0E0E10;
+      --bg-light:    #FFFFFF;
+      --cream:       #F4F1EA;
+      --ink-dark:    #111111;
+      --ink-mid:     #595959;
+      --sun:         #FDE781;
+      --orange:      #FF7A1A;
+      --mint:        #A5EFBE;
+      --sky:         #B7D9FF;
+      --lilac:       #C4C5FC;
+      --green-check: #26A85D;
+    }
+
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: var(--bg-dark);
+    }
+
+    /* Composition wrapper */
+    #comp {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* Each scene is a full-frame clip */
+    .clip {
+      position: absolute;
+      top: 0; left: 0;
+      width: 1920px;
+      height: 1080px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      overflow: hidden;
+    }
+
+    /* ==============================
+       SCENE 1 — Hook
+    ============================== */
+    #scene-1 {
+      background: var(--bg-dark);
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .hook-line {
+      font-family: 'Inter', sans-serif;
+      font-weight: 800;
+      font-size: 68px;
+      line-height: 1.15;
+      color: var(--cream);
+      text-align: center;
+      max-width: 1400px;
+      opacity: 0;
+      transform: translateY(40px);
+    }
+    .hook-line:first-child { margin-bottom: 28px; }
+
+    /* subtle glow on hook lines — audio reactive target */
+    .hook-line.glow {
+      text-shadow: 0 0 60px rgba(244, 241, 234, 0.18);
+    }
+
+    /* ==============================
+       SCENE 2 — Reveal
+    ============================== */
+    #scene-2 {
+      background: var(--bg-light);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+    }
+
+    .wordmark-wrap {
+      opacity: 0;
+      transform: translateY(-24px);
+      margin-bottom: 40px;
+    }
+
+    .wordmark-text {
+      font-family: 'Inter', sans-serif;
+      font-weight: 900;
+      font-size: 54px;
+      letter-spacing: -0.03em;
+      color: var(--ink-dark);
+    }
+    .wordmark-bracket {
+      color: var(--ink-dark);
+      font-weight: 900;
+    }
+
+    .reveal-headline {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-style: italic;
+      font-size: 60px;
+      font-weight: 400;
+      color: var(--ink-dark);
+      text-align: center;
+      max-width: 1100px;
+      opacity: 0;
+      transform: translateY(20px);
+      margin-bottom: 60px;
+    }
+
+    .confirm-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 14px;
+      background: #F6FFF9;
+      border: 1.5px solid var(--mint);
+      border-radius: 12px;
+      padding: 18px 32px;
+      opacity: 0;
+      transform: translateX(48px);
+    }
+    .confirm-check {
+      font-size: 28px;
+      color: #26A85D;
+    }
+    .confirm-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      font-size: 22px;
+      color: #1A7A40;
+      letter-spacing: -0.01em;
+    }
+
+    /* ==============================
+       SCENE 3 — Board
+    ============================== */
+    #scene-3 {
+      background: var(--bg-dark);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+    }
+
+    .board-wrap {
+      display: flex;
+      gap: 28px;
+      margin-bottom: 52px;
+    }
+
+    .lane {
+      width: 420px;
+      background: #18181C;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 24px 20px;
+      opacity: 0;
+      transform: translateX(-36px);
+    }
+
+    .lane-header {
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 18px;
+      color: #8B8B89;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 18px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .task-card {
+      background: #1F1F24;
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 10px;
+      padding: 16px 18px;
+      margin-bottom: 12px;
+    }
+    .task-card:last-child { margin-bottom: 0; }
+
+    .task-key {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 600;
+      color: #969695;
+      margin-bottom: 6px;
+    }
+
+    .task-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--cream);
+      margin-bottom: 8px;
+    }
+
+    .task-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .task-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: #919190;
+      background: rgba(255,255,255,0.05);
+      border-radius: 4px;
+      padding: 2px 7px;
+    }
+
+    .task-blocked {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--orange);
+      background: rgba(255,122,26,0.12);
+      border: 1px solid rgba(255,122,26,0.3);
+      border-radius: 6px;
+      padding: 2px 8px;
+    }
+
+    .board-tagline {
+      font-family: 'Inter', sans-serif;
+      font-size: 26px;
+      font-weight: 500;
+      color: #968F88;
+      text-align: center;
+      opacity: 0;
+    }
+
+    /* ==============================
+       SCENE 4 — Present / Pitch Kit
+    ============================== */
+    #scene-4 {
+      background: var(--bg-dark);
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 120px;
+    }
+
+    .pitch-segments {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      opacity: 0;
+      transform: translateX(-36px);
+    }
+
+    .seg-item {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .seg-label {
+      font-family: 'Inter', sans-serif;
+      font-size: 18px;
+      font-weight: 600;
+      color: #9B9490;
+      width: 120px;
+    }
+
+    .seg-bar-track {
+      width: 240px;
+      height: 8px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .seg-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      background: var(--mint);
+    }
+
+    .seg-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 16px;
+      font-weight: 600;
+      color: #919190;
+      min-width: 52px;
+      text-align: right;
+    }
+
+    .pitch-headline-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      opacity: 0;
+    }
+
+    .pitch-headline {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-style: italic;
+      font-weight: 400;
+      font-size: 88px;
+      line-height: 1.0;
+      color: var(--cream);
+      margin-bottom: 28px;
+    }
+
+    .pitch-subline {
+      font-family: 'Inter', sans-serif;
+      font-size: 22px;
+      font-weight: 500;
+      color: #968F88;
+      max-width: 520px;
+      line-height: 1.5;
+    }
+
+    /* ==============================
+       SCENE 5 — Submit / Outro
+    ============================== */
+    #scene-5 {
+      background: var(--bg-dark);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+    }
+
+    .countdown-clock {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      font-size: 96px;
+      letter-spacing: -0.02em;
+      color: var(--cream);
+      text-align: center;
+      opacity: 0;
+      margin-bottom: 60px;
+    }
+
+    .submitted-stamp {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      opacity: 0;
+      transform: scale(0.7) rotate(-4deg);
+      transform-origin: center center;
+    }
+
+    .stamp-word {
+      font-family: 'Inter', sans-serif;
+      font-weight: 900;
+      font-size: 104px;
+      letter-spacing: 0.08em;
+      color: var(--mint);
+      border: 6px solid var(--mint);
+      border-radius: 12px;
+      padding: 8px 36px;
+      line-height: 1.0;
+      text-shadow: 0 0 40px rgba(165,239,190,0.4);
+      box-shadow: 0 0 60px rgba(165,239,190,0.15);
+    }
+
+    .stamp-sub {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-style: italic;
+      font-size: 36px;
+      color: rgba(165,239,190,0.75);
+    }
+
+    .final-wordmark {
+      opacity: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .final-brand {
+      font-family: 'Inter', sans-serif;
+      font-weight: 900;
+      font-size: 88px;
+      letter-spacing: -0.04em;
+      color: var(--cream);
+    }
+    .final-brand .bracket {
+      color: var(--sun);
+    }
+
+    .final-caption {
+      font-family: 'Inter', sans-serif;
+      font-size: 24px;
+      font-weight: 400;
+      color: #919190;
+      letter-spacing: 0.02em;
+    }
+  </style>
+</head>
+<body>
+
+<div id="comp"
+     data-composition-id="root"
+     data-width="1920"
+     data-height="1080">
+
+  <!-- ==========================================
+       AUDIO TRACKS
+  ========================================== -->
+
+  <!-- Music bed: vol-9, 114.84 BPM. data-track-index must be lower than all SFX. -->
+  <audio id="bg-music"
+         data-start="0"
+         data-duration="20"
+         data-track-index="10"
+         data-volume="0.35"
+         data-fade-out="1.5"
+         src="assets/music/happy-beats-business-moves-vol-9-by-ende-dot-app.mp3">
+  </audio>
+
+  <!-- SFX: hook line 1 arrival (0.3s) -->
+  <audio id="sfx-hook-1"
+         data-start="0.3"
+         data-duration="0.11"
+         data-track-index="11"
+         data-volume="0.60"
+         src="assets/sfx/interface/drop_001.ogg">
+  </audio>
+
+  <!-- SFX: hook line 2 arrival (1.4s) -->
+  <audio id="sfx-hook-2"
+         data-start="1.4"
+         data-duration="0.19"
+         data-track-index="12"
+         data-volume="0.60"
+         src="assets/sfx/interface/drop_002.ogg">
+  </audio>
+
+  <!-- SFX: board lane 1 arrival. Scene 3 starts at 6.0s. Lane 1 at scene+2.44s = 8.44s music. // beat-locked: 8.44s -->
+  <audio id="sfx-lane-1"
+         data-start="8.44"
+         data-duration="0.46"
+         data-track-index="13"
+         data-volume="0.65"
+         src="assets/sfx/casino/card-place-2.ogg">
+  </audio>
+
+  <!-- SFX: board lane 2 arrival. beat ~8.96s -->
+  <audio id="sfx-lane-2"
+         data-start="8.96"
+         data-duration="0.89"
+         data-track-index="14"
+         data-volume="0.65"
+         src="assets/sfx/casino/card-place-3.ogg">
+  </audio>
+
+  <!-- SFX: board lane 3 arrival. beat ~9.50s -->
+  <audio id="sfx-lane-3"
+         data-start="9.50"
+         data-duration="0.60"
+         data-track-index="15"
+         data-volume="0.65"
+         src="assets/sfx/casino/card-place-4.ogg">
+  </audio>
+
+  <!-- SFX: pitch headline slam-in. Scene 4 starts at 11.0s. Headline at scene+1.65s = 12.65s. // beat-locked: 12.65s -->
+  <audio id="sfx-pitch"
+         data-start="12.65"
+         data-duration="0.19"
+         data-track-index="16"
+         data-volume="0.70"
+         src="assets/sfx/impact/impactSoft_medium_001.ogg">
+  </audio>
+
+  <!-- SFX: SUBMITTED stamp bell. Scene 5 starts at 14.0s. Stamp at scene+1.5s = 15.5s. -->
+  <audio id="sfx-submit"
+         data-start="15.5"
+         data-duration="1.48"
+         data-track-index="17"
+         data-volume="0.80"
+         src="assets/sfx/impact/impactBell_heavy_000.ogg">
+  </audio>
+
+  <!-- ==========================================
+       SCENE 1 — Hook (0s - 3s)
+       "Most teams don't lose because they can't code."
+       "They decide late, scope wrong, and run out of time."
+       Source: hero-copy.ts headingLead + lead
+  ========================================== -->
+  <div id="scene-1" class="clip"
+       data-start="0"
+       data-duration="3"
+       data-track-index="1">
+    <div class="hook-line" id="hook-1">Most teams don't lose because they can't code.</div>
+    <div class="hook-line" id="hook-2">They decide late, scope wrong, and run out of time.</div>
+  </div>
+
+  <!-- ==========================================
+       SCENE 2 — Reveal (3s - 6s)
+       [brackit] wordmark, Instrument Serif headline, brief confirmation chip
+       Source: hero-copy.ts lead (adapted); product-fixtures.ts BRIEF_FIXTURE.confirmedText
+  ========================================== -->
+  <div id="scene-2" class="clip"
+       data-start="3"
+       data-duration="3"
+       data-track-index="2">
+    <div class="wordmark-wrap" id="wordmark">
+      <span class="wordmark-text">[brackit]</span>
+    </div>
+    <!-- beat-locked: 6.34s = scene time 3.34s = 0.34s into scene -->
+    <div class="reveal-headline" id="reveal-hl">
+      From the first brief to the final submit,<br>on one clock.
+    </div>
+    <div class="confirm-chip" id="confirm-chip">
+      <span class="confirm-check">&#10003;</span>
+      <span class="confirm-label">8 of 8 rules confirmed</span>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       SCENE 3 — Board (6s - 11s)
+       Kanban board with 3 lanes. Lanes arrive sequentially.
+       Source: product-fixtures.ts BOARD_FIXTURE; room-grid.ts board tile line
+  ========================================== -->
+  <div id="scene-3" class="clip"
+       data-start="6"
+       data-duration="5"
+       data-track-index="3">
+    <div class="board-wrap">
+      <!-- Lane 1: To Do — arrives at scene 2.44s (music 8.44s) // beat-grid: lane 1 at 8.44s -->
+      <div class="lane" id="lane-1">
+        <div class="lane-header">To do</div>
+        <div class="task-card">
+          <div class="task-key">OS-11</div>
+          <div class="task-title">Event cost model</div>
+          <div class="task-meta">
+            <span class="task-tag">backend</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#969695">45m</span>
+          </div>
+        </div>
+        <div class="task-card">
+          <div class="task-key">OS-14</div>
+          <div class="task-title">Role permissions</div>
+          <div class="task-meta">
+            <span class="task-tag">backend</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#969695">1h</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lane 2: In Progress — arrives at scene 2.96s (music 8.96s) // beat-grid: lane 2 at 8.96s -->
+      <div class="lane" id="lane-2">
+        <div class="lane-header">In progress</div>
+        <div class="task-card">
+          <div class="task-key">OS-08</div>
+          <div class="task-title">Receipt upload API</div>
+          <div class="task-meta">
+            <span class="task-tag">backend</span>
+            <span class="task-blocked">&#9940; Blocked</span>
+          </div>
+        </div>
+        <div class="task-card">
+          <div class="task-key">OS-09</div>
+          <div class="task-title">Budget dashboard layout</div>
+          <div class="task-meta">
+            <span class="task-tag">frontend</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#969695">1h 30m</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lane 3: Done — arrives at scene 3.50s (music 9.50s) // beat-grid: lane 3 at 9.50s -->
+      <div class="lane" id="lane-3">
+        <div class="lane-header">Done</div>
+        <div class="task-card">
+          <div class="task-key">OS-01</div>
+          <div class="task-title">Project setup</div>
+          <div class="task-meta">
+            <span class="task-tag">setup</span>
+            <span style="color:var(--mint);font-size:14px">&#10003;</span>
+          </div>
+        </div>
+        <div class="task-card">
+          <div class="task-key">OS-03</div>
+          <div class="task-title">Auth and session</div>
+          <div class="task-meta">
+            <span class="task-tag">backend</span>
+            <span style="color:var(--mint);font-size:14px">&#10003;</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Verbatim from room-grid.ts board tile line -->
+    <div class="board-tagline" id="board-tagline">
+      The team always knows what is next and who is stuck.
+    </div>
+  </div>
+
+  <!-- ==========================================
+       SCENE 4 — Present: Walk in ready (11s - 14s)
+       Pitch segment bar + "Walk in ready." headline
+       Source: stage-act.ts STAGE_HEAD, REHEARSAL.segments
+  ========================================== -->
+  <div id="scene-4" class="clip"
+       data-start="11"
+       data-duration="3"
+       data-track-index="4">
+    <!-- Pitch rehearsal segments — verbatim from REHEARSAL.segments in stage-act.ts -->
+    <div class="pitch-segments" id="pitch-segs">
+      <div class="seg-item">
+        <span class="seg-label">Problem</span>
+        <div class="seg-bar-track"><div class="seg-bar-fill" style="width:30%"></div></div>
+        <span class="seg-time">0:30</span>
+      </div>
+      <div class="seg-item">
+        <span class="seg-label">Solution</span>
+        <div class="seg-bar-track"><div class="seg-bar-fill" style="width:45%"></div></div>
+        <span class="seg-time">0:45</span>
+      </div>
+      <div class="seg-item">
+        <span class="seg-label">Demo</span>
+        <div class="seg-bar-track"><div class="seg-bar-fill" style="width:60%"></div></div>
+        <span class="seg-time">1:00</span>
+      </div>
+      <div class="seg-item">
+        <span class="seg-label">Impact</span>
+        <div class="seg-bar-track"><div class="seg-bar-fill" style="width:30%"></div></div>
+        <span class="seg-time">0:30</span>
+      </div>
+      <div class="seg-item">
+        <span class="seg-label">Ask</span>
+        <div class="seg-bar-track"><div class="seg-bar-fill" style="width:15%"></div></div>
+        <span class="seg-time">0:15</span>
+      </div>
+    </div>
+
+    <!-- "Walk in ready." — beat-locked to 12.65s (scene+1.65s) // beat-locked: 12.65s -->
+    <!-- Source: stage-act.ts STAGE_HEAD.headingLead + headingEm; STAGE_HEAD.line -->
+    <div class="pitch-headline-wrap" id="pitch-hl">
+      <div class="pitch-headline">Walk in ready.</div>
+      <div class="pitch-subline">Rehearse out loud. Hear the hard questions first. Submit with margin.</div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       SCENE 5 — Submit: Outro/punchline (14s - 20s)
+       Countdown clock, SUBMITTED stamp, [brackit] wordmark
+       Source: stage-act.ts LAUNCH.time, LAUNCH.stamp, LAUNCH.result; hero-copy.ts eyebrow
+  ========================================== -->
+  <div id="scene-5" class="clip"
+       data-start="14"
+       data-duration="6"
+       data-track-index="5">
+    <!-- Countdown clock — verbatim from LAUNCH.time in stage-act.ts -->
+    <div class="countdown-clock" id="clock">T&#8209;03:12:47</div>
+
+    <!-- SUBMITTED stamp — verbatim from LAUNCH.stamp + LAUNCH.result in stage-act.ts -->
+    <div class="submitted-stamp" id="stamp">
+      <div class="stamp-word">SUBMITTED</div>
+      <div class="stamp-sub">with margin.</div>
+    </div>
+
+    <!-- [brackit] wordmark — verbatim from hero-copy.ts eyebrow for caption -->
+    <div class="final-wordmark" id="final-wm">
+      <div class="final-brand"><span class="bracket">[</span>brackit<span class="bracket">]</span></div>
+      <div class="final-caption">[brackit] &middot; a hackathon OS</div>
+    </div>
+  </div>
+
+</div><!-- /#comp -->
+
+<script>
+(function () {
+  const tl = gsap.timeline({ paused: true });
+
+  // ============================================================
+  // SCENE 1 — Hook (0s-3s)
+  // ============================================================
+
+  // Scene 1 fades in instantly (it's the first scene)
+  tl.to("#scene-1", { opacity: 1, duration: 0.01 }, 0);
+
+  // Hook line 1: slam in from below. Arrives at 0.3s.
+  tl.fromTo("#hook-1",
+    { opacity: 0, y: 40 },
+    { opacity: 1, y: 0, duration: 0.25, ease: "power3.out" },
+    0.3
+  );
+
+  // Hook line 2: slam in from below. Arrives at 1.4s.
+  tl.fromTo("#hook-2",
+    { opacity: 0, y: 40 },
+    { opacity: 1, y: 0, duration: 0.25, ease: "power3.out" },
+    1.4
+  );
+
+  // Transition: Scene 1 fades out at 2.85s → hard cut
+  tl.to("#scene-1", { opacity: 0, duration: 0.15 }, 2.85);
+
+  // ============================================================
+  // SCENE 2 — Reveal (3s-6s) — beat-locked headline at 6.34s
+  // ============================================================
+
+  tl.to("#scene-2", { opacity: 1, duration: 0.25 }, 3.0);
+
+  // Wordmark slides down from top, arrives at scene 3.3s
+  tl.fromTo("#wordmark",
+    { opacity: 0, y: -24 },
+    { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" },
+    3.3
+  );
+
+  // Headline fades up — beat-locked to music 6.34s → 3.34s into scene // beat-locked: 6.34s
+  tl.fromTo("#reveal-hl",
+    { opacity: 0, y: 20 },
+    { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" },
+    3.34
+  );
+
+  // Confirmation chip slides in from right, at 4.6s
+  tl.fromTo("#confirm-chip",
+    { opacity: 0, x: 48 },
+    { opacity: 1, x: 0, duration: 0.3, ease: "power2.out" },
+    4.6
+  );
+
+  // Scene 2 fades out at 5.8s
+  tl.to("#scene-2", { opacity: 0, duration: 0.2 }, 5.8);
+
+  // ============================================================
+  // SCENE 3 — Board (6s-11s) — lanes beat-locked: 8.44s, 8.96s, 9.50s
+  // ============================================================
+
+  tl.to("#scene-3", { opacity: 1, duration: 0.2 }, 6.0);
+
+  // Lane 1 slides in from left. Music 8.44s. Scene time 8.44s. // beat-locked: 8.44s
+  tl.fromTo("#lane-1",
+    { opacity: 0, x: -36 },
+    { opacity: 1, x: 0, duration: 0.3, ease: "power3.out" },
+    8.44
+  );
+
+  // Lane 2 slides in. Music 8.96s. // beat-grid: lane 2 at 8.96s
+  tl.fromTo("#lane-2",
+    { opacity: 0, x: -36 },
+    { opacity: 1, x: 0, duration: 0.3, ease: "power3.out" },
+    8.96
+  );
+
+  // Lane 3 slides in. Music 9.50s. // beat-grid: lane 3 at 9.50s
+  tl.fromTo("#lane-3",
+    { opacity: 0, x: -36 },
+    { opacity: 1, x: 0, duration: 0.3, ease: "power3.out" },
+    9.50
+  );
+
+  // Board tagline fades in after all lanes, at 10.1s
+  tl.fromTo("#board-tagline",
+    { opacity: 0 },
+    { opacity: 1, duration: 0.4, ease: "power2.out" },
+    10.1
+  );
+
+  // Scene 3 fades out at 10.75s
+  tl.to("#scene-3", { opacity: 0, duration: 0.25 }, 10.75);
+
+  // ============================================================
+  // SCENE 4 — Present: Walk in ready (11s-14s) — headline beat-locked: 12.65s
+  // ============================================================
+
+  tl.to("#scene-4", { opacity: 1, duration: 0.2 }, 11.0);
+
+  // Pitch segment bar slides in from left, at 11.3s
+  tl.fromTo("#pitch-segs",
+    { opacity: 0, x: -36 },
+    { opacity: 1, x: 0, duration: 0.3, ease: "power3.out" },
+    11.3
+  );
+
+  // "Walk in ready." slams in — beat-locked to music 12.65s = scene 11.0s + 1.65s // beat-locked: 12.65s
+  tl.fromTo("#pitch-hl",
+    { opacity: 0, x: 24, scale: 0.97 },
+    { opacity: 1, x: 0, scale: 1, duration: 0.25, ease: "power4.out" },
+    12.65
+  );
+
+  // Scene 4 hard cut out at 13.8s
+  tl.to("#scene-4", { opacity: 0, duration: 0.15 }, 13.85);
+
+  // ============================================================
+  // SCENE 5 — Submit: Outro/punchline (14s-20s)
+  // Countdown: 14.3s | SUBMITTED stamp: 15.5s | wordmark: 17.5s
+  // ============================================================
+
+  tl.to("#scene-5", { opacity: 1, duration: 0.15 }, 14.0);
+
+  // Countdown clock fades in, at 14.3s
+  tl.fromTo("#clock",
+    { opacity: 0 },
+    { opacity: 1, duration: 0.35, ease: "power2.out" },
+    14.3
+  );
+
+  // SUBMITTED stamp sweeps in at 15.5s (ease-stamp: cubic-bezier(0.5,0,1,1) ~ power2.in inverted)
+  // Bell SFX fires at 15.5s
+  tl.fromTo("#stamp",
+    { opacity: 0, scale: 0.7, rotation: -4 },
+    { opacity: 1, scale: 1, rotation: 0, duration: 0.4, ease: "back.out(1.4)" },
+    15.5
+  );
+
+  // Clock and stamp fade out at 17.2s
+  tl.to("#clock", { opacity: 0, duration: 0.4 }, 17.2);
+  tl.to("#stamp", { opacity: 0, duration: 0.4 }, 17.2);
+
+  // [brackit] wordmark fades in, at 17.8s
+  tl.fromTo("#final-wm",
+    { opacity: 0 },
+    { opacity: 1, duration: 0.5, ease: "power2.out" },
+    17.8
+  );
+
+  // Wordmark holds until 20.0s (scene end)
+  // Scene 5 fades to black at 19.7s
+  tl.to("#scene-5", { opacity: 0, duration: 0.3 }, 19.7);
+
+  // Register the timeline
+  window.__timelines = window.__timelines || {};
+  window.__timelines["root"] = tl;
+})();
+</script>
+
+</body>
+</html>
+
+
+

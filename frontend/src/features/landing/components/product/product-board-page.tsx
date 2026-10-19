@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { Flag, Lock, Check, CheckSquare, Search, SlidersHorizontal, Plus } from 'lucide-react';
 import { BOARD_FIXTURE } from '../../data/product-fixtures';
 
@@ -11,12 +12,15 @@ export function ProductBoardPage() {
 
   return (
     <div className="w-full flex flex-col gap-4 p-7 max-w-[1240px] mx-auto font-sans">
-      {/* Header Row: Title, Phase Pill, Filter bar */}
-      <div className="flex items-center justify-between pb-2 border-b border-border/60">
+      {/* 1. Header Row: Title, Phase Pill, Filter bar */}
+      <div
+        className="l-ps-rise flex items-center justify-between pb-2 border-b border-border/60"
+        style={{ '--l-i': 0 } as CSSProperties}
+      >
         <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-display font-normal tracking-tight text-foreground leading-none">
+          <div className="text-3xl font-display font-normal tracking-tight text-foreground leading-none">
             {BOARD_FIXTURE.title}
-          </h1>
+          </div>
           <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold border bg-surface border-border text-ink-2">
             {phase}
           </span>
@@ -38,12 +42,13 @@ export function ProductBoardPage() {
         </div>
       </div>
 
-      {/* Kanban 3-column Grid */}
+      {/* 2. Kanban 3-column Grid */}
       <div className="grid grid-cols-3 gap-4 items-start">
-        {lanes.map((lane) => (
+        {lanes.map((lane, colIdx) => (
           <div
             key={lane.id}
-            className="flex flex-col rounded-[16px] p-2.5 bg-surface border border-border/60 min-h-[460px]"
+            className="l-ps-rise flex flex-col rounded-[16px] p-2.5 bg-surface border border-border/60 min-h-[460px]"
+            style={{ '--l-i': 1 + colIdx } as CSSProperties}
           >
             {/* Column Header */}
             <div className="flex items-center justify-between px-2 py-1 mb-2 bg-surface select-none">
@@ -55,25 +60,29 @@ export function ProductBoardPage() {
                   {lane.tasks.length}
                 </span>
               </div>
-              <div className="size-5 rounded flex items-center justify-center text-muted-foreground hover:bg-card">
+              <div className="size-5 rounded flex items-center justify-center text-muted-foreground">
                 <Plus className="size-3.5" />
               </div>
             </div>
 
             {/* Task Cards in this Column */}
             <div className="flex flex-col gap-2.5">
-              {lane.tasks.map((task) => {
+              {lane.tasks.map((task, taskIdx) => {
                 const isBlocked = Boolean(task.blocked);
                 const isDone = Boolean(task.done);
+                const hasLock = Boolean(task.waitsFor);
 
                 return (
                   <div
                     key={task.id}
-                    className={`group relative bg-card rounded-[12px] p-3 text-left border select-none shadow-[0_1px_2px_rgba(10,10,10,0.04)] ${
+                    {...(isBlocked ? { 'data-callout': 'Blocked' } : {})}
+                    {...(hasLock ? { 'data-callout': 'Dependency lock' } : {})}
+                    className={`l-ps-rise group relative bg-card rounded-[12px] p-3 text-left border select-none shadow-xs ${
                       isBlocked
                         ? 'border-l-[3px] border-l-rose-500 border-border'
                         : 'border-border'
                     }`}
+                    style={{ '--l-i': 4 + colIdx * 2 + taskIdx } as CSSProperties}
                   >
                     {/* Blocked banner if flagged */}
                     {isBlocked && (
@@ -94,13 +103,13 @@ export function ProductBoardPage() {
 
                     {/* Task Title */}
                     <div className="flex items-start justify-between gap-2">
-                      <h4
+                      <p
                         className={`text-[13px] font-medium leading-snug line-clamp-2 text-foreground ${
                           isDone ? 'text-muted-foreground line-through' : ''
                         }`}
                       >
                         {task.title}
-                      </h4>
+                      </p>
                     </div>
 
                     {/* Meta Chips: Tag & Dependency */}
@@ -138,9 +147,8 @@ export function ProductBoardPage() {
                           {task.estimate}
                         </span>
 
-                        {/* Assignee initial circle */}
                         <div
-                          className="size-5 rounded-full flex items-center justify-center font-bold text-[10px] border border-border/60 text-ink-strong"
+                          className="size-5 rounded-full flex items-center justify-center font-bold text-[9px] border border-border text-ink-strong"
                           style={{ backgroundColor: task.assignee.color }}
                           title={task.assignee.name}
                         >

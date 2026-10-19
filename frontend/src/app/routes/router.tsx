@@ -22,7 +22,6 @@ import { SignInPage } from '@/features/auth/sign-in-page';
 import { UnsubscribedPage } from '@/features/auth/unsubscribed-page';
 import { GoodbyePage } from '@/features/auth/goodbye-page';
 import { InviteLandingPage } from '@/features/invite/invite-landing-page';
-import { PlaybookBrowsePage } from '@/features/playbooks/playbook-browse-page';
 import { PlaybookDetailPage } from '@/features/playbooks/playbook-detail-page';
 import { SituationPickerPage } from '@/features/onboarding/situation-picker-page';
 import { CreateRoomWizard } from '@/features/onboarding/create-room-wizard';
@@ -32,6 +31,7 @@ import { ToolDirectoryView } from '@/features/tools/tool-directory-view';
 import { isModuleHidden } from '@/config/featureFlags';
 import { RoomErrorBoundary } from '@/shared/ui/RoomErrorBoundary';
 import { FullPage } from '@/features/public/full-page';
+import { useCurrentUser } from '@/features/auth/useCurrentUser';
 import {
   NotFoundPage,
   ForbiddenPage,
@@ -261,6 +261,34 @@ function PlaceholderPage({ title }: { title: string }) {
   );
 }
 
+/**
+ * Smart redirect for /playbooks and /playbooks/:slug:
+ * - Authenticated users → /app/playbooks (the in-app view)
+ * - Guests             → /signin?returnUrl=/app/playbooks
+ */
+function PlaybooksRedirect() {
+  const { data: user, isLoading } = useCurrentUser();
+  const location = useLocation();
+
+  if (isLoading) {
+    // Tiny loading state to avoid a flash while auth resolves
+    return <PageSuspenseFallback />;
+  }
+
+  if (user) {
+    // Map /playbooks/:slug → /app/playbooks/:slug if present
+    const appPath = location.pathname.replace(/^\/playbooks/, '/app/playbooks') + location.search;
+    return <Navigate to={appPath} replace />;
+  }
+
+  return (
+    <Navigate
+      to={`/signin?next=${encodeURIComponent('/app/playbooks')}`}
+      replace
+    />
+  );
+}
+
 const router = createBrowserRouter([
   // ── Prototypes ────────────────────────────────────────────────
   {
@@ -331,11 +359,11 @@ const router = createBrowserRouter([
   },
   {
     path: '/playbooks',
-    element: <PlaybookBrowsePage />,
+    element: <PlaybooksRedirect />,
   },
   {
     path: '/playbooks/:slug',
-    element: <PlaybookDetailPage />,
+    element: <PlaybooksRedirect />,
   },
   {
     path: '/onboarding',
