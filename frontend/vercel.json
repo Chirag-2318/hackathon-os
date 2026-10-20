@@ -1,16 +1,63 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://REPLACE-WITH-RENDER-HOST.onrender.com/api/:path*" },
-    { "source": "/oauth2/:path*", "destination": "https://REPLACE-WITH-RENDER-HOST.onrender.com/oauth2/:path*" },
-    { "source": "/login/oauth2/:path*", "destination": "https://REPLACE-WITH-RENDER-HOST.onrender.com/login/oauth2/:path*" },
-    { "source": "/uploads/:path*", "destination": "https://REPLACE-WITH-RENDER-HOST.onrender.com/uploads/:path*" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/:path*",
+      "destination": "https://brackit-api.onrender.com/api/:path*"
+    },
+    {
+      "source": "/oauth2/:path*",
+      "destination": "https://brackit-api.onrender.com/oauth2/:path*"
+    },
+    {
+      "source": "/login/oauth2/:path*",
+      "destination": "https://brackit-api.onrender.com/login/oauth2/:path*"
+    },
+    {
+      "source": "/uploads/:path*",
+      "destination": "https://brackit-api.onrender.com/uploads/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
-    { "source": "/api/:path*", "headers": [{ "key": "x-vercel-enable-rewrite-caching", "value": "0" }] },
-    { "source": "/oauth2/:path*", "headers": [{ "key": "x-vercel-enable-rewrite-caching", "value": "0" }] },
-    { "source": "/login/oauth2/:path*", "headers": [{ "key": "x-vercel-enable-rewrite-caching", "value": "0" }] },
-    { "source": "/uploads/:path*", "headers": [{ "key": "x-vercel-enable-rewrite-caching", "value": "0" }] }
+    {
+      "source": "/api/:path*",
+      "headers": [
+        {
+          "key": "x-vercel-enable-rewrite-caching",
+          "value": "0"
+        }
+      ]
+    },
+    {
+      "source": "/oauth2/:path*",
+      "headers": [
+        {
+          "key": "x-vercel-enable-rewrite-caching",
+          "value": "0"
+        }
+      ]
+    },
+    {
+      "source": "/login/oauth2/:path*",
+      "headers": [
+        {
+          "key": "x-vercel-enable-rewrite-caching",
+          "value": "0"
+        }
+      ]
+    },
+    {
+      "source": "/uploads/:path*",
+      "headers": [
+        {
+          "key": "x-vercel-enable-rewrite-caching",
+          "value": "0"
+        }
+      ]
+    }
   ]
 }

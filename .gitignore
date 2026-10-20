@@ -30,6 +30,8 @@ uploads/
 
 # Deployment & Build artifacts
 application-local.yml
+render-env.local
+*.local
 *.pem
 *.key
 build/
