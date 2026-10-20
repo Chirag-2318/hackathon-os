@@ -75,16 +75,20 @@ public class ProductionStartupValidator implements ApplicationRunner {
                 env.getProperty("app.api-public-url"),
                 "http", "localhost");
 
-        // 5. Mail Configuration
-        checkRequired(errors, "MAIL_HOST",
-                env.getProperty("app.mail.host", env.getProperty("spring.mail.host")),
-                null, null);
-        checkRequired(errors, "MAIL_USERNAME",
-                env.getProperty("app.mail.username", env.getProperty("spring.mail.username")),
-                "@", null);
-        checkRequired(errors, "MAIL_APP_PASSWORD",
-                env.getProperty("app.mail.app-password", env.getProperty("spring.mail.password")),
-                null, null);
+        // 5. Mail Configuration (validated when mail is enabled)
+        boolean mailEnabled = Boolean.parseBoolean(env.getProperty("app.mail.enabled",
+                env.getProperty("MAIL_ENABLED", "false")));
+        if (mailEnabled) {
+            checkRequired(errors, "MAIL_HOST",
+                    env.getProperty("app.mail.host", env.getProperty("spring.mail.host")),
+                    null, null);
+            checkRequired(errors, "MAIL_USERNAME",
+                    env.getProperty("app.mail.username", env.getProperty("spring.mail.username")),
+                    "@", null);
+            checkRequired(errors, "MAIL_APP_PASSWORD",
+                    env.getProperty("app.mail.app-password", env.getProperty("spring.mail.password")),
+                    null, null);
+        }
 
         // 6. Administrative Contacts
         checkRequired(errors, "ADMIN_EMAILS",

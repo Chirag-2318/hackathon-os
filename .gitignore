@@ -26,4 +26,12 @@ Thumbs.db
 
 # Uploads
 uploads/
-**/uploads/
+**/uploads/
+
+# Deployment & Build artifacts
+application-local.yml
+*.pem
+*.key
+build/
+.gradle/
+.vercel

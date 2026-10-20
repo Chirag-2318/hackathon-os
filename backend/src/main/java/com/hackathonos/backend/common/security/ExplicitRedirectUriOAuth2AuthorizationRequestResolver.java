@@ -44,9 +44,9 @@ public class ExplicitRedirectUriOAuth2AuthorizationRequestResolver implements OA
         if (req == null) {
             return null;
         }
-        String apiPublicUrl = appProperties.getApiPublicUrl();
-        if (apiPublicUrl != null && !apiPublicUrl.isBlank()) {
-            String baseUrl = apiPublicUrl.replaceAll("/+$", "");
+        String publicUrl = appProperties.getPublicUrl();
+        if (publicUrl != null && !publicUrl.isBlank()) {
+            String baseUrl = publicUrl.replaceAll("/+$", "");
             String regId = (String) req.getAttributes().get(OAuth2ParameterNames.REGISTRATION_ID);
             if (regId != null && !regId.isBlank()) {
                 String explicitRedirectUri = baseUrl + "/login/oauth2/code/" + regId;

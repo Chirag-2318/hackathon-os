@@ -829,6 +829,8 @@ public class UserService {
         org.springframework.http.ResponseCookie cookie = org.springframework.http.ResponseCookie.from(name, "")
                 .path("/")
                 .maxAge(0)
+                .secure(appProperties.getCookie().isSecure())
+                .sameSite(appProperties.getCookie().getSameSite())
                 .build();
         response.addHeader(org.springframework.http.HttpHeaders.SET_COOKIE, cookie.toString());
     }

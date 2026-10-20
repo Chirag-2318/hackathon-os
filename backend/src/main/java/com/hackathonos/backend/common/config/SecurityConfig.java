@@ -52,19 +52,10 @@ public class SecurityConfig {
         boolean isProd = environment.acceptsProfiles(Profiles.of("prod"));
 
         CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
-        String cookieDomain = appProperties.getCookieDomain();
-        if (cookieDomain != null && !cookieDomain.isBlank()) {
-            csrfTokenRepository.setCookieCustomizer(cookie -> {
-                cookie.domain(cookieDomain.trim());
-                cookie.sameSite("Lax");
-                cookie.secure(true);
-            });
-        } else {
-            csrfTokenRepository.setCookieCustomizer(cookie -> {
-                cookie.sameSite("Lax");
-                cookie.secure(isProd);
-            });
-        }
+        csrfTokenRepository.setCookieCustomizer(cookie -> {
+            cookie.sameSite(appProperties.getCookie().getSameSite());
+            cookie.secure(appProperties.getCookie().isSecure());
+        });
 
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource))
@@ -181,14 +172,8 @@ public class SecurityConfig {
     @Bean
     public ServletContextInitializer sessionCookieInitializer() {
         return servletContext -> {
-            String domain = appProperties.getCookieDomain();
-            if (domain != null && !domain.trim().isEmpty()) {
-                servletContext.getSessionCookieConfig().setDomain(domain.trim());
-            }
             servletContext.getSessionCookieConfig().setHttpOnly(true);
-            if (environment.acceptsProfiles(Profiles.of("prod"))) {
-                servletContext.getSessionCookieConfig().setSecure(true);
-            }
+            servletContext.getSessionCookieConfig().setSecure(appProperties.getCookie().isSecure());
         };
     }
 }

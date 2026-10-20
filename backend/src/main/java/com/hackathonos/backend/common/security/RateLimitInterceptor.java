@@ -29,6 +29,11 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             return true;
         }
 
+        String uri = request.getRequestURI();
+        if ("/api/v1/health".equals(uri) || uri.startsWith("/actuator/health")) {
+            return true;
+        }
+
         User user = currentUser != null ? currentUser.getOptional().orElse(null) : null;
 
         // Global per-IP limit for unauthenticated requests (60 per minute)

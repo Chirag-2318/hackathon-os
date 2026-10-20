@@ -25,8 +25,8 @@ function getCookie(name: string): string | null {
 
 import { isSampleRoomTarget, handleSampleRoomRequest } from '@/tour/guided/sample-room-adapter';
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL !== undefined
-  ? import.meta.env.VITE_API_BASE_URL
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL !== undefined && import.meta.env.VITE_API_BASE_URL !== '')
+  ? import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, '')
   : (import.meta.env.DEV ? (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' ? 'http://127.0.0.1:8080' : 'http://localhost:8080') : '');
 const BASE_URL = API_BASE_URL;
 

@@ -1,0 +1,70 @@
+# Render Web Service Environment Variables
+# One KEY=value per line, no quotes, no inline comments
+
+# Server and Spring Profile
+SPRING_PROFILES_ACTIVE=prod
+PORT=10000
+
+# Public URLs (Never include trailing slashes)
+APP_PUBLIC_URL=https://REPLACE-WITH-VERCEL-URL
+API_PUBLIC_URL=https://REPLACE-WITH-RENDER-HOST.onrender.com
+
+# Database Connection (Render Managed PostgreSQL)
+DB_HOST=REPLACE_ME
+DB_PORT=5432
+DB_NAME=REPLACE_ME
+DB_USERNAME=REPLACE_ME
+DB_PASSWORD=REPLACE_ME
+DB_POOL_SIZE=5
+
+# Cookies and Security
+COOKIE_SECURE=true
+COOKIE_SAME_SITE=Lax
+
+# AES-256-GCM Token Encryption Key (32 random bytes, base64 or 64 hex characters)
+APP_ENCRYPTION_KEY=REPLACE_ME
+
+# OAuth2 Authentication - GitHub
+GITHUB_CLIENT_ID=REPLACE_ME
+GITHUB_CLIENT_SECRET=REPLACE_ME
+
+# OAuth2 Authentication - Google
+GOOGLE_CLIENT_ID=REPLACE_ME
+GOOGLE_CLIENT_SECRET=REPLACE_ME
+
+# GitHub Repository Syncing Integration
+APP_GITHUB_TOKEN=REPLACE_ME
+APP_GITHUB_USE_FAKE=false
+GITHUB_LINK_CLIENT_ID=REPLACE_ME
+GITHUB_LINK_CLIENT_SECRET=REPLACE_ME
+
+# Canva Integration
+CANVA_CLIENT_ID=REPLACE_ME
+CANVA_CLIENT_SECRET=REPLACE_ME
+
+# AI Gateway Configuration (Groq / BYOK OpenAI-compatible)
+AI_BASE_URL=https://api.groq.com/openai/v1
+AI_API_KEY=REPLACE_ME
+AI_MODEL_DEFAULT=llama-3.3-70b-versatile
+AI_MODEL_FAST=llama-3.1-8b-instant
+AI_MODEL_SMART=llama-3.3-70b-versatile
+AI_PLATFORM_FALLBACK=false
+
+# Speech-to-Text Whisper Gateway
+STT_BASE_URL=https://api.groq.com/openai/v1
+STT_API_KEY=REPLACE_ME
+STT_MODEL=whisper-large-v3
+
+# Mail Configuration (Gmail SMTP)
+MAIL_ENABLED=false
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=REPLACE_ME
+MAIL_APP_PASSWORD=REPLACE_ME
+MAIL_FROM_ADDRESS=REPLACE_ME
+MAIL_FROM_NAME=Hackathon OS
+MAIL_REPLY_TO=REPLACE_ME
+
+# Administrative and Support Contacts
+ADMIN_EMAILS=REPLACE_ME
+SUPPORT_EMAIL=REPLACE_ME

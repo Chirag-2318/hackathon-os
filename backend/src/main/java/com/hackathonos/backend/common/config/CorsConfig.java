@@ -1,37 +1,45 @@
 package com.hackathonos.backend.common.config;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 
 @Configuration
 public class CorsConfig {
 
-    private final String allowedOrigins;
+    private final AppProperties appProperties;
+    private final Environment environment;
 
-    public CorsConfig(@Value("${app.cors.allowed-origins:http://localhost:5173}") String allowedOrigins) {
-        this.allowedOrigins = allowedOrigins;
+    public CorsConfig(AppProperties appProperties, Environment environment) {
+        this.appProperties = appProperties;
+        this.environment = environment;
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        java.util.List<String> origins = new java.util.ArrayList<>(Arrays.stream(allowedOrigins.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .toList());
+        List<String> origins = new ArrayList<>();
 
-        // Ensure standard local dev origins are always permitted
-        if (!origins.contains("http://localhost:5173")) origins.add("http://localhost:5173");
-        if (!origins.contains("http://127.0.0.1:5173")) origins.add("http://127.0.0.1:5173");
-        if (!origins.contains("http://localhost:3000")) origins.add("http://localhost:3000");
-        if (!origins.contains("http://127.0.0.1:3000")) origins.add("http://127.0.0.1:3000");
+        String publicUrl = appProperties.getPublicUrl();
+        if (publicUrl != null && !publicUrl.isBlank()) {
+            origins.add(publicUrl);
+        }
+
+        // When the active profile is not prod, keep the existing local origins as well
+        boolean isProd = environment.acceptsProfiles(Profiles.of("prod"));
+        if (!isProd) {
+            if (!origins.contains("http://localhost:5173")) origins.add("http://localhost:5173");
+            if (!origins.contains("http://127.0.0.1:5173")) origins.add("http://127.0.0.1:5173");
+            if (!origins.contains("http://localhost:3000")) origins.add("http://localhost:3000");
+            if (!origins.contains("http://127.0.0.1:3000")) origins.add("http://127.0.0.1:3000");
+        }
 
         config.setAllowedOrigins(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));

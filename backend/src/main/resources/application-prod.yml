@@ -1,5 +1,7 @@
-# Production Profile Configuration
+# Production Profile Configuration for Render / Cloud Deployment
 server:
+  port: ${PORT:8080}
+  forward-headers-strategy: framework
   error:
     include-stacktrace: never
     include-message: always
@@ -7,23 +9,49 @@ server:
     session:
       cookie:
         http-only: true
-        same-site: lax
-        secure: true
-        domain: ${COOKIE_DOMAIN:}
+        same-site: ${COOKIE_SAME_SITE:Lax}
+        secure: ${COOKIE_SECURE:true}
 
 spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:5}
+      minimum-idle: 1
   jpa:
+    hibernate:
+      ddl-auto: validate
     show-sql: false
     properties:
       hibernate:
         show_sql: false
         format_sql: false
+  flyway:
+    enabled: true
   h2:
     console:
       enabled: false
   devtools:
     restart:
       enabled: false
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: ${GITHUB_CLIENT_ID}
+            client-secret: ${GITHUB_CLIENT_SECRET}
+            redirect-uri: "${APP_PUBLIC_URL}/login/oauth2/code/{registrationId}"
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            redirect-uri: "${APP_PUBLIC_URL}/login/oauth2/code/{registrationId}"
+
+logging:
+  level:
+    root: INFO
 
 management:
   endpoints:
@@ -43,5 +71,8 @@ springdoc:
     enabled: false
 
 app:
+  cookie:
+    secure: ${COOKIE_SECURE:true}
+    same-site: ${COOKIE_SAME_SITE:Lax}
   mail:
     test-endpoint-enabled: false

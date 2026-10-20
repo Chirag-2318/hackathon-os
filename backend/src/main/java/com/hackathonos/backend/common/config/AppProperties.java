@@ -17,13 +17,39 @@ public class AppProperties {
     private String supportEmail = "";
     private String clientIpHeader = "x-vercel-forwarded-for";
 
-    public String getFrontendUrl() { return frontendUrl; }
-    public void setFrontendUrl(String frontendUrl) { this.frontendUrl = frontendUrl; }
+    private CookieProperties cookie = new CookieProperties();
+
+    public CookieProperties getCookie() { return cookie; }
+    public void setCookie(CookieProperties cookie) { this.cookie = cookie; }
+
+    public static class CookieProperties {
+        private boolean secure = false;
+        private String sameSite = "Lax";
+
+        public boolean isSecure() { return secure; }
+        public void setSecure(boolean secure) { this.secure = secure; }
+        public String getSameSite() { return sameSite; }
+        public void setSameSite(String sameSite) { this.sameSite = sameSite; }
+    }
+
+    public String getFrontendUrl() { return getPublicUrl(); }
+    public void setFrontendUrl(String frontendUrl) {
+        this.frontendUrl = (frontendUrl != null) ? frontendUrl.replaceAll("/+$", "") : "";
+        if (this.publicUrl == null || this.publicUrl.isBlank()) {
+            this.publicUrl = this.frontendUrl;
+        }
+    }
 
     public String getPublicUrl() {
-        return (publicUrl != null && !publicUrl.isBlank()) ? publicUrl : frontendUrl;
+        String url = (publicUrl != null && !publicUrl.isBlank()) ? publicUrl : frontendUrl;
+        if (url != null && !url.isBlank()) {
+            return url.replaceAll("/+$", "");
+        }
+        return "http://localhost:5173";
     }
-    public void setPublicUrl(String publicUrl) { this.publicUrl = publicUrl; }
+    public void setPublicUrl(String publicUrl) {
+        this.publicUrl = (publicUrl != null) ? publicUrl.replaceAll("/+$", "") : "";
+    }
 
     public String getApiPublicUrl() {
         return (apiPublicUrl != null && !apiPublicUrl.isBlank()) ? apiPublicUrl : baseUrl;

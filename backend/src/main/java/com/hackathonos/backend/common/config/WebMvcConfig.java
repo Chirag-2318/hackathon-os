@@ -40,7 +40,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(org.springframework.web.servlet.config.annotation.InterceptorRegistry registry) {
-        registry.addInterceptor(rateLimitInterceptor);
+        registry.addInterceptor(rateLimitInterceptor)
+                .excludePathPatterns("/api/v1/health", "/actuator/health/**", "/error");
         registry.addInterceptor(roomChangeInterceptor).addPathPatterns("/api/v1/**");
     }
 

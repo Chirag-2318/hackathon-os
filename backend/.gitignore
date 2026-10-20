@@ -6,6 +6,9 @@ target/
 .env
 .env.*
 !.env.example
+application-local.yml
+*.pem
+*.key
 uploads/
 **/uploads/
 
