@@ -12,3 +12,4 @@ CREATE INDEX IF NOT EXISTS idx_doc_versions_doc_id_version ON doc_versions (doc_
 
 -- 4. Drop redundant index: idx_tasks_room_status (room_id, status) is a prefix duplicate of idx_tasks_room_status_pos (room_id, status, position)
 DROP INDEX IF EXISTS idx_tasks_room_status;
+
