@@ -120,3 +120,4 @@ public class SentryService {
         return SENSITIVE_PATTERN.matcher(s).replaceAll("$1=[REDACTED]");
     }
 }
+

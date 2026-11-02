@@ -55,3 +55,4 @@ class PublicMentorSecurityTest {
                 .andExpect(jsonPath("$.code").value("INVALID_QUESTION"));
     }
 }
+

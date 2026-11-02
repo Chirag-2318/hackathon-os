@@ -8,3 +8,4 @@ public interface MailTransport {
     void send(String to, String subject, String htmlBody, String textBody) throws Exception;
     String getProviderName();
 }
+

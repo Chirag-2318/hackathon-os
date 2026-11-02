@@ -68,3 +68,4 @@ public class ResendMailTransport implements MailTransport {
         return "resend";
     }
 }
+

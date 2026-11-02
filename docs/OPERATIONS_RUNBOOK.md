@@ -187,3 +187,4 @@ pg_restore -h $DB_HOST -p $DB_PORT -U $DB_USERNAME -d $DB_NAME --clean --if-exis
 ### 7.2 Frontend Rollback
 1. In Vercel Dashboard: Open Project -> **Deployments**.
 2. Locate the previous production deployment and click **Promote to Production** (instant CDN pointer change).
+

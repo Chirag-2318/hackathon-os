@@ -41,3 +41,4 @@ public class LogMailTransport implements MailTransport {
         return "log";
     }
 }
+

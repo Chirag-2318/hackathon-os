@@ -75,6 +75,15 @@ public class SecurityConfig {
                     ErrorResponse err = new ErrorResponse(Instant.now().toString(), 401, "UNAUTHORIZED", "Authentication required", reqId);
                     response.getWriter().write(new ObjectMapper().writeValueAsString(err));
                 })
+                .accessDeniedHandler((request, response, accessDeniedException) -> {
+                    if (request.getRequestURI().startsWith("/api/") || request.getRequestURI().startsWith("/actuator/")) {
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.setContentType("application/json");
+                        response.getWriter().write("{\"timestamp\":\"" + Instant.now() + "\",\"status\":403,\"code\":\"FORBIDDEN\",\"message\":\"Access denied\"}");
+                    } else {
+                        response.sendRedirect(appProperties.getPublicUrl() + "/login");
+                    }
+                })
             );
         return http.build();
     }
@@ -102,7 +111,6 @@ public class SecurityConfig {
             .csrf(csrf -> csrf
                 .ignoringRequestMatchers(
                         "/mock/**",
-                        "/api/v1/dev/**",
                         "/api/v1/mentor/**",
                         "/api/v1/public/**",
                         "/api/v1/client-errors",
@@ -148,6 +156,7 @@ public class SecurityConfig {
                         "/actuator/health/readiness"
                 ).permitAll();
 
+
                 auth.requestMatchers("/actuator/prometheus").access((authentication, context) -> {
                     String metricsToken = environment.getProperty("METRICS_TOKEN");
                     if (metricsToken == null || metricsToken.isBlank()) {
@@ -156,7 +165,17 @@ public class SecurityConfig {
                     String authHeader = context.getRequest().getHeader("Authorization");
                     boolean matches = authHeader != null && authHeader.equals("Bearer " + metricsToken.trim());
                     return new org.springframework.security.authorization.AuthorizationDecision(matches);
+                })
+                .accessDeniedHandler((request, response, accessDeniedException) -> {
+                    if (request.getRequestURI().startsWith("/api/") || request.getRequestURI().startsWith("/actuator/")) {
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.setContentType("application/json");
+                        response.getWriter().write("{\"timestamp\":\"" + Instant.now() + "\",\"status\":403,\"code\":\"FORBIDDEN\",\"message\":\"Access denied\"}");
+                    } else {
+                        response.sendRedirect(appProperties.getPublicUrl() + "/login");
+                    }
                 });
+
 
                 // Core public endpoints
                 auth.requestMatchers(
@@ -184,6 +203,7 @@ public class SecurityConfig {
                         "/mock/**"
                 ).permitAll();
 
+
                 // Dev/Swagger endpoints permitted ONLY when not in production profile
                 if (!isProd) {
                     auth.requestMatchers(
@@ -191,6 +211,9 @@ public class SecurityConfig {
                             "/swagger-ui/**",
                             "/swagger-ui.html"
                     ).permitAll();
+
+
+    
                 }
 
                 auth.requestMatchers(HttpMethod.GET, "/api/v1/invites/**").permitAll();
@@ -209,12 +232,30 @@ public class SecurityConfig {
                     String target = appProperties.getPublicUrl() + "/login?error="
                             + URLEncoder.encode(exception.getMessage() != null ? exception.getMessage() : "OAuth authentication failed", StandardCharsets.UTF_8);
                     response.sendRedirect(target);
+                })
+                .accessDeniedHandler((request, response, accessDeniedException) -> {
+                    if (request.getRequestURI().startsWith("/api/") || request.getRequestURI().startsWith("/actuator/")) {
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.setContentType("application/json");
+                        response.getWriter().write("{\"timestamp\":\"" + Instant.now() + "\",\"status\":403,\"code\":\"FORBIDDEN\",\"message\":\"Access denied\"}");
+                    } else {
+                        response.sendRedirect(appProperties.getPublicUrl() + "/login");
+                    }
                 });
             })
             .logout(logout -> logout
                 .logoutUrl("/api/v1/logout")
                 .logoutSuccessHandler((request, response, authentication) -> {
                     response.setStatus(HttpServletResponse.SC_NO_CONTENT);
+                })
+                .accessDeniedHandler((request, response, accessDeniedException) -> {
+                    if (request.getRequestURI().startsWith("/api/") || request.getRequestURI().startsWith("/actuator/")) {
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.setContentType("application/json");
+                        response.getWriter().write("{\"timestamp\":\"" + Instant.now() + "\",\"status\":403,\"code\":\"FORBIDDEN\",\"message\":\"Access denied\"}");
+                    } else {
+                        response.sendRedirect(appProperties.getPublicUrl() + "/login");
+                    }
                 })
             )
             .addFilterAfter(new OncePerRequestFilter() {

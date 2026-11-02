@@ -36,3 +36,4 @@ public class MailTransportConfig {
         return smtpTransport;
     }
 }
+

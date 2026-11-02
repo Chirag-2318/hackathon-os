@@ -49,3 +49,4 @@ public class SmtpMailTransport implements MailTransport {
         return "smtp";
     }
 }
+

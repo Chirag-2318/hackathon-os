@@ -76,3 +76,4 @@ export function initSentry() {
     sendEvent(msg, stack);
   });
 }
+

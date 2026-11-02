@@ -61,3 +61,4 @@ class ClientIpResolverTest {
         assertThat(resolver.resolveClientIp(request)).isEqualTo("192.0.2.1");
     }
 }
+
