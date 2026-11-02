@@ -52,8 +52,10 @@ public class RequestIdFilter extends OncePerRequestFilter {
                 user = auth.getName();
             }
 
-            if (duration > 1000) {
-                log.warn("{} {} status={} duration={}ms user={} requestId={}", method, path, status, duration, user, requestId);
+            if (status >= 500) {
+                log.error("SERVER_ERROR: method={} path={} status={} duration={}ms user={} requestId={}", method, path, status, duration, user, requestId);
+            } else if (duration > 1500) {
+                log.warn("SLOW_REQUEST: method={} path={} status={} duration={}ms user={} requestId={}", method, path, status, duration, user, requestId);
             } else {
                 log.info("{} {} status={} duration={}ms user={} requestId={}", method, path, status, duration, user, requestId);
             }

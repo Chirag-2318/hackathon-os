@@ -31,6 +31,7 @@ public class RoomExportController {
     /**
      * Downloads an offline ZIP archive containing all room artifacts.
      */
+    @com.hackathonos.backend.common.security.RateLimited(key = "room_export", limit = 5, periodSeconds = 60)
     @GetMapping(value = {"/export", "/export.zip"}, produces = "application/zip")
     public ResponseEntity<byte[]> exportRoom(@PathVariable UUID roomId) {
         User user = currentUser.get();

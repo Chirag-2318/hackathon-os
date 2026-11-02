@@ -33,7 +33,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 @Service
-@Profile("dev")
+@Profile("!prod")
 public class DevSeedService {
 
     private final boolean seedEnabled;

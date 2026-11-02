@@ -20,4 +20,8 @@ public interface ClientErrorRepository extends JpaRepository<ClientError, UUID> 
             @Param("since") Instant since,
             Pageable pageable
     );
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("DELETE FROM ClientError e WHERE e.createdAt < :cutoff")
+    int deleteByCreatedAtBefore(@Param("cutoff") Instant cutoff);
 }

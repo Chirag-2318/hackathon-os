@@ -66,11 +66,22 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,metrics,prometheus
+
+
   endpoint:
+    prometheus:
+      enabled: true
+    metrics:
+      enabled: true
+
     health:
       show-details: never
       probes:
+        enabled: true
+  prometheus:
+    metrics:
+      export:
         enabled: true
 
 springdoc:
@@ -88,3 +99,5 @@ app:
     same-site: ${COOKIE_SAME_SITE:Lax}
   mail:
     test-endpoint-enabled: false
+    provider: ${MAIL_PROVIDER:smtp}
+    resend-api-key: ${RESEND_API_KEY:}

@@ -66,6 +66,18 @@ public class SecretCipher {
             }
             this.secretKey = new SecretKeySpec(decoded, "AES");
         }
+
+        // Round-trip encrypt/decrypt canary self-test to verify algorithm and key validity
+        try {
+            String canary = "brackit-self-test-canary-" + System.currentTimeMillis();
+            String encrypted = encrypt(canary);
+            String decrypted = decrypt(encrypted);
+            if (!canary.equals(decrypted)) {
+                throw new IllegalStateException("SecretCipher canary round-trip validation mismatch");
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("SecretCipher self-test failed with configured key: " + e.getMessage(), e);
+        }
     }
 
     public String encrypt(String plaintext) {
@@ -112,12 +124,13 @@ public class SecretCipher {
             byte[] plainTextBytes = cipher.doFinal(cipherText);
             return new String(plainTextBytes, StandardCharsets.UTF_8);
         } catch (Exception e) {
+            int len = ciphertextBase64 != null ? ciphertextBase64.length() : 0;
+            log.error("SecretCipher decryption failed: ciphertext length={}, cause={}", len, e.getClass().getSimpleName());
             throw new RuntimeException("Decryption failed", e);
         }
     }
 
     public record EncryptedSecret(String ciphertext, String iv) {}
-
 
     public EncryptedSecret encryptWithIv(String plaintext) {
         if (plaintext == null) {
@@ -156,8 +169,10 @@ public class SecretCipher {
             byte[] plainTextBytes = cipher.doFinal(cipherText);
             return new String(plainTextBytes, StandardCharsets.UTF_8);
         } catch (Exception e) {
+            int cLen = ciphertextBase64 != null ? ciphertextBase64.length() : 0;
+            int ivLen = ivBase64 != null ? ivBase64.length() : 0;
+            log.error("SecretCipher decryptWithIv failed: ciphertext length={}, iv length={}, cause={}", cLen, ivLen, e.getClass().getSimpleName());
             throw new RuntimeException("Decryption failed", e);
         }
     }
 }
-

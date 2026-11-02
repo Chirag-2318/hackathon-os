@@ -35,6 +35,7 @@ import java.util.stream.Collectors;
  */
 @Service
 public class IdeasService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(IdeasService.class);
 
     private final IdeaRepository ideaRepository;
     private final IdeaLinkRepository linkRepository;
@@ -454,7 +455,7 @@ public class IdeasService {
         try {
             planPrepareServiceProvider.ifAvailable(svc -> svc.triggerPrepareAsync(roomId, 1));
         } catch (Exception e) {
-            // Fire and forget, never fail the transition
+            log.warn("Failed to trigger prepare async for step 1 in room {}: {}", roomId, e.getMessage());
         }
     }
 

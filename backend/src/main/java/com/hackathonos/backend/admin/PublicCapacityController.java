@@ -22,6 +22,7 @@ import java.util.regex.Pattern;
 public class PublicCapacityController {
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PublicCapacityController.class);
 
     private final AppSettingsService appSettingsService;
     private final RateLimiter rateLimiter;
@@ -78,7 +79,7 @@ public class PublicCapacityController {
         }
 
         String normalizedEmail = rawEmail.trim().toLowerCase(Locale.ROOT);
-        if (!EMAIL_PATTERN.matcher(normalizedEmail).matches()) {
+        if (normalizedEmail.length() > 254 || !EMAIL_PATTERN.matcher(normalizedEmail).matches()) {
             return ResponseEntity.status(HttpStatus.ACCEPTED).body(successResponse);
         }
 
@@ -98,7 +99,9 @@ public class PublicCapacityController {
                             "ON CONFLICT (email) DO NOTHING",
                     normalizedEmail
             );
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            log.debug("Failed to record waitlist signup: {}", e.getMessage());
+        }
 
         // Always return 202 Accepted
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(successResponse);

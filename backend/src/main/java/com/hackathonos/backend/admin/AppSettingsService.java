@@ -15,6 +15,7 @@ import java.util.*;
 
 @Service
 public class AppSettingsService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AppSettingsService.class);
 
     private static final long SIGNUP_CAP_LOCK_KEY = 89421001L;
 
@@ -58,6 +59,7 @@ public class AppSettingsService {
             }
             return !"false".equalsIgnoreCase(values.get(0).trim());
         } catch (Exception e) {
+            log.debug("Failed to query app setting: {}", e.getMessage());
             return true;
         }
     }
@@ -199,12 +201,16 @@ public class AppSettingsService {
                     Long.class
             );
             clientErrors24h = errs != null ? errs : 0L;
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            log.debug("Could not query client errors 24h count: {}", e.getMessage());
+        }
 
         String databaseSize = "Unknown";
         try {
             databaseSize = jdbcTemplate.queryForObject("SELECT pg_size_pretty(pg_database_size(current_database()))", String.class);
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            log.debug("Could not query client errors 24h count: {}", e.getMessage());
+        }
 
         return new AdminOverviewDto(
                 users,
@@ -245,6 +251,7 @@ public class AppSettingsService {
             Long val = jdbcTemplate.queryForObject(sql, Long.class);
             return val != null ? val : 0L;
         } catch (Exception e) {
+            log.debug("Safe query count failed for [{}]: {}", sql, e.getMessage());
             return 0L;
         }
     }

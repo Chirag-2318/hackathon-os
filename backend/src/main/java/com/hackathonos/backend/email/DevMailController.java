@@ -12,7 +12,7 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/api/v1/dev/mail")
-@Profile("dev")
+@Profile("!prod")
 public class DevMailController {
 
     private final MailTemplateRenderer templateRenderer;

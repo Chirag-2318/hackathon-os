@@ -123,6 +123,9 @@ public class AppProperties {
 
     public String getClientIpHeader() { return clientIpHeader; }
     public void setClientIpHeader(String clientIpHeader) { this.clientIpHeader = clientIpHeader; }
+    private String proxySharedSecret = "";
+    public String getProxySharedSecret() { return proxySharedSecret; }
+    public void setProxySharedSecret(String proxySharedSecret) { this.proxySharedSecret = proxySharedSecret; }
 
     public String getBaseUrl() { return baseUrl; }
     public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }

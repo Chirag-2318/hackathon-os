@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
@@ -17,6 +18,7 @@ import java.util.List;
  */
 @Component
 @Profile("prod")
+@ConditionalOnProperty(name = "app.startup-validation.enabled", havingValue = "true", matchIfMissing = true)
 public class ProductionStartupValidator implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ProductionStartupValidator.class);
@@ -82,15 +84,27 @@ public class ProductionStartupValidator implements ApplicationRunner {
         boolean mailEnabled = Boolean.parseBoolean(env.getProperty("app.mail.enabled",
                 env.getProperty("MAIL_ENABLED", "false")));
         if (mailEnabled) {
-            checkRequired(errors, "MAIL_HOST",
-                    env.getProperty("app.mail.host", env.getProperty("spring.mail.host")),
-                    null, null);
-            checkRequired(errors, "MAIL_USERNAME",
-                    env.getProperty("app.mail.username", env.getProperty("spring.mail.username")),
-                    "@", null);
-            checkRequired(errors, "MAIL_APP_PASSWORD",
-                    env.getProperty("app.mail.app-password", env.getProperty("spring.mail.password")),
-                    null, null);
+            String mailProvider = env.getProperty("app.mail.provider", env.getProperty("MAIL_PROVIDER", "smtp")).trim().toLowerCase();
+            if ("resend".equals(mailProvider)) {
+                checkRequired(errors, "RESEND_API_KEY",
+                        env.getProperty("app.mail.resend-api-key", env.getProperty("RESEND_API_KEY")),
+                        null, null);
+                checkRequired(errors, "MAIL_FROM_ADDRESS",
+                        env.getProperty("app.mail.from-address", env.getProperty("MAIL_FROM_ADDRESS")),
+                        "@", null);
+            } else if ("smtp".equals(mailProvider)) {
+                checkRequired(errors, "MAIL_HOST",
+                        env.getProperty("app.mail.host", env.getProperty("spring.mail.host")),
+                        null, null);
+                checkRequired(errors, "MAIL_USERNAME",
+                        env.getProperty("app.mail.username", env.getProperty("spring.mail.username")),
+                        "@", null);
+                checkRequired(errors, "MAIL_APP_PASSWORD",
+                        env.getProperty("app.mail.app-password", env.getProperty("spring.mail.password")),
+                        null, null);
+            } else if ("log".equals(mailProvider)) {
+                log.warn("MAIL_PROVIDER is set to 'log' in production. Emails will be logged locally and not delivered to real inboxes.");
+            }
         }
 
         // 6. Administrative Contacts
@@ -107,7 +121,6 @@ public class ProductionStartupValidator implements ApplicationRunner {
         if (Boolean.parseBoolean(fallbackStr)) {
             errors.add("AI_PLATFORM_FALLBACK must be false in prod (platform pays for NO AI usage in production)");
         }
-
 
         // 8. Storage Provider
         String storageProvider = env.getProperty("app.storage.provider", env.getProperty("STORAGE_PROVIDER", "local"));

@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 
 @CrossOrigin(origins = "*")
 @RestController
+@org.springframework.context.annotation.Profile("!prod")
 public class PublicMockController {
 
     private final ApiHubService apiHubService;

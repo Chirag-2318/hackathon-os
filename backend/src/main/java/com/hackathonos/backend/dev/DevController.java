@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@Profile("dev")
+@Profile("!prod")
 @RequestMapping("/api/v1/dev")
 public class DevController {
 

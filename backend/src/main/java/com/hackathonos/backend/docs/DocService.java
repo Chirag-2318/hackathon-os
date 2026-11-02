@@ -740,7 +740,9 @@ The following items are intentionally cut from the initial hackathon sprint to p
         try {
             UUID docId = UUID.fromString(docIdOrFileName);
             doc = docRepository.findById(docId).orElse(null);
-        } catch (Exception ignored) {}
+        } catch (IllegalArgumentException e) {
+            log.debug("Doc download target '{}' is not a UUID, falling back to file name lookup", docIdOrFileName);
+        }
 
         if (doc == null) {
             doc = docRepository.findByRoomIdAndFileName(roomId, docIdOrFileName)

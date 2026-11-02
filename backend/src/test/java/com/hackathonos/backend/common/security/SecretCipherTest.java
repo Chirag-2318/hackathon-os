@@ -62,4 +62,20 @@ class SecretCipherTest {
         assertThatThrownBy(cipher::init)
                 .isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    void testCorruptCiphertextThrowsExceptionWithoutLeaking() {
+        AppProperties props = new AppProperties();
+        byte[] key32 = new byte[32];
+        for (int i = 0; i < 32; i++) key32[i] = (byte) (i + 1);
+        props.setEncryptionKey(Base64.getEncoder().encodeToString(key32));
+
+        MockEnvironment env = new MockEnvironment();
+        SecretCipher cipher = new SecretCipher(props, env);
+        cipher.init();
+
+        assertThatThrownBy(() -> cipher.decrypt("YWJjZGVmZ2hpamtsbW5vcA=="))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("Decryption failed");
+    }
 }

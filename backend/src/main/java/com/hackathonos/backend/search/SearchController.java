@@ -20,6 +20,7 @@ public class SearchController {
         this.searchService = searchService;
     }
 
+    @com.hackathonos.backend.common.security.RateLimited(key = "search", limit = 30, periodSeconds = 60)
     @GetMapping
     public SearchResponseDto search(
             @RequestParam(required = false) String q,

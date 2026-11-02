@@ -2,17 +2,14 @@ package com.hackathonos.backend.email;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -47,19 +44,22 @@ public class MailWorker {
     private final ObjectMapper objectMapper;
     private final AtomicBoolean credentialWarnLogged = new AtomicBoolean(false);
     private final com.hackathonos.backend.common.lock.DbAdvisoryLockService advisoryLockService;
+    private final MailTransport mailTransport;
 
     public MailWorker(EmailOutboxRepository outboxRepository,
                       MailProperties mailProperties,
                       MailTemplateRenderer templateRenderer,
                       ObjectProvider<JavaMailSender> mailSenderProvider,
                       ObjectMapper objectMapper,
-                      com.hackathonos.backend.common.lock.DbAdvisoryLockService advisoryLockService) {
+                      com.hackathonos.backend.common.lock.DbAdvisoryLockService advisoryLockService,
+                      MailTransport mailTransport) {
         this.outboxRepository = outboxRepository;
         this.mailProperties = mailProperties;
         this.templateRenderer = templateRenderer;
         this.mailSenderProvider = mailSenderProvider;
         this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
         this.advisoryLockService = advisoryLockService;
+        this.mailTransport = mailTransport;
     }
 
     @Scheduled(fixedDelay = 5000)
@@ -77,13 +77,24 @@ public class MailWorker {
             }
 
             if (enabled && !dryRun) {
-                String user = mailProperties.getUsername();
-                String pwd = mailProperties.getAppPassword();
-                if (user == null || user.isBlank() || pwd == null || pwd.isBlank()) {
-                    if (credentialWarnLogged.compareAndSet(false, true)) {
-                        log.warn("MAIL_ENABLED is true but MAIL_USERNAME or MAIL_APP_PASSWORD is missing. Mail sending is disabled.");
+                String provider = mailProperties.getProvider();
+                if ("smtp".equalsIgnoreCase(provider)) {
+                    String user = mailProperties.getUsername();
+                    String pwd = mailProperties.getAppPassword();
+                    if (user == null || user.isBlank() || pwd == null || pwd.isBlank()) {
+                        if (credentialWarnLogged.compareAndSet(false, true)) {
+                            log.warn("MAIL_ENABLED is true but MAIL_USERNAME or MAIL_APP_PASSWORD is missing for SMTP. Mail sending is disabled.");
+                        }
+                        return;
                     }
-                    return;
+                } else if ("resend".equalsIgnoreCase(provider)) {
+                    String apiKey = mailProperties.getResendApiKey();
+                    if (apiKey == null || apiKey.isBlank()) {
+                        if (credentialWarnLogged.compareAndSet(false, true)) {
+                            log.warn("MAIL_ENABLED is true but RESEND_API_KEY is missing for Resend. Mail sending is disabled.");
+                        }
+                        return;
+                    }
                 }
             }
 
@@ -102,7 +113,7 @@ public class MailWorker {
                     dailySent >= (mailProperties.getDailyLimit() - 50);
 
             // Claim pending items inside a short transaction using transaction-scoped advisory lock.
-            // This releases the pooled DB connection immediately before slow SMTP I/O begins.
+            // This releases the pooled DB connection immediately before slow email I/O begins.
             List<EmailOutbox> pending = advisoryLockService.tryXactLockAndClaim(1004L, () -> {
                 List<EmailOutbox> items = outboxRepository.findByStatusAndNextAttemptAtLessThanEqualOrderByPriorityDescNextAttemptAtAsc(
                         EmailOutbox.Status.PENDING,
@@ -209,39 +220,20 @@ public class MailWorker {
             }
         }
 
-        JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
-        if (mailSender == null) {
-            item.setStatus(EmailOutbox.Status.FAILED);
-            item.setLastError("JavaMailSender bean is not available. Check mail configuration.");
-            outboxRepository.save(item);
-            return false;
-        }
-
         try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
-            helper.setFrom(mailProperties.getFromAddress(), mailProperties.getFromName());
-            helper.setTo(item.getToEmail());
-            helper.setSubject(rendered.subject());
-            helper.setText(rendered.textBody(), rendered.htmlBody());
-            if (mailProperties.getReplyTo() != null && !mailProperties.getReplyTo().isBlank()) {
-                helper.setReplyTo(mailProperties.getReplyTo());
-            }
-            mimeMessage.setHeader("Auto-Submitted", "auto-generated");
-
-            mailSender.send(mimeMessage);
+            mailTransport.send(item.getToEmail(), rendered.subject(), rendered.htmlBody(), rendered.textBody());
 
             item.setStatus(EmailOutbox.Status.SENT);
             item.setSentAt(Instant.now());
             item.setLastError(null);
             outboxRepository.save(item);
-            log.info("Email '{}' successfully sent to {}", item.getTemplate(), item.getToEmail());
+            log.info("Email '{}' successfully sent to {} via {}", item.getTemplate(), item.getToEmail(), mailTransport.getProviderName());
             return true;
         } catch (Exception e) {
             String rawMessage = e.getMessage() != null ? e.getMessage() : "";
             String hint = getHumanHint(rawMessage);
             if (!hint.isEmpty()) {
-                log.warn("[SMTP ERROR HINT] {}", hint);
+                log.warn("[MAIL ERROR HINT] {}", hint);
             }
 
             int nextAttempt = item.getAttempts() + 1;

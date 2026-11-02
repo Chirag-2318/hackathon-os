@@ -56,7 +56,7 @@ public class CorsConfig {
                 "Cache-Control",
                 "*"
         ));
-        config.setExposedHeaders(List.of("X-Request-Id", "Retry-After", "Idempotency-Key", "ETag"));
+        config.setExposedHeaders(List.of("X-Request-Id", "Retry-After", "Idempotency-Key", "ETag", "X-Total-Count", "X-Truncated"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 

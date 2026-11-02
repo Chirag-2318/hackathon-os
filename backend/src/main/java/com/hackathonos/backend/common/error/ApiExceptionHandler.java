@@ -27,6 +27,15 @@ import java.util.UUID;
 public class ApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+    private final com.hackathonos.backend.common.observability.SentryService sentryService;
+
+    public ApiExceptionHandler() {
+        this(new com.hackathonos.backend.common.observability.SentryService(""));
+    }
+
+    public ApiExceptionHandler(com.hackathonos.backend.common.observability.SentryService sentryService) {
+        this.sentryService = sentryService != null ? sentryService : new com.hackathonos.backend.common.observability.SentryService("");
+    }
 
     private String resolveRequestId() {
         String reqId = MDC.get(RequestIdFilter.MDC_KEY);
@@ -475,6 +484,7 @@ public class ApiExceptionHandler {
     public ResponseEntity<ErrorResponse> handleDatabaseError(Exception ex) {
         String reqId = resolveRequestId();
         log.error("Database error [{}]", reqId, ex);
+        sentryService.captureException(ex, reqId, Map.of("handler", "handleDatabaseError"));
         ErrorResponse body = new ErrorResponse(
                 Instant.now().toString(),
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
@@ -489,6 +499,7 @@ public class ApiExceptionHandler {
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
         String reqId = resolveRequestId();
         log.error("Internal error [{}]", reqId, ex);
+        sentryService.captureException(ex, reqId, Map.of("handler", "handleGeneric"));
         ErrorResponse body = new ErrorResponse(
                 Instant.now().toString(),
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),

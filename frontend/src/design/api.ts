@@ -1,4 +1,5 @@
 import { toast } from './components/toast';
+import { triggerServerWaking } from '../components/ServerWakingOverlay';
 
 export interface UnifiedErrorResponse {
   code?: string;
@@ -180,6 +181,10 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     }
 
     const code = body.code || `HTTP_${res.status}`;
+
+    if (res.status === 502 || res.status === 504) {
+      triggerServerWaking();
+    }
 
     // Auto-retry ONCE for AI actions on SERVER_BUSY (503)
     const isAiAction = Boolean(

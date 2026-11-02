@@ -30,6 +30,8 @@ public interface EmailOutboxRepository extends JpaRepository<EmailOutbox, UUID> 
             Pageable pageable
     );
 
+    long countByStatus(EmailOutbox.Status status);
+
     long countByStatusAndSentAtGreaterThanEqual(EmailOutbox.Status status, Instant since);
 
     long countByToEmailIgnoreCaseAndStatusAndSentAtGreaterThanEqual(

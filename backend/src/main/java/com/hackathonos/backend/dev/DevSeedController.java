@@ -13,7 +13,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/dev/seed")
-@Profile("dev")
+@Profile("!prod")
 public class DevSeedController {
 
     private final DevSeedService devSeedService;

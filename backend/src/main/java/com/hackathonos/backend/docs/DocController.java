@@ -37,7 +37,7 @@ public class DocController {
             @AuthenticationPrincipal User user
     ) {
         DocListResponseDto dto = docService.listDocs(roomId, resolveUser(user));
-        List<DocItemDto> all = dto.docs();
+        List<DocItemDto> all = dto.items();
         int total = all.size();
         int safeLimit = (limit != null && limit > 0) ? Math.min(limit, 500) : 500;
         int pageNum = (page != null && page >= 0) ? page : 0;
@@ -62,6 +62,7 @@ public class DocController {
         return docService.createCustomDoc(roomId, req, resolveUser(user));
     }
 
+    @com.hackathonos.backend.common.security.RateLimited(key = "doc_download_zip", limit = 10, periodSeconds = 60)
     @GetMapping("/download.zip")
     public ResponseEntity<byte[]> downloadAllZip(
             @PathVariable UUID roomId,

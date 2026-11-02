@@ -94,3 +94,13 @@ MAIL_REPLY_TO=REPLACE_ME
 # Administrative and Support Contacts
 ADMIN_EMAILS=REPLACE_ME
 SUPPORT_EMAIL=REPLACE_ME
+
+# Observability & Proxy Security
+PROXY_SHARED_SECRET=
+METRICS_TOKEN=REPLACE_ME
+SENTRY_DSN=
+VITE_SENTRY_DSN=
+
+# Mail Provider ('smtp', 'resend', or 'log')
+MAIL_PROVIDER=smtp
+RESEND_API_KEY=

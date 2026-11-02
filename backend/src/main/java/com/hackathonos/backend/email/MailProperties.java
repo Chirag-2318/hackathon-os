@@ -8,6 +8,8 @@ import org.springframework.stereotype.Component;
 public class MailProperties {
 
     private boolean enabled = false;
+    private String provider = "smtp"; // smtp, resend, log
+    private String resendApiKey = "";
     private String host = "smtp.gmail.com";
     private int port = 587;
     private String username = "";
@@ -40,6 +42,12 @@ public class MailProperties {
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
 
+    public String getProvider() { return provider; }
+    public void setProvider(String provider) { this.provider = clean(provider).toLowerCase(); }
+
+    public String getResendApiKey() { return resendApiKey; }
+    public void setResendApiKey(String resendApiKey) { this.resendApiKey = clean(resendApiKey); }
+
     public String getHost() { return host; }
     public void setHost(String host) { this.host = clean(host); }
 
@@ -53,7 +61,11 @@ public class MailProperties {
     public void setAppPassword(String appPassword) { this.appPassword = cleanPassword(appPassword); }
 
     public String getFromAddress() {
-        // Gmail rewrites From address unless it matches the authenticated username
+        if ("resend".equalsIgnoreCase(provider)) {
+            if (fromAddress != null && !fromAddress.isBlank()) {
+                return fromAddress;
+            }
+        }
         if (username != null && !username.isBlank()) {
             return username;
         }

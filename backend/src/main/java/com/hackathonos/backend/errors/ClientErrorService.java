@@ -84,4 +84,14 @@ public class ClientErrorService {
         String trimmed = val.trim();
         return trimmed.length() <= maxLen ? trimmed : trimmed.substring(0, maxLen);
     }
+
+    @org.springframework.scheduling.annotation.Scheduled(cron = "0 0 3 * * ?")
+    @Transactional
+    public void pruneOldErrors() {
+        Instant cutoff = Instant.now().minus(Duration.ofDays(30));
+        int deleted = clientErrorRepository.deleteByCreatedAtBefore(cutoff);
+        if (deleted > 0) {
+            log.info("Pruned {} client error records older than 30 days (cutoff={})", deleted, cutoff);
+        }
+    }
 }

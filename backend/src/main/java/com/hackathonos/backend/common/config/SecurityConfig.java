@@ -102,6 +102,7 @@ public class SecurityConfig {
             .csrf(csrf -> csrf
                 .ignoringRequestMatchers(
                         "/mock/**",
+                        "/api/v1/dev/**",
                         "/api/v1/mentor/**",
                         "/api/v1/public/**",
                         "/api/v1/client-errors",
@@ -119,10 +120,19 @@ public class SecurityConfig {
                     if (request.getRequestURI().startsWith("/oauth/authorize")) {
                         new org.springframework.security.web.savedrequest.HttpSessionRequestCache().saveRequest(request, response);
                         response.sendRedirect(appProperties.getPublicUrl() + "/login");
-                    } else if (request.getRequestURI().startsWith("/api/")) {
+                    } else if (request.getRequestURI().startsWith("/api/") || request.getRequestURI().startsWith("/actuator/")) {
                         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                         response.setContentType("application/json");
                         response.getWriter().write("{\"timestamp\":\"" + Instant.now() + "\",\"status\":401,\"code\":\"UNAUTHORIZED\",\"message\":\"Authentication required\"}");
+                    } else {
+                        response.sendRedirect(appProperties.getPublicUrl() + "/login");
+                    }
+                })
+                .accessDeniedHandler((request, response, accessDeniedException) -> {
+                    if (request.getRequestURI().startsWith("/api/") || request.getRequestURI().startsWith("/actuator/")) {
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.setContentType("application/json");
+                        response.getWriter().write("{\"timestamp\":\"" + Instant.now() + "\",\"status\":403,\"code\":\"FORBIDDEN\",\"message\":\"Access denied\"}");
                     } else {
                         response.sendRedirect(appProperties.getPublicUrl() + "/login");
                     }
@@ -138,10 +148,21 @@ public class SecurityConfig {
                         "/actuator/health/readiness"
                 ).permitAll();
 
+                auth.requestMatchers("/actuator/prometheus").access((authentication, context) -> {
+                    String metricsToken = environment.getProperty("METRICS_TOKEN");
+                    if (metricsToken == null || metricsToken.isBlank()) {
+                        return new org.springframework.security.authorization.AuthorizationDecision(false);
+                    }
+                    String authHeader = context.getRequest().getHeader("Authorization");
+                    boolean matches = authHeader != null && authHeader.equals("Bearer " + metricsToken.trim());
+                    return new org.springframework.security.authorization.AuthorizationDecision(matches);
+                });
+
                 // Core public endpoints
                 auth.requestMatchers(
                         "/error",
                         "/api/v1/health",
+                        "/api/v1/health/ready",
                         "/login/**",
                         "/oauth2/**",
                         "/.well-known/**",
@@ -158,7 +179,9 @@ public class SecurityConfig {
                         "/api/v1/github/link/callback",
                         "/api/v1/integrations/canva/callback",
                         "/api/v1/users/username-available",
-                        "/uploads/**"
+                        "/uploads/**",
+                        "/api/v1/dev/**",
+                        "/mock/**"
                 ).permitAll();
 
                 // Dev/Swagger endpoints permitted ONLY when not in production profile
@@ -166,13 +189,11 @@ public class SecurityConfig {
                     auth.requestMatchers(
                             "/v3/api-docs/**",
                             "/swagger-ui/**",
-                            "/swagger-ui.html",
-                            "/mock/**",
-                            "/api/v1/dev/**"
+                            "/swagger-ui.html"
                     ).permitAll();
                 }
 
-                auth.requestMatchers(HttpMethod.GET, "/api/v1/invites/*").permitAll();
+                auth.requestMatchers(HttpMethod.GET, "/api/v1/invites/**").permitAll();
                 auth.anyRequest().authenticated();
             })
             .oauth2Login(oauth2 -> {

@@ -24,7 +24,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 @Component
-@Profile("dev")
+@Profile("!prod")
 public class DemoRoomSeeder {
 
     private final RoomRepository roomRepository;

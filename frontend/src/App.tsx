@@ -8,6 +8,7 @@ import { useMotionModeSync, useIsMotionReduced } from '@/shared/motion/use-motio
 import { Toaster } from '@/components/ui/sonner';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { SessionExpiryDialog } from '@/components/SessionExpiryDialog';
+import { ServerWakingOverlay, triggerServerWaking, isServerWakingUp } from '@/components/ServerWakingOverlay';
 import { SoundEffects } from '@/shared/sound/sound-effects';
 import { useNotificationStream } from '@/api/useNotificationStream';
 import { useCurrentUser } from '@/features/auth/useCurrentUser';
@@ -15,6 +16,10 @@ import { useCurrentUser } from '@/features/auth/useCurrentUser';
 const lastErrorToastTimes = new Map<string, number>();
 
 function showThrottledErrorToast(requestType: string, rawMessage: string) {
+  if (isServerWakingUp()) {
+    // Suppress error toast storms while backend is cold starting
+    return;
+  }
   const now = Date.now();
   const lastTime = lastErrorToastTimes.get(requestType) ?? 0;
   if (now - lastTime >= 60_000) {
@@ -31,8 +36,15 @@ const queryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: (error: any, query) => {
       if (error?.name === 'AbortError') return;
-      const queryType = Array.isArray(query.queryKey) ? String(query.queryKey[0]) : 'query';
       const status = error?.status ?? error?.response?.status;
+
+      // When encountering gateway/timeout/wake errors, trigger waking overlay
+      if (status === 502 || status === 503 || status === 504 || (error?.name === 'TypeError' && navigator.onLine)) {
+        triggerServerWaking();
+        return;
+      }
+
+      const queryType = Array.isArray(query.queryKey) ? String(query.queryKey[0]) : 'query';
       if (status !== 401) {
         showThrottledErrorToast(queryType, error?.message || `Request failed (${queryType})`);
       }
@@ -89,6 +101,7 @@ function App() {
               <OfflineBanner />
               <AppRouter />
               <SessionExpiryDialog />
+              <ServerWakingOverlay />
               <Toaster position="bottom-right" />
             </MotionTreeWrapper>
           </SoundEffects>

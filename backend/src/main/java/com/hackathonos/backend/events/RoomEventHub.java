@@ -366,7 +366,7 @@ public class RoomEventHub {
                 }
             }
             for (UserEmitter ue : failed) {
-                try { ue.emitter().complete(); } catch (Exception ignored) {}
+                try { ue.emitter().complete(); } catch (Exception e) { log.debug("Error completing emitter: {}", e.getMessage()); }
                 removeRoomEmitter(roomId, ue);
             }
         });
@@ -392,7 +392,7 @@ public class RoomEventHub {
                 }
             }
             for (UserEmitter ue : failed) {
-                try { ue.emitter().complete(); } catch (Exception ignored) {}
+                try { ue.emitter().complete(); } catch (Exception e) { log.debug("Error completing emitter: {}", e.getMessage()); }
                 removeNotificationEmitter(userId, ue);
             }
         });
@@ -420,7 +420,7 @@ public class RoomEventHub {
                 }
             }
             for (UserEmitter ue : failed) {
-                try { ue.emitter().complete(); } catch (Exception ignored) {}
+                try { ue.emitter().complete(); } catch (Exception e) { log.debug("Error completing emitter: {}", e.getMessage()); }
                 removeNotificationEmitter(userId, ue);
             }
         });
@@ -525,7 +525,7 @@ public class RoomEventHub {
                 }
             }
             for (UserEmitter ue : failed) {
-                try { ue.emitter().complete(); } catch (Exception ignored) {}
+                try { ue.emitter().complete(); } catch (Exception e) { log.debug("Error completing emitter: {}", e.getMessage()); }
                 removeRoomEmitter(entry.getKey(), ue);
             }
         }
@@ -539,7 +539,7 @@ public class RoomEventHub {
                 }
             }
             for (UserEmitter ue : failed) {
-                try { ue.emitter().complete(); } catch (Exception ignored) {}
+                try { ue.emitter().complete(); } catch (Exception e) { log.debug("Error completing emitter: {}", e.getMessage()); }
                 removeNotificationEmitter(entry.getKey(), ue);
             }
         }
@@ -556,15 +556,34 @@ public class RoomEventHub {
 
     @PreDestroy
     public void shutdown() {
+        log.info("Graceful shutdown: notifying all active SSE connections with 'bye' event");
         for (List<UserEmitter> list : roomEmitters.values()) {
             for (UserEmitter ue : list) {
-                try { ue.emitter().complete(); } catch (Exception ignored) {}
+                try {
+                    ue.trySend(SseEmitter.event().name("bye").data(Map.of("reason", "server_shutdown", "message", "Server is shutting down")));
+                } catch (Exception e) {
+                    log.debug("Failed sending shutdown bye event to room emitter: {}", e.getMessage());
+                }
+                try {
+                    ue.emitter().complete();
+                } catch (Exception e) {
+                    log.debug("Error completing room emitter on shutdown: {}", e.getMessage());
+                }
             }
         }
         roomEmitters.clear();
         for (List<UserEmitter> list : notificationEmitters.values()) {
             for (UserEmitter ue : list) {
-                try { ue.emitter().complete(); } catch (Exception ignored) {}
+                try {
+                    ue.trySend(SseEmitter.event().name("bye").data(Map.of("reason", "server_shutdown", "message", "Server is shutting down")));
+                } catch (Exception e) {
+                    log.debug("Failed sending shutdown bye event to notification emitter: {}", e.getMessage());
+                }
+                try {
+                    ue.emitter().complete();
+                } catch (Exception e) {
+                    log.debug("Error completing notification emitter on shutdown: {}", e.getMessage());
+                }
             }
         }
         notificationEmitters.clear();
@@ -572,15 +591,24 @@ public class RoomEventHub {
         scheduledExecutor.shutdown();
     }
 
-    public int getActiveConnectionCount() {
+    public int getActiveRoomEmittersCount() {
         int count = 0;
         for (List<UserEmitter> list : roomEmitters.values()) {
             count += list.size();
         }
+        return count;
+    }
+
+    public int getActiveNotificationEmittersCount() {
+        int count = 0;
         for (List<UserEmitter> list : notificationEmitters.values()) {
             count += list.size();
         }
         return count;
+    }
+
+    public int getActiveConnectionCount() {
+        return getActiveRoomEmittersCount() + getActiveNotificationEmittersCount();
     }
 
     public Map<String, Object> getRealtimeStats() {

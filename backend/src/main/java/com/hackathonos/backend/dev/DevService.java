@@ -40,7 +40,7 @@ import java.time.Instant;
 import java.util.*;
 
 @Service
-@Profile("dev")
+@Profile("!prod")
 public class DevService {
 
     private record FakePersona(String name, String email, String role, List<String> skills) {}
