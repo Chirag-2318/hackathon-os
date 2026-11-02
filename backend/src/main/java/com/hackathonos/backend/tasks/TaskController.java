@@ -45,6 +45,29 @@ public class TaskController {
     }
 
 
+    @GetMapping("/tasks")
+    public org.springframework.http.ResponseEntity<java.util.List<TaskDto>> listTasks(
+            @PathVariable UUID roomId,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) Integer page
+    ) {
+        User user = currentUser.get();
+        java.util.List<TaskDto> all = taskService.listTasks(roomId, user);
+        int total = all.size();
+        int safeLimit = (limit != null && limit > 0) ? Math.min(limit, 500) : 500;
+        int pageNum = (page != null && page >= 0) ? page : 0;
+        int fromIndex = Math.min(pageNum * safeLimit, total);
+        int toIndex = Math.min(fromIndex + safeLimit, total);
+        java.util.List<TaskDto> pageItems = all.subList(fromIndex, toIndex);
+
+        var response = org.springframework.http.ResponseEntity.ok()
+                .header("X-Total-Count", String.valueOf(total));
+        if (total > safeLimit || toIndex < total) {
+            response.header("X-Truncated", "true");
+        }
+        return response.body(pageItems);
+    }
+
     @GetMapping("/tasks/{taskIdOrKey}")
     public TaskDetailDto getTask(@PathVariable UUID roomId, @PathVariable String taskIdOrKey) {
         return taskService.getTask(roomId, currentUser.get(), taskIdOrKey);

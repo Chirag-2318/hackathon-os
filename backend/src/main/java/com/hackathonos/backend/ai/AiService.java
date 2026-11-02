@@ -21,7 +21,9 @@ import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -46,8 +48,14 @@ public class AiService {
     private final CurrentUser currentUser;
     private final Semaphore concurrencyLimiter;
     private final ExternalCallBulkhead bulkhead;
-    private final ConcurrentHashMap<UUID, Semaphore> userConcurrencyLimiters = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<UUID, Boolean> lastCallOkMap = new ConcurrentHashMap<>();
+    private final Cache<UUID, Semaphore> userConcurrencyLimiters = Caffeine.newBuilder()
+            .maximumSize(5000)
+            .expireAfterAccess(1, TimeUnit.HOURS)
+            .build();
+    private final Cache<UUID, Boolean> lastCallOkMap = Caffeine.newBuilder()
+            .maximumSize(5000)
+            .expireAfterWrite(1, TimeUnit.HOURS)
+            .build();
     private final ObjectMapper objectMapper;
     private final AiUsageDailyRepository usageRepository;
 
@@ -105,7 +113,7 @@ public class AiService {
     }
 
     public Boolean getLastCallOk(UUID userId) {
-        return userId != null ? lastCallOkMap.get(userId) : null;
+        return userId != null ? lastCallOkMap.getIfPresent(userId) : null;
     }
 
     public LlmClient getClient() {
@@ -306,7 +314,7 @@ public class AiService {
         }
 
         Semaphore userLimiter = actingUserId != null
-                ? userConcurrencyLimiters.computeIfAbsent(actingUserId, k -> new Semaphore(4, true))
+                ? userConcurrencyLimiters.get(actingUserId, k -> new Semaphore(4, true))
                 : null;
 
         boolean userAcquired = false;

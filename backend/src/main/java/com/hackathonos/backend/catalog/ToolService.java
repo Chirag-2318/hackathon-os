@@ -1,5 +1,8 @@
 package com.hackathonos.backend.catalog;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import java.util.concurrent.TimeUnit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +17,14 @@ import java.util.*;
 public class ToolService {
 
     private final ToolRepository toolRepository;
+    private final Cache<String, List<Tool>> toolsCache = Caffeine.newBuilder()
+            .maximumSize(10)
+            .expireAfterWrite(1, TimeUnit.HOURS)
+            .build();
+
+    public void invalidateCache() {
+        toolsCache.invalidateAll();
+    }
 
     public ToolService(ToolRepository toolRepository) {
         this.toolRepository = toolRepository;
@@ -24,7 +35,7 @@ public class ToolService {
      */
     @Transactional(readOnly = true)
     public CatalogDtos.ToolsResponse searchTools(String category, String cost, String license, String q) {
-        List<Tool> allTools = toolRepository.findAllByOrderBySortOrderAsc();
+        List<Tool> allTools = toolsCache.get("all", k -> toolRepository.findAllByOrderBySortOrderAsc());
         LocalDate now = LocalDate.now();
 
         // Compute facets from all tools
@@ -102,7 +113,7 @@ public class ToolService {
      */
     @Transactional(readOnly = true)
     public CatalogDtos.RecommendedToolsResponse getRecommendedTools(com.hackathonos.backend.users.User user) {
-        List<Tool> allTools = toolRepository.findAllByOrderBySortOrderAsc();
+        List<Tool> allTools = toolsCache.get("all", k -> toolRepository.findAllByOrderBySortOrderAsc());
         LocalDate now = LocalDate.now();
 
         List<String> techTags = parseJsonList(user != null ? user.getTechStack() : null);

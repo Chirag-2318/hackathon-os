@@ -94,6 +94,11 @@ spring:
     properties:
       hibernate:
         format_sql: false
+        default_batch_fetch_size: 50
+        jdbc:
+          batch_size: 25
+        order_inserts: true
+        order_updates: true
     show-sql: false
 
   flyway:

@@ -348,10 +348,16 @@ The following items are intentionally cut from the initial hackathon sprint to p
                 .toList();
 
         List<DocItemDto> items = new ArrayList<>();
+        List<UUID> docIds = docs.stream().map(Doc::getId).toList();
+        Map<UUID, String> latestContentMap = new HashMap<>();
+        if (!docIds.isEmpty()) {
+            for (DocVersion v : versionRepository.findByDocIdInOrderByVersionDesc(docIds)) {
+                latestContentMap.putIfAbsent(v.getDocId(), v.getContent());
+            }
+        }
 
         for (Doc doc : docs) {
-            List<DocVersion> versions = versionRepository.findByDocIdOrderByVersionDesc(doc.getId());
-            String latestContent = versions.isEmpty() ? "" : versions.get(0).getContent();
+            String latestContent = latestContentMap.getOrDefault(doc.getId(), "");
             long sizeBytes = latestContent.getBytes(StandardCharsets.UTF_8).length;
             DocHealthChecker.DocHealthDto health = healthChecker.check(doc.getFileName(), latestContent);
 
@@ -683,9 +689,16 @@ The following items are intentionally cut from the initial hackathon sprint to p
         try (ZipOutputStream zos = new ZipOutputStream(baos, StandardCharsets.UTF_8)) {
             List<String> fileList = new ArrayList<>();
 
+            List<UUID> docIds = docs.stream().map(Doc::getId).toList();
+            Map<UUID, String> latestContentMap = new HashMap<>();
+            if (!docIds.isEmpty()) {
+                for (DocVersion v : versionRepository.findByDocIdInOrderByVersionDesc(docIds)) {
+                    latestContentMap.putIfAbsent(v.getDocId(), v.getContent());
+                }
+            }
+
             for (Doc doc : docs) {
-                List<DocVersion> versions = versionRepository.findByDocIdOrderByVersionDesc(doc.getId());
-                String content = versions.isEmpty() ? "" : versions.get(0).getContent();
+                String content = latestContentMap.getOrDefault(doc.getId(), "");
                 byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
 
                 ZipEntry entry = new ZipEntry(doc.getFileName());

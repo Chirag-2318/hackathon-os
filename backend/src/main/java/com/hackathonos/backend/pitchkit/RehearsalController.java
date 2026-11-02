@@ -60,11 +60,26 @@ public class RehearsalController {
     }
 
     @GetMapping
-    public List<RehearsalSummaryResponse> listRehearsals(
+    public org.springframework.http.ResponseEntity<List<RehearsalSummaryResponse>> listRehearsals(
             @PathVariable UUID roomId,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) Integer page,
             @AuthenticationPrincipal User user
     ) {
-        return rehearsalService.listRehearsals(roomId, user);
+        List<RehearsalSummaryResponse> all = rehearsalService.listRehearsals(roomId, user);
+        int total = all.size();
+        int safeLimit = (limit != null && limit > 0) ? Math.min(limit, 500) : 500;
+        int pageNum = (page != null && page >= 0) ? page : 0;
+        int fromIndex = Math.min(pageNum * safeLimit, total);
+        int toIndex = Math.min(fromIndex + safeLimit, total);
+        List<RehearsalSummaryResponse> pageItems = all.subList(fromIndex, toIndex);
+
+        var response = org.springframework.http.ResponseEntity.ok()
+                .header("X-Total-Count", String.valueOf(total));
+        if (total > safeLimit || toIndex < total) {
+            response.header("X-Truncated", "true");
+        }
+        return response.body(pageItems);
     }
 
     @GetMapping("/{rid}")

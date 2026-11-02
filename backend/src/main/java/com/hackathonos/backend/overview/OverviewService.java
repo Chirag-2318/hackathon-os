@@ -33,6 +33,9 @@ import com.hackathonos.backend.team.dto.TeamDtos;
 import com.hackathonos.backend.team.TeamService;
 import com.hackathonos.backend.users.User;
 import com.hackathonos.backend.users.UserRepository;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import java.util.concurrent.TimeUnit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +46,28 @@ import java.util.*;
 
 @Service
 public class OverviewService {
+
+    private final Cache<String, Object> overviewCache = Caffeine.newBuilder()
+            .maximumSize(2000)
+            .expireAfterWrite(5, TimeUnit.SECONDS)
+            .build();
+
+    private final Cache<UUID, NavBadgesDto> navBadgesCache = Caffeine.newBuilder()
+            .maximumSize(2000)
+            .expireAfterWrite(5, TimeUnit.SECONDS)
+            .build();
+
+    public void invalidate(UUID roomId) {
+        if (roomId == null) return;
+        String prefix = roomId + ":";
+        overviewCache.asMap().keySet().removeIf(k -> k.startsWith(prefix));
+        navBadgesCache.invalidate(roomId);
+    }
+
+    public void invalidateAll() {
+        overviewCache.invalidateAll();
+        navBadgesCache.invalidateAll();
+    }
 
     private final RoomAccess roomAccess;
     private final RoomStageService stageService;
@@ -120,13 +145,22 @@ public class OverviewService {
      */
     @Transactional(readOnly = true)
     public Object getOverview(UUID roomId, User user) {
+        String cacheKey = roomId + ":" + user.getId();
+        Object cached = overviewCache.getIfPresent(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
         roomAccess.requireMember(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
 
+        Object result;
         if (!"build".equalsIgnoreCase(room.getStage())) {
-            return buildPlanningOverview(room, user);
+            result = buildPlanningOverview(room, user);
+        } else {
+            result = buildBuildOverview(room, user);
         }
-        return buildBuildOverview(room, user);
+        overviewCache.put(cacheKey, result);
+        return result;
     }
 
     /**

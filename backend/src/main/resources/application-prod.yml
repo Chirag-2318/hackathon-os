@@ -32,6 +32,11 @@ spring:
       hibernate:
         show_sql: false
         format_sql: false
+        default_batch_fetch_size: 50
+        jdbc:
+          batch_size: 25
+        order_inserts: true
+        order_updates: true
   flyway:
     enabled: true
   h2:

@@ -37,6 +37,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -498,10 +499,19 @@ public class UserService {
 
         // Rooms
         List<RoomMember> memberships = memberRepository.findByUserId(user.getId());
+        Set<UUID> roomIds = memberships.stream().map(RoomMember::getRoomId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<UUID, Room> roomMap = new HashMap<>();
+        if (!roomIds.isEmpty()) {
+            for (Room r : roomRepository.findAllById(roomIds)) {
+                roomMap.put(r.getId(), r);
+            }
+        }
         List<DataSummaryResponse.RoomMembershipSummary> rooms = new ArrayList<>();
         for (RoomMember m : memberships) {
-            roomRepository.findById(m.getRoomId()).ifPresent(r ->
-                    rooms.add(new DataSummaryResponse.RoomMembershipSummary(r.getId(), r.getName(), m.getRole())));
+            Room r = roomMap.get(m.getRoomId());
+            if (r != null) {
+                rooms.add(new DataSummaryResponse.RoomMembershipSummary(r.getId(), r.getName(), m.getRole()));
+            }
         }
 
         // Content
@@ -602,11 +612,22 @@ public class UserService {
         List<DeletePreviewResponse.WillDeleteRoom> willDelete = new ArrayList<>();
         List<UUID> stayingRoomIds = new ArrayList<>();
 
+        Set<UUID> previewRoomIds = memberships.stream().map(RoomMember::getRoomId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<UUID, Room> previewRoomMap = new HashMap<>();
+        Map<UUID, Long> memberCountMap = new HashMap<>();
+        if (!previewRoomIds.isEmpty()) {
+            for (Room r : roomRepository.findAllById(previewRoomIds)) {
+                previewRoomMap.put(r.getId(), r);
+            }
+            for (RoomMember rm : memberRepository.findByRoomIdIn(previewRoomIds)) {
+                memberCountMap.put(rm.getRoomId(), memberCountMap.getOrDefault(rm.getRoomId(), 0L) + 1L);
+            }
+        }
+
         for (RoomMember m : memberships) {
-            Optional<Room> rOpt = roomRepository.findById(m.getRoomId());
-            if (rOpt.isEmpty()) continue;
-            Room r = rOpt.get();
-            long memberCount = memberRepository.countByRoomId(r.getId());
+            Room r = previewRoomMap.get(m.getRoomId());
+            if (r == null) continue;
+            long memberCount = memberCountMap.getOrDefault(r.getId(), 0L);
 
             if (memberCount <= 1) {
                 willDelete.add(new DeletePreviewResponse.WillDeleteRoom(r.getId(), r.getName()));
@@ -939,13 +960,16 @@ public class UserService {
         }
     }
 
-    private final Map<UUID, List<Long>> usernameRateLimits = new ConcurrentHashMap<>();
+    private final com.github.benmanes.caffeine.cache.Cache<UUID, List<Long>> usernameRateLimits = com.github.benmanes.caffeine.cache.Caffeine.newBuilder()
+            .maximumSize(10_000)
+            .expireAfterWrite(5, java.util.concurrent.TimeUnit.MINUTES)
+            .build();
 
     private void checkRateLimit(UUID userId) {
         if (userId == null) return;
         long now = System.currentTimeMillis();
         long window = now - 60_000L;
-        List<Long> timestamps = usernameRateLimits.compute(userId, (k, list) -> {
+        List<Long> timestamps = usernameRateLimits.asMap().compute(userId, (k, list) -> {
             if (list == null) list = new ArrayList<>();
             list.removeIf(t -> t < window);
             list.add(now);

@@ -21,11 +21,17 @@ public class ActivityController {
     }
 
     @GetMapping
-    public CursorPageResponse<ActivityItemDto> listRoomActivity(
+    public org.springframework.http.ResponseEntity<CursorPageResponse<ActivityItemDto>> listRoomActivity(
             @PathVariable UUID roomId,
             @RequestParam(required = false) Integer limit,
             @RequestParam(required = false) String cursor) {
         User user = currentUser.get();
-        return activityService.listRoomActivity(user, roomId, limit, cursor);
+        int safeLimit = (limit != null && limit > 0) ? Math.min(limit, 500) : 50;
+        CursorPageResponse<ActivityItemDto> res = activityService.listRoomActivity(user, roomId, safeLimit, cursor);
+        var response = org.springframework.http.ResponseEntity.ok();
+        if (res.nextCursor() != null) {
+            response.header("X-Truncated", "true");
+        }
+        return response.body(res);
     }
 }

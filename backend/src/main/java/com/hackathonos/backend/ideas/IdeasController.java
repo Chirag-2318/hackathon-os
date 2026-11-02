@@ -36,8 +36,25 @@ public class IdeasController {
     }
 
     @GetMapping("/ideas")
-    public List<IdeaDto> listIdeas(@PathVariable UUID roomId) {
-        return ideasService.getIdeateData(roomId, currentUser.get()).ideas();
+    public ResponseEntity<List<IdeaDto>> listIdeas(
+            @PathVariable UUID roomId,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) Integer page
+    ) {
+        List<IdeaDto> all = ideasService.getIdeateData(roomId, currentUser.get()).ideas();
+        int total = all.size();
+        int safeLimit = (limit != null && limit > 0) ? Math.min(limit, 500) : 500;
+        int pageNum = (page != null && page >= 0) ? page : 0;
+        int fromIndex = Math.min(pageNum * safeLimit, total);
+        int toIndex = Math.min(fromIndex + safeLimit, total);
+        List<IdeaDto> pageItems = all.subList(fromIndex, toIndex);
+
+        var response = ResponseEntity.ok()
+                .header("X-Total-Count", String.valueOf(total));
+        if (total > safeLimit || toIndex < total) {
+            response.header("X-Truncated", "true");
+        }
+        return response.body(pageItems);
     }
 
     @PostMapping("/ideas")

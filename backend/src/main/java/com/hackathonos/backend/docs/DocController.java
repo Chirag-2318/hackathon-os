@@ -30,11 +30,27 @@ public class DocController {
     }
 
     @GetMapping
-    public DocListResponseDto listDocs(
+    public ResponseEntity<DocListResponseDto> listDocs(
             @PathVariable UUID roomId,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) Integer page,
             @AuthenticationPrincipal User user
     ) {
-        return docService.listDocs(roomId, resolveUser(user));
+        DocListResponseDto dto = docService.listDocs(roomId, resolveUser(user));
+        List<DocItemDto> all = dto.docs();
+        int total = all.size();
+        int safeLimit = (limit != null && limit > 0) ? Math.min(limit, 500) : 500;
+        int pageNum = (page != null && page >= 0) ? page : 0;
+        int fromIndex = Math.min(pageNum * safeLimit, total);
+        int toIndex = Math.min(fromIndex + safeLimit, total);
+        List<DocItemDto> pageItems = all.subList(fromIndex, toIndex);
+
+        var response = ResponseEntity.ok()
+                .header("X-Total-Count", String.valueOf(total));
+        if (total > safeLimit || toIndex < total) {
+            response.header("X-Truncated", "true");
+        }
+        return response.body(new DocListResponseDto(pageItems));
     }
 
     @PostMapping

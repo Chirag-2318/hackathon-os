@@ -62,7 +62,10 @@ public class GitHubService {
         }
     }
 
-    private final Map<String, CacheEntry<?>> sectionCache = new ConcurrentHashMap<>();
+    private final com.github.benmanes.caffeine.cache.Cache<String, CacheEntry<?>> sectionCache = com.github.benmanes.caffeine.cache.Caffeine.newBuilder()
+            .maximumSize(1000)
+            .expireAfterWrite(60, java.util.concurrent.TimeUnit.SECONDS)
+            .build();
 
     private final GithubRepoRepository repoRepository;
     private final GithubBranchRepository branchRepository;
@@ -295,7 +298,7 @@ public class GitHubService {
             return SectionResponse.error("No repository connected");
         }
         String cacheKey = roomId + ":summary";
-        CacheEntry<RepoSummarySectionDto> cached = (CacheEntry<RepoSummarySectionDto>) sectionCache.get(cacheKey);
+        CacheEntry<RepoSummarySectionDto> cached = (CacheEntry<RepoSummarySectionDto>) sectionCache.getIfPresent(cacheKey);
 
         String[] parts = repo.getFullName().split("/");
         GitHubClient client = clientResolver.resolveClient(repo.getFullName());
@@ -352,7 +355,7 @@ public class GitHubService {
             return SectionResponse.error("No repository connected");
         }
         String cacheKey = roomId + ":branches";
-        CacheEntry<List<BranchDto>> cached = (CacheEntry<List<BranchDto>>) sectionCache.get(cacheKey);
+        CacheEntry<List<BranchDto>> cached = (CacheEntry<List<BranchDto>>) sectionCache.getIfPresent(cacheKey);
 
         String[] parts = repo.getFullName().split("/");
         GitHubClient client = clientResolver.resolveClient(repo.getFullName());
@@ -449,7 +452,7 @@ public class GitHubService {
             return SectionResponse.error("No repository connected");
         }
         String cacheKey = roomId + ":commits";
-        CacheEntry<List<CommitItemDto>> cached = (CacheEntry<List<CommitItemDto>>) sectionCache.get(cacheKey);
+        CacheEntry<List<CommitItemDto>> cached = (CacheEntry<List<CommitItemDto>>) sectionCache.getIfPresent(cacheKey);
 
         String[] parts = repo.getFullName().split("/");
         GitHubClient client = clientResolver.resolveClient(repo.getFullName());
@@ -505,7 +508,7 @@ public class GitHubService {
             return SectionResponse.error("No repository connected");
         }
         String cacheKey = roomId + ":pulls";
-        CacheEntry<List<PullItemDto>> cached = (CacheEntry<List<PullItemDto>>) sectionCache.get(cacheKey);
+        CacheEntry<List<PullItemDto>> cached = (CacheEntry<List<PullItemDto>>) sectionCache.getIfPresent(cacheKey);
 
         String[] parts = repo.getFullName().split("/");
         GitHubClient client = clientResolver.resolveClient(repo.getFullName());
@@ -562,7 +565,7 @@ public class GitHubService {
             return SectionResponse.error("No repository connected");
         }
         String cacheKey = roomId + ":health";
-        CacheEntry<List<HealthItemDto>> cached = (CacheEntry<List<HealthItemDto>>) sectionCache.get(cacheKey);
+        CacheEntry<List<HealthItemDto>> cached = (CacheEntry<List<HealthItemDto>>) sectionCache.getIfPresent(cacheKey);
 
         String[] parts = repo.getFullName().split("/");
         GitHubClient client = clientResolver.resolveClient(repo.getFullName());
@@ -1300,17 +1303,28 @@ public class GitHubService {
 
         // 8. TEAM_COMMITS
         List<RoomMember> members = roomMemberRepository.findByRoomId(roomId);
+        Set<UUID> memberUserIds = members.stream().map(RoomMember::getUserId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<UUID, User> memberUsers = new HashMap<>();
+        Map<UUID, UserOAuthToken> memberTokens = new HashMap<>();
+        if (!memberUserIds.isEmpty()) {
+            for (User u : userRepository.findAllById(memberUserIds)) {
+                memberUsers.put(u.getId(), u);
+            }
+            for (UserOAuthToken t : userOAuthTokenRepository.findByUserIdInAndProvider(memberUserIds, "GITHUB")) {
+                memberTokens.put(t.getUserId(), t);
+            }
+        }
         int unlinkedCount = 0;
         int zeroCommitCount = 0;
         List<String> unlinkedNames = new ArrayList<>();
         for (RoomMember m : members) {
-            User u = userRepository.findById(m.getUserId()).orElse(null);
-            Optional<UserOAuthToken> tok = userOAuthTokenRepository.findByUserIdAndProvider(m.getUserId(), "GITHUB");
-            if (tok.isEmpty() || tok.get().getGithubLogin() == null) {
+            User u = memberUsers.get(m.getUserId());
+            UserOAuthToken tok = memberTokens.get(m.getUserId());
+            if (tok == null || tok.getGithubLogin() == null) {
                 unlinkedCount++;
                 unlinkedNames.add(u != null ? u.getName() : "Member");
             } else {
-                String ghLogin = tok.get().getGithubLogin();
+                String ghLogin = tok.getGithubLogin();
                 long userCommits = commits.stream().filter(c -> c.getAuthorLogin() != null && c.getAuthorLogin().equalsIgnoreCase(ghLogin)).count();
                 if (userCommits == 0) {
                     zeroCommitCount++;
@@ -1338,13 +1352,25 @@ public class GitHubService {
         List<GithubCommit> commits = commitRepository.findByRoomIdOrderByCommittedAtDesc(roomId);
         List<RoomMember> members = roomMemberRepository.findByRoomId(roomId);
 
+        Set<UUID> memberUserIds = members.stream().map(RoomMember::getUserId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<UUID, User> memberUsers = new HashMap<>();
+        Map<UUID, UserOAuthToken> memberTokens = new HashMap<>();
+        if (!memberUserIds.isEmpty()) {
+            for (User u : userRepository.findAllById(memberUserIds)) {
+                memberUsers.put(u.getId(), u);
+            }
+            for (UserOAuthToken t : userOAuthTokenRepository.findByUserIdInAndProvider(memberUserIds, "GITHUB")) {
+                memberTokens.put(t.getUserId(), t);
+            }
+        }
+
         Set<String> memberLogins = new HashSet<>();
         List<GithubContributorItemDto> memberDtos = new ArrayList<>();
 
         for (RoomMember m : members) {
-            User u = userRepository.findById(m.getUserId()).orElse(null);
-            Optional<UserOAuthToken> tok = userOAuthTokenRepository.findByUserIdAndProvider(m.getUserId(), "GITHUB");
-            String ghLogin = tok.map(UserOAuthToken::getGithubLogin).orElse(null);
+            User u = memberUsers.get(m.getUserId());
+            UserOAuthToken tok = memberTokens.get(m.getUserId());
+            String ghLogin = tok != null ? tok.getGithubLogin() : null;
             if (ghLogin != null && !ghLogin.isBlank()) {
                 memberLogins.add(ghLogin.toLowerCase());
                 List<GithubCommit> memberCommits = commits.stream()

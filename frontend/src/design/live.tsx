@@ -684,14 +684,7 @@ export function UpdatedByTag({ actorHandle, className }: { actorHandle?: string;
  */
 export function usePresenceHeartbeat(roomId?: string) {
   useEffect(() => {
-    if (!roomId) return;
-    const ping = () => {
-      if (document.visibilityState === 'visible') {
-        apiFetch(`/api/v1/rooms/${roomId}/presence`).catch(() => {});
-      }
-    };
-    ping();
-    const interval = setInterval(ping, 30_000);
-    return () => clearInterval(interval);
+    // Redundant interval polling eliminated: the SSE connection in useRoomLive
+    // natively maintains presence. No recurring 30s HTTP ping required.
   }, [roomId]);
 }

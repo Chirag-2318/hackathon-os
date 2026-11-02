@@ -26,6 +26,9 @@ import com.hackathonos.backend.team.TeamService;
 import com.hackathonos.backend.rooms.dto.NextStepDto;
 import com.hackathonos.backend.users.User;
 import com.hackathonos.backend.users.UserRepository;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import java.util.concurrent.TimeUnit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +41,21 @@ import java.util.*;
 
 @Service
 public class HomeService {
+
+    private final Cache<String, HomeResponseDto> homeCache = Caffeine.newBuilder()
+            .maximumSize(1000)
+            .expireAfterWrite(5, TimeUnit.SECONDS)
+            .build();
+
+    public void invalidateCache(UUID userId) {
+        if (userId == null) return;
+        String prefix = userId + ":";
+        homeCache.asMap().keySet().removeIf(k -> k.startsWith(prefix));
+    }
+
+    public void invalidateAll() {
+        homeCache.invalidateAll();
+    }
 
     private final RoomRepository roomRepository;
     private final RoomStageService stageService;
@@ -105,6 +123,11 @@ public class HomeService {
     public HomeResponseDto getHome(User user, UUID requestedRoomId) {
         if (user == null) {
             throw new com.hackathonos.backend.common.error.UnauthenticatedException("UNAUTHENTICATED", "Authentication required");
+        }
+        String cacheKey = user.getId() + ":" + (requestedRoomId != null ? requestedRoomId : "default");
+        HomeResponseDto cached = homeCache.getIfPresent(cacheKey);
+        if (cached != null) {
+            return cached;
         }
         List<Room> rooms = roomRepository.findActiveRoomsByMemberUserId(user.getId());
         Instant now = clock.instant();
@@ -240,7 +263,7 @@ public class HomeService {
         }).count();
         HomeCountsDto counts = new HomeCountsDto(rooms.size(), liveRooms);
 
-        return new HomeResponseDto(
+        HomeResponseDto response = new HomeResponseDto(
                 userDto,
                 now,
                 roomCards,
@@ -254,6 +277,8 @@ public class HomeService {
                 resume,
                 counts
         );
+        homeCache.put(cacheKey, response);
+        return response;
     }
 
     private SelectedRoomDto buildSelectedRoom(Room room, User user) {

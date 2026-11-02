@@ -1,7 +1,7 @@
 /**
  * Notifications — User-wide and room-scoped API queries
  */
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/api/client';
 import type { NotificationsResponse, Notification } from './types';
 
@@ -64,6 +64,15 @@ export async function markAllUserNotificationsRead(): Promise<void> {
 
 export async function markNotificationRead(id: string): Promise<void> {
   return apiFetch<void>(`/api/v1/notifications/${id}/read`, { method: 'PATCH' });
+}
+
+export function useInfiniteUserNotifications(unreadOnly = false, limit = 20) {
+  return useInfiniteQuery({
+    queryKey: ['notifications', 'infinite', { unreadOnly, limit }],
+    queryFn: ({ pageParam }) => fetchUserNotificationsPage(unreadOnly, pageParam as string | undefined, limit),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
+  });
 }
 
 export function useUserNotifications(unreadOnly = false) {

@@ -4,6 +4,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hackathonos.backend.common.error.NotFoundException;
 import com.hackathonos.backend.templates.dto.EventTemplateDto;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import java.util.concurrent.TimeUnit;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -55,28 +58,31 @@ public class EventTemplateService {
                 });
     }
 
-    private List<EventTemplateDto> cachedTemplates;
-    private java.time.Instant cacheExpiry = java.time.Instant.MIN;
+    private final Cache<String, List<EventTemplateDto>> templateListCache = Caffeine.newBuilder()
+            .maximumSize(10)
+            .expireAfterWrite(1, TimeUnit.HOURS)
+            .build();
+
+    public void invalidateCache() {
+        templateListCache.invalidateAll();
+    }
 
     /**
      * Returns all event templates ordered by sort_order.
      * Cached in-memory with a 1-hour TTL.
      */
-    public synchronized List<EventTemplateDto> listAll() {
-        if (cachedTemplates != null && java.time.Instant.now().isBefore(cacheExpiry)) {
-            return cachedTemplates;
-        }
-        List<EventTemplate> templates = templateRepository.findAllByOrderBySortOrderAsc();
-        List<EventTemplateDto> dtos = new ArrayList<>();
-        java.util.Set<String> seenNames = new java.util.HashSet<>();
-        for (EventTemplate template : templates) {
-            if (seenNames.add(template.getName())) {
-                dtos.add(toDto(template));
+    public List<EventTemplateDto> listAll() {
+        return templateListCache.get("all", k -> {
+            List<EventTemplate> templates = templateRepository.findAllByOrderBySortOrderAsc();
+            List<EventTemplateDto> dtos = new ArrayList<>();
+            java.util.Set<String> seenNames = new java.util.HashSet<>();
+            for (EventTemplate template : templates) {
+                if (seenNames.add(template.getName())) {
+                    dtos.add(toDto(template));
+                }
             }
-        }
-        cachedTemplates = dtos;
-        cacheExpiry = java.time.Instant.now().plusSeconds(3600);
-        return dtos;
+            return dtos;
+        });
     }
 
 

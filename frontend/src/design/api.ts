@@ -16,14 +16,27 @@ export class ApiError extends Error {
   requestId?: string;
   fieldErrors?: Record<string, string>;
 
-  constructor(status: number, message = 'Request failed', code = 'UNKNOWN', details?: any, requestId?: string, fieldErrors?: Record<string, string>) {
+  constructor(
+    status: number,
+    message = 'Request failed',
+    code = 'UNKNOWN',
+    detailsOrFieldErrors?: any,
+    requestIdOrDetails?: any,
+    fieldErrors?: Record<string, string>
+  ) {
     super(message || 'Request failed');
     this.name = 'ApiError';
     this.status = status;
     this.code = code || 'UNKNOWN';
-    this.details = details;
-    this.requestId = requestId;
-    this.fieldErrors = fieldErrors;
+
+    if (requestIdOrDetails && typeof requestIdOrDetails === 'object') {
+      this.fieldErrors = detailsOrFieldErrors;
+      this.details = requestIdOrDetails;
+    } else {
+      this.details = detailsOrFieldErrors;
+      this.requestId = typeof requestIdOrDetails === 'string' ? requestIdOrDetails : undefined;
+      this.fieldErrors = fieldErrors;
+    }
   }
 }
 
@@ -33,8 +46,9 @@ function getCookie(name: string): string | null {
   return match ? decodeURIComponent(match[2]) : null;
 }
 
-import { API_BASE_URL } from '@/lib/apiClient';
-export { API_BASE_URL };
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL !== undefined && import.meta.env.VITE_API_BASE_URL !== '')
+  ? import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, '')
+  : (import.meta.env.DEV ? (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' ? 'http://127.0.0.1:8080' : 'http://localhost:8080') : '');
 
 export interface ApiFetchOptions extends RequestInit {
   skipRetry?: boolean;
@@ -101,6 +115,21 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     );
   }
 
+  // Automatic retry on 403 CSRF token refresh
+  if (res.status === 403 && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && !headers['X-CSRF-RETRIED']) {
+    const freshToken = getCookie('XSRF-TOKEN');
+    if (freshToken) {
+      return apiFetch<T>(path, {
+        ...options,
+        headers: {
+          ...headers,
+          'X-XSRF-TOKEN': freshToken,
+          'X-CSRF-RETRIED': 'true',
+        },
+      });
+    }
+  }
+
   // Handle 401 Session Expired / Unauthorized
   if (res.status === 401) {
     let body: UnifiedErrorResponse = {};
@@ -150,8 +179,54 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
       body = { message: res.statusText };
     }
 
-    const message = body.message || 'Request failed';
     const code = body.code || `HTTP_${res.status}`;
+
+    // Auto-retry ONCE for AI actions on SERVER_BUSY (503)
+    const isAiAction = Boolean(
+      headers['X-AI-ACTION'] === 'true' ||
+      url.includes('/ai') ||
+      url.includes('/plan/generate') ||
+      url.includes('/brief/extract') ||
+      url.includes('/brief/auto-extract') ||
+      url.includes('/brief/images') ||
+      url.includes('/pitch/deck/audit') ||
+      url.includes('/pitch/deck/slides/draft') ||
+      url.includes('/pitch/rehearse/audio') ||
+      url.includes('/pitch/rehearse/coach') ||
+      url.includes('/pitch/qa/grade') ||
+      url.includes('/pitch/qa/generate') ||
+      url.includes('/pitch/edit') ||
+      url.includes('/docs/ask') ||
+      url.includes('/diagrams/fix') ||
+      url.includes('/phases/generate-tasks') ||
+      url.includes('/qna/session/audio') ||
+      url.includes('/qna/grade') ||
+      url.includes('/qna/generate') ||
+      url.includes('/readiness/simulate') ||
+      url.includes('/submission/generate-draft')
+    );
+
+    if ((res.status === 503 || code === 'SERVER_BUSY') && isAiAction && !headers['X-SERVER-BUSY-RETRIED']) {
+      const retryHeader = res.headers.get('Retry-After');
+      const retrySec = retryHeader ? parseInt(retryHeader, 10) : (body?.details?.retryAfterSeconds ?? 5);
+      const waitMs = Math.max(1, Math.min(15, isNaN(retrySec) ? 5 : retrySec)) * 1000;
+
+      try {
+        toast.info('Our AI helper is busy - trying again in a few seconds');
+      } catch {}
+
+      await new Promise(resolve => setTimeout(resolve, waitMs));
+
+      return apiFetch<T>(path, {
+        ...options,
+        headers: {
+          ...headers,
+          'X-SERVER-BUSY-RETRIED': 'true',
+        },
+      });
+    }
+
+    const message = body.message || 'Request failed';
 
     if (code === 'LIMIT_REACHED') {
       toast.info(message);

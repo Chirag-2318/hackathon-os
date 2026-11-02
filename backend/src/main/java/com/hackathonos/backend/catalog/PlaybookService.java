@@ -1,6 +1,9 @@
 package com.hackathonos.backend.catalog;
 
 import com.hackathonos.backend.common.error.NotFoundException;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import java.util.concurrent.TimeUnit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,6 +16,14 @@ import java.util.List;
 public class PlaybookService {
 
     private final PlaybookRepository playbookRepository;
+    private final Cache<String, List<CatalogDtos.PlaybookCardDto>> playbooksCache = Caffeine.newBuilder()
+            .maximumSize(10)
+            .expireAfterWrite(1, TimeUnit.HOURS)
+            .build();
+
+    public void invalidateCache() {
+        playbooksCache.invalidateAll();
+    }
 
     public PlaybookService(PlaybookRepository playbookRepository) {
         this.playbookRepository = playbookRepository;
@@ -23,8 +34,8 @@ public class PlaybookService {
      */
     @Transactional(readOnly = true)
     public List<CatalogDtos.PlaybookCardDto> listPlaybooks() {
-        return playbookRepository.findAllByOrderBySortOrderAsc().stream()
-                .map(this::toCardDto).toList();
+        return playbooksCache.get("all", k -> playbookRepository.findAllByOrderBySortOrderAsc().stream()
+                .map(this::toCardDto).toList());
     }
 
     /**

@@ -13,7 +13,10 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RateLimiter {
 
     private final Clock clock;
-    private final Map<String, TokenBucket> buckets = new ConcurrentHashMap<>();
+    private final com.github.benmanes.caffeine.cache.Cache<String, TokenBucket> buckets = com.github.benmanes.caffeine.cache.Caffeine.newBuilder()
+            .maximumSize(50_000)
+            .expireAfterAccess(1, java.util.concurrent.TimeUnit.HOURS)
+            .build();
 
     public RateLimiter(Clock clock) {
         this.clock = clock;
@@ -61,7 +64,7 @@ public class RateLimiter {
      */
     public RateLimitResult tryAcquire(String key, int capacity, int refillCount, Duration period) {
         Instant now = clock.instant();
-        TokenBucket bucket = buckets.computeIfAbsent(key, k -> new TokenBucket(capacity, refillCount, period, now));
+        TokenBucket bucket = buckets.get(key, k -> new TokenBucket(capacity, refillCount, period, now));
         return bucket.tryConsume(1.0, now);
     }
 
@@ -70,8 +73,6 @@ public class RateLimiter {
      */
     @Scheduled(fixedDelay = 300000)
     public void cleanupStaleBuckets() {
-        Instant now = clock.instant();
-        Duration ttl = Duration.ofHours(1);
-        buckets.entrySet().removeIf(entry -> entry.getValue().isStale(now, ttl));
+        buckets.cleanUp();
     }
 }

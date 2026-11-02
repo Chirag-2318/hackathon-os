@@ -28,7 +28,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -63,8 +65,14 @@ public class RehearsalService {
     private final TransactionTemplate transactionTemplate;
 
     // Rate limiter maps: rehearsalId -> uploadCount, userId -> List of coach call timestamps
-    private final ConcurrentHashMap<UUID, Integer> uploadCountMap = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<UUID, List<Instant>> coachCallMap = new ConcurrentHashMap<>();
+    private final Cache<UUID, Integer> uploadCountMap = Caffeine.newBuilder()
+            .maximumSize(5000)
+            .expireAfterWrite(2, TimeUnit.HOURS)
+            .build();
+    private final Cache<UUID, List<Instant>> coachCallMap = Caffeine.newBuilder()
+            .maximumSize(5000)
+            .expireAfterWrite(2, TimeUnit.HOURS)
+            .build();
 
     public RehearsalService(
             RehearsalRepository rehearsalRepository,
@@ -151,7 +159,7 @@ public class RehearsalService {
         }
 
         // Rate limit: 30 uploads per rehearsal run
-        int currentUploads = uploadCountMap.compute(rehearsalId, (k, v) -> v == null ? 1 : v + 1);
+        int currentUploads = uploadCountMap.asMap().compute(rehearsalId, (k, v) -> v == null ? 1 : v + 1);
         if (currentUploads > 30) {
             throw new TooManyRequestsException("UPLOAD_LIMIT", "Maximum of 30 audio uploads per rehearsal run reached.", 60);
         }
@@ -533,7 +541,7 @@ public class RehearsalService {
     private void enforceCoachRateLimit(UUID userId) {
         if (userId == null) return;
         Instant hourAgo = Instant.now().minus(1, ChronoUnit.HOURS);
-        List<Instant> calls = coachCallMap.computeIfAbsent(userId, k -> new ArrayList<>());
+        List<Instant> calls = coachCallMap.get(userId, k -> new ArrayList<>());
         synchronized (calls) {
             calls.removeIf(t -> t.isBefore(hourAgo));
             if (calls.size() >= 6) {

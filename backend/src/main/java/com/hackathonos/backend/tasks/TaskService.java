@@ -169,6 +169,34 @@ public class TaskService {
      * Retrieves full task details including dependencies, acceptance criteria, comments, and history.
      */
     @Transactional(readOnly = true)
+    public List<TaskDto> listTasks(UUID roomId, User user) {
+        roomAccess.requireMember(roomId, user);
+        roomAccess.getActiveRoomOrThrow(roomId);
+        List<Task> tasks = taskRepository.findByRoomIdOrderByPositionAsc(roomId);
+        List<PlanPhase> phases = phaseRepository.findByRoomIdOrderByPositionAsc(roomId);
+        Map<UUID, PlanPhase> phaseMap = new HashMap<>();
+        for (PlanPhase p : phases) phaseMap.put(p.getId(), p);
+
+        Set<UUID> userIds = new HashSet<>();
+        for (Task t : tasks) {
+            if (t.getAssigneeId() != null) userIds.add(t.getAssigneeId());
+            if (t.getReporterId() != null) userIds.add(t.getReporterId());
+        }
+        Map<UUID, User> userMap = new HashMap<>();
+        if (!userIds.isEmpty()) {
+            for (User u : userRepository.findAllById(userIds)) {
+                userMap.put(u.getId(), u);
+            }
+        }
+        List<TaskDto> dtos = new ArrayList<>();
+        for (Task t : tasks) {
+            if (t.isDropped()) continue;
+            dtos.add(taskDtoMapper.toDto(t, phaseMap.get(t.getPhaseId()), userMap.get(t.getAssigneeId()), userMap.get(t.getReporterId()), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), 0, false));
+        }
+        return dtos;
+    }
+
+    @Transactional(readOnly = true)
     public TaskDetailDto getTask(UUID roomId, User user, String taskIdOrKey) {
         roomAccess.requireMember(roomId, user);
         Task task = resolveTask(roomId, taskIdOrKey);
@@ -936,42 +964,84 @@ public class TaskService {
         List<TaskAcceptanceItem> acceptance = acceptanceRepository.findByTaskIdOrderByPositionAsc(task.getId());
 
         List<TaskDependency> deps = dependencyRepository.findByTaskId(task.getId());
-        List<TaskDependencyItemDto> dependsOn = new ArrayList<>();
-        for (TaskDependency d : deps) {
-            taskRepository.findById(d.getDependsOnTaskId()).ifPresent(t ->
-                    dependsOn.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()), t.isSatisfiedForDependency())));
+        List<TaskDependency> blockerDeps = dependencyRepository.findByDependsOnTaskId(task.getId());
+
+        Set<UUID> depTaskIds = new HashSet<>();
+        for (TaskDependency d : deps) depTaskIds.add(d.getDependsOnTaskId());
+        for (TaskDependency d : blockerDeps) depTaskIds.add(d.getTaskId());
+
+        Map<UUID, Task> relatedTasks = new HashMap<>();
+        if (!depTaskIds.isEmpty()) {
+            for (Task t : taskRepository.findAllById(depTaskIds)) {
+                relatedTasks.put(t.getId(), t);
+            }
         }
 
-        List<TaskDependency> blockerDeps = dependencyRepository.findByDependsOnTaskId(task.getId());
+        List<TaskDependencyItemDto> dependsOn = new ArrayList<>();
+        for (TaskDependency d : deps) {
+            Task t = relatedTasks.get(d.getDependsOnTaskId());
+            if (t != null) {
+                dependsOn.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()), t.isSatisfiedForDependency()));
+            }
+        }
+
         List<TaskDependencyItemDto> blocks = new ArrayList<>();
         for (TaskDependency d : blockerDeps) {
-            taskRepository.findById(d.getTaskId()).ifPresent(t -> {
-                if (!t.isDropped()) {
-                    blocks.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()), t.isSatisfiedForDependency()));
-                }
-            });
+            Task t = relatedTasks.get(d.getTaskId());
+            if (t != null && !t.isDropped()) {
+                blocks.add(new TaskDependencyItemDto(t.getId(), t.getTaskKey(), t.getSummary(), taskDtoMapper.normalizeStatus(t.getStatus()), t.isSatisfiedForDependency()));
+            }
         }
 
         List<TaskComment> comments = commentRepository.findByTaskIdOrderByCreatedAtAsc(task.getId());
+        List<TaskHistory> history = historyRepository.findByTaskIdOrderByCreatedAtDesc(task.getId());
+
+        Set<UUID> userIds = new HashSet<>();
+        for (TaskComment c : comments) {
+            if (c.getAuthorId() != null) userIds.add(c.getAuthorId());
+        }
+        for (TaskHistory h : history) {
+            if (h.getActorId() != null) userIds.add(h.getActorId());
+        }
+
+        Map<UUID, User> userMap = new HashMap<>();
+        if (!userIds.isEmpty()) {
+            for (User u : userRepository.findAllById(userIds)) {
+                userMap.put(u.getId(), u);
+            }
+        }
+
         List<TaskCommentDto> commentDtos = new ArrayList<>();
         for (TaskComment c : comments) {
-            User author = c.getAuthorId() != null ? userRepository.findById(c.getAuthorId()).orElse(null) : null;
+            User author = c.getAuthorId() != null ? userMap.get(c.getAuthorId()) : null;
             boolean isMine = viewer != null && c.getAuthorId() != null && c.getAuthorId().equals(viewer.getId());
             commentDtos.add(new TaskCommentDto(c.getId(), taskDtoMapper.toCommentAuthorDto(author), c.getText(), c.getCreatedAt(), c.getEditedAt(), isMine));
         }
 
-        List<TaskHistory> history = historyRepository.findByTaskIdOrderByCreatedAtDesc(task.getId());
         List<TaskHistoryDto> historyDtos = new ArrayList<>();
         for (TaskHistory h : history) {
-            User actor = h.getActorId() != null ? userRepository.findById(h.getActorId()).orElse(null) : null;
+            User actor = h.getActorId() != null ? userMap.get(h.getActorId()) : null;
             historyDtos.add(new TaskHistoryDto(h.getId(), taskDtoMapper.toUserDto(actor), h.getText(), h.getCreatedAt()));
         }
 
         List<GithubBranchTask> branchTasks = branchTaskRepository.findByTaskId(task.getId());
+        Set<UUID> branchIds = new HashSet<>();
+        for (GithubBranchTask bt : branchTasks) {
+            if (bt.getBranchId() != null) branchIds.add(bt.getBranchId());
+        }
+        Map<UUID, com.hackathonos.backend.github.GithubBranch> branchMap = new HashMap<>();
+        if (!branchIds.isEmpty()) {
+            for (var b : branchRepository.findAllById(branchIds)) {
+                branchMap.put(b.getId(), b);
+            }
+        }
+
         List<TaskDevelopmentDto> development = new ArrayList<>();
         for (GithubBranchTask bt : branchTasks) {
-            branchRepository.findById(bt.getBranchId()).ifPresent(b ->
-                    development.add(new TaskDevelopmentDto(b.getId(), b.getName(), b.getPrStatus(), b.getPrNumber(), b.getUrl())));
+            var b = branchMap.get(bt.getBranchId());
+            if (b != null) {
+                development.add(new TaskDevelopmentDto(b.getId(), b.getName(), b.getPrStatus(), b.getPrNumber(), b.getUrl()));
+            }
         }
         boolean hasBranch = !development.isEmpty();
 

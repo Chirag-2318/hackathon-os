@@ -298,7 +298,7 @@ public class RoomService {
                     "EDIT_CONFLICT",
                     "Room was modified by another teammate",
                     room.getVersion(),
-                    null,
+                    (UserSummaryDto) null,
                     room.getUpdatedAt(),
                     getRoomDetail(user, roomId)
             );
