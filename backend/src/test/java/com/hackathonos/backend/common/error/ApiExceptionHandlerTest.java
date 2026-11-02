@@ -185,8 +185,8 @@ class ApiExceptionHandlerTest {
     void testGenericException() throws Exception {
         mockMvc.perform(get("/test/errors/runtime"))
                 .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
-                .andExpect(jsonPath("$.message").value("Something went wrong"))
+                .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
+                .andExpect(jsonPath("$.message").value("An unexpected internal error occurred. Please try again later."))
                 .andExpect(jsonPath("$.requestId").value(notNullValue()));
     }
 

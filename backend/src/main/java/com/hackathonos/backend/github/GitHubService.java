@@ -28,6 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -82,6 +83,7 @@ public class GitHubService {
     private final GitHubClientResolver clientResolver;
     private final SafeHttpClient safeHttpClient;
     private final ActivityLogger activityLogger;
+    private final TransactionTemplate transactionTemplate;
     private final NotificationService notificationService;
     private final Clock clock;
 
@@ -104,7 +106,8 @@ public class GitHubService {
                          GitHubClientResolver clientResolver,
                          SafeHttpClient safeHttpClient,
                          ActivityLogger activityLogger,
-                         NotificationService notificationService,
+                         TransactionTemplate transactionTemplate,
+                          NotificationService notificationService,
                          Clock clock) {
         this.repoRepository = repoRepository;
         this.branchRepository = branchRepository;
@@ -125,6 +128,7 @@ public class GitHubService {
         this.clientResolver = clientResolver;
         this.safeHttpClient = safeHttpClient;
         this.activityLogger = activityLogger;
+        this.transactionTemplate = transactionTemplate;
         this.notificationService = notificationService;
         this.clock = clock;
     }
@@ -163,7 +167,6 @@ public class GitHubService {
     /**
      * Connects a repository to the room, verifies existence on GitHub, saves it fast, and returns page model.
      */
-    @Transactional
     public GithubPageResponse connect(UUID roomId, ConnectRepoRequest request, User user) {
         String input = request != null ? request.getEffectiveRepo() : null;
         link(roomId, new LinkRepoRequest(input, input), user);
@@ -173,7 +176,6 @@ public class GitHubService {
     /**
      * Link step validating in under 2s with one GET call to GitHub.
      */
-    @Transactional
     public RepoSummarySectionDto link(UUID roomId, LinkRepoRequest request, User user) {
         long start = System.currentTimeMillis();
         String rawInput = request != null ? request.getEffectiveUrl() : null;
@@ -220,26 +222,33 @@ public class GitHubService {
             handleConnectFailure(404, currentTokenSource, owner, repoName, null);
         }
 
-        log.info("[GitHub Link] Stage 4 - Saving repo entity in DB (elapsed: {}ms)", System.currentTimeMillis() - start);
-        GithubRepo repo = repoRepository.findById(roomId).orElse(null);
-        if (repo == null) {
-            repo = new GithubRepo(
-                    roomId, clientRepo.fullName(), clientRepo.url(), clientRepo.visibility(),
-                    clientRepo.defaultBranch(), "read-only", user != null ? user.getId() : null, clock.instant(),
-                    null, "idle", null, null, currentTokenSource
-            );
-        } else {
-            repo.setFullName(clientRepo.fullName());
-            repo.setUrl(clientRepo.url());
-            repo.setVisibility(clientRepo.visibility());
-            repo.setDefaultBranch(clientRepo.defaultBranch());
-            repo.setConnectedBy(user != null ? user.getId() : null);
-            repo.setTokenSource(currentTokenSource);
-            repo.setLastSyncAt(clock.instant());
-        }
-        repoRepository.save(repo);
+        final GitHubClient.ClientRepo finalClientRepo = clientRepo;
+        final String finalTokenSource = currentTokenSource;
 
-        activityLogger.log(room, user, "GITHUB_CONNECTED", "Connected repository " + repo.getFullName());
+        log.info("[GitHub Link] Stage 4 - Saving repo entity in DB (elapsed: {}ms)", System.currentTimeMillis() - start);
+        transactionTemplate.execute(status -> {
+            GithubRepo repo = repoRepository.findById(roomId).orElse(null);
+            if (repo == null) {
+                repo = new GithubRepo(
+                        roomId, finalClientRepo.fullName(), finalClientRepo.url(), finalClientRepo.visibility(),
+                        finalClientRepo.defaultBranch(), "read-only", user != null ? user.getId() : null, clock.instant(),
+                        null, "idle", null, null, finalTokenSource
+                );
+            } else {
+                repo.setFullName(finalClientRepo.fullName());
+                repo.setUrl(finalClientRepo.url());
+                repo.setVisibility(finalClientRepo.visibility());
+                repo.setDefaultBranch(finalClientRepo.defaultBranch());
+                repo.setConnectedBy(user != null ? user.getId() : null);
+                repo.setTokenSource(finalTokenSource);
+                repo.setLastSyncAt(clock.instant());
+            }
+            repoRepository.save(repo);
+
+            activityLogger.log(room, user, "GITHUB_CONNECTED", "Connected repository " + repo.getFullName());
+            return null;
+        });
+
         log.info("[GitHub Link] Completed in {}ms", System.currentTimeMillis() - start);
 
         return new RepoSummarySectionDto(
@@ -663,7 +672,6 @@ public class GitHubService {
     /**
      * Synchronizes repository state with GitHub, enforcing a 10-second guard between manual sync requests.
      */
-    @Transactional
     public GithubPageResponse sync(UUID roomId, User user) {
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
         roomAccess.requireMember(roomId, user);
@@ -768,22 +776,25 @@ public class GitHubService {
     /**
      * Performs SSRF-safe HEAD/GET validation of a deployed URL and saves it to repository record.
      */
-    @Transactional
     public DeployedLinkResponse updateDeployedLink(UUID roomId, DeployedLinkRequest request, User user) {
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
         roomAccess.requireMember(roomId, user);
 
-        GithubRepo repo = repoRepository.findById(roomId)
-                .orElseThrow(() -> new NotFoundException("REPO_NOT_FOUND", "No repository connected"));
-
         String url = request.url() != null ? request.url().trim() : null;
-        repo.setDeployedLink(url);
-        repoRepository.save(repo);
+
+        transactionTemplate.execute(status -> {
+            GithubRepo repo = repoRepository.findById(roomId)
+                    .orElseThrow(() -> new NotFoundException("REPO_NOT_FOUND", "No repository connected"));
+            repo.setDeployedLink(url);
+            repoRepository.save(repo);
+            return null;
+        });
 
         if (url == null || url.isBlank()) {
             return new DeployedLinkResponse(false, 0);
         }
 
+        // Slow HTTP call outside transaction
         SafeHttpClient.SafeHttpResponse res = safeHttpClient.headOrGet(url, 5000);
         return new DeployedLinkResponse(res.ok(), res.httpStatus());
     }
@@ -907,7 +918,6 @@ public class GitHubService {
     /**
      * Lists up to 100 repositories accessible with the caller's stored GitHub OAuth token, with optional search filter.
      */
-    @Transactional(readOnly = true)
     public List<MyRepoDto> getMyRepos(User user, String search) {
         if (user == null || user.getId() == null) {
             throw new BadRequestException("NO_GITHUB_TOKEN", "No GitHub account connected. Please sign in with GitHub.");

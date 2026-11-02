@@ -16,7 +16,7 @@ import java.util.UUID;
 @Component
 public class IdeasMapper {
 
-    public IdeaDto toDto(Idea idea, List<IdeaLink> links, List<IdeaNote> notes, User author, UUID currentUserId) {
+    public IdeaDto toDto(Idea idea, List<IdeaLink> links, List<IdeaNote> notes, User author, UUID currentUserId, int votes, boolean hasVoted) {
         String name = author != null ? (author.getName() != null ? author.getName() : (author.getEmail() != null ? author.getEmail() : "Unknown")) : "Unknown";
         AuthorDto authorDto = AuthorDto.from(author, name);
         if (authorDto.userId() == null && idea.getAuthorId() != null) {
@@ -52,8 +52,15 @@ public class IdeasMapper {
                 idea.getAuthorId() != null ? idea.getAuthorId().toString() : null,
                 isMine,
                 idea.getCreatedAt() != null ? idea.getCreatedAt().toString() : null,
-                idea.getDecidedAt() != null ? idea.getDecidedAt().toString() : null
+                idea.getDecidedAt() != null ? idea.getDecidedAt().toString() : null,
+                idea.getVersion() != null ? idea.getVersion() : 0L,
+                votes,
+                hasVoted
         );
+    }
+
+    public IdeaDto toDto(Idea idea, List<IdeaLink> links, List<IdeaNote> notes, User author, UUID currentUserId) {
+        return toDto(idea, links, notes, author, currentUserId, idea.getVoteCount(), false);
     }
 
     private String computeInitials(String name) {

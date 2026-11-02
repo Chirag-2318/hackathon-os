@@ -149,11 +149,27 @@ public class ApiExceptionHandler {
     @ExceptionHandler(com.hackathonos.backend.docs.DocConflictException.class)
     public ResponseEntity<ErrorResponse> handleDocConflict(com.hackathonos.backend.docs.DocConflictException ex) {
         String reqId = resolveRequestId();
+        Map<String, Object> details = new HashMap<>();
+        details.put("code", "EDIT_CONFLICT");
+        details.put("currentVersion", ex.getVersion());
+        details.put("version", ex.getVersion());
+        details.put("content", ex.getContent());
+        details.put("currentContent", ex.getContent());
+        details.put("editorName", ex.getLastEditorName());
+        details.put("lastEditorName", ex.getLastEditorName());
+        details.put("updatedAt", ex.getUpdatedAt());
+        Map<String, Object> currentCopy = new HashMap<>();
+        currentCopy.put("content", ex.getContent());
+        currentCopy.put("version", ex.getVersion());
+        currentCopy.put("lastEditorName", ex.getLastEditorName());
+        currentCopy.put("updatedAt", ex.getUpdatedAt());
+        details.put("currentCopy", currentCopy);
+        details.put("latestData", currentCopy);
+
         ErrorResponse body = new ErrorResponse(
-                Instant.now().toString(),
-                HttpStatus.CONFLICT.value(),
-                "DOC_CHANGED",
+                "EDIT_CONFLICT",
                 ex.getMessage(),
+                details,
                 reqId
         );
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
@@ -163,22 +179,48 @@ public class ApiExceptionHandler {
     public ResponseEntity<ErrorResponse> handleEntityConflict(EntityConflictException ex) {
         String reqId = resolveRequestId();
         Map<String, Object> details = new HashMap<>();
+        details.put("code", "EDIT_CONFLICT");
         details.put("currentVersion", ex.getCurrentVersion());
+        details.put("version", ex.getCurrentVersion());
         details.put("lastEditedBy", ex.getLastEditedBy());
-        details.put("editorName", ex.getLastEditedBy() != null ? ex.getLastEditedBy().displayName() : null);
+        String editorName = ex.getEditorName() != null ? ex.getEditorName()
+                : (ex.getLastEditedBy() != null ? ex.getLastEditedBy().displayName() : null);
+        details.put("editorName", editorName);
+        details.put("lastEditorName", editorName);
         details.put("updatedAt", ex.getUpdatedAt());
         if (ex.getLatestData() != null) {
             details.put("latestData", ex.getLatestData());
+            details.put("currentCopy", ex.getLatestData());
         }
 
         ErrorResponse body = new ErrorResponse(
-                ex.getCode() != null ? ex.getCode() : ErrorCode.VERSION_CONFLICT.getCode(),
+                "EDIT_CONFLICT",
                 ex.getMessage(),
                 details,
                 reqId
         );
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
+
+    @ExceptionHandler({
+            org.springframework.dao.OptimisticLockingFailureException.class,
+            jakarta.persistence.OptimisticLockException.class
+    })
+    public ResponseEntity<ErrorResponse> handleOptimisticLockingFailure(Exception ex) {
+        String reqId = resolveRequestId();
+        Map<String, Object> details = new HashMap<>();
+        details.put("code", "EDIT_CONFLICT");
+        details.put("message", "This resource was modified by another teammate. Please refresh and try again.");
+        ErrorResponse body = new ErrorResponse(
+                "EDIT_CONFLICT",
+                "This resource was modified by another teammate. Please refresh and try again.",
+                details,
+                reqId
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    
 
     @ExceptionHandler(TooManyRequestsException.class)
     public ResponseEntity<ErrorResponse> handleTooManyRequests(TooManyRequestsException ex) {
@@ -194,6 +236,28 @@ public class ApiExceptionHandler {
                 reqId
         );
         var builder = ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS);
+        if (ex.getRetryAfterSeconds() > 0) {
+            builder.header(org.springframework.http.HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()));
+        }
+        return builder.body(body);
+    }
+
+@ExceptionHandler(ServerBusyException.class)
+    public ResponseEntity<ErrorResponse> handleServerBusy(ServerBusyException ex) {
+        String reqId = resolveRequestId();
+        Map<String, Object> details = new HashMap<>();
+        if (ex.getRetryAfterSeconds() > 0) {
+            details.put("retryAfterSeconds", ex.getRetryAfterSeconds());
+        }
+        ErrorResponse body = new ErrorResponse(
+                ex.getCode() != null ? ex.getCode() : "SERVER_BUSY",
+                ex.getMessage(),
+                details.isEmpty() ? null : details,
+                reqId,
+                Instant.now().toString(),
+                HttpStatus.SERVICE_UNAVAILABLE.value()
+        );
+        var builder = ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE);
         if (ex.getRetryAfterSeconds() > 0) {
             builder.header(org.springframework.http.HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()));
         }

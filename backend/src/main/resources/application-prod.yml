@@ -18,9 +18,13 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     hikari:
-      maximum-pool-size: ${DB_POOL_SIZE:5}
+      # DB_POOL_SIZE must stay below managed Postgres max_connections / app instances (leave headroom for admin & scheduler advisory locks)
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      connection-timeout: 10000
+      leak-detection-threshold: 30000
       minimum-idle: 1
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: validate
     show-sql: false
@@ -71,6 +75,9 @@ springdoc:
     enabled: false
 
 app:
+  events:
+    max-streams-per-user: ${SSE_MAX_STREAMS_PER_USER:6}
+    bus: ${EVENTS_BUS:local}
   cookie:
     secure: ${COOKIE_SECURE:true}
     same-site: ${COOKIE_SAME_SITE:Lax}

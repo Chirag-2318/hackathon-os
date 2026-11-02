@@ -46,6 +46,8 @@ class CheckpointServiceTest {
     private SubmissionRepository submissionRepository;
     @Mock
     private RoomAccess roomAccess;
+    @Mock
+    private com.hackathonos.backend.events.RoomEventService roomEventService;
 
     private final Instant baseStart = Instant.parse("2026-10-10T08:00:00Z");
 
@@ -56,7 +58,7 @@ class CheckpointServiceTest {
         CheckpointService service = new CheckpointService(
                 checkpointRepository, phaseRepository, mvpStateRepository,
                 pitchRehearsalRepository, demoMediaRepository, submissionRepository,
-                roomAccess, clock
+                roomAccess, clock, roomEventService
         );
 
         Room room = new Room();
@@ -91,7 +93,7 @@ class CheckpointServiceTest {
         CheckpointService service = new CheckpointService(
                 checkpointRepository, phaseRepository, mvpStateRepository,
                 pitchRehearsalRepository, demoMediaRepository, submissionRepository,
-                roomAccess, clock
+                roomAccess, clock, roomEventService
         );
 
         Room room = new Room();
@@ -123,7 +125,7 @@ class CheckpointServiceTest {
         CheckpointService service = new CheckpointService(
                 checkpointRepository, phaseRepository, mvpStateRepository,
                 pitchRehearsalRepository, demoMediaRepository, submissionRepository,
-                roomAccess, clock
+                roomAccess, clock, roomEventService
         );
 
         UUID roomId = UUID.randomUUID();

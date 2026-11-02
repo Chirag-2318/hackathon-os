@@ -11,6 +11,7 @@ export interface UserLike {
   avatarType?: string | null;
   avatarPreset?: number | null;
   avatarUrl?: string | null;
+  providerAvatarUrl?: string | null;
   initials?: string | null;
   email?: string | null;
 }
@@ -40,21 +41,24 @@ export function UserAvatar({
   className,
   alt,
 }: UserAvatarProps) {
-  const [imgError, setImgError] = useState(false);
+  const [customFailed, setCustomFailed] = useState(false);
+  const [providerFailed, setProviderFailed] = useState(false);
 
-  // 1. Resolve image source from avatarType, avatarPreset and avatarUrl only
+  // 1. Resolve image source from avatarType, avatarPreset and avatarUrl with provider fallback
   let resolvedSrc: string | null = null;
-  if (!imgError && user) {
+  if (user) {
     if (user.avatarType === 'NONE') {
       resolvedSrc = null;
     } else if (user.avatarType === 'PRESET' && user.avatarPreset) {
       resolvedSrc = getPresetAvatarUrl(user.avatarPreset);
-    } else if (user.avatarType === 'CUSTOM' && user.avatarUrl) {
+    } else if (user.avatarType === 'CUSTOM' && user.avatarUrl && !customFailed) {
       resolvedSrc = user.avatarUrl;
+    } else if (!customFailed && user.avatarUrl) {
+      resolvedSrc = user.avatarUrl;
+    } else if (!providerFailed && user.providerAvatarUrl) {
+      resolvedSrc = user.providerAvatarUrl;
     } else if (user.avatarPreset) {
       resolvedSrc = getPresetAvatarUrl(user.avatarPreset);
-    } else if (user.avatarUrl) {
-      resolvedSrc = user.avatarUrl;
     }
   }
 
@@ -77,7 +81,13 @@ export function UserAvatar({
           alt={alt || displayName}
           className="w-full h-full object-cover"
           loading="lazy"
-          onError={() => setImgError(true)}
+          onError={() => {
+            if (!customFailed && user?.avatarUrl && resolvedSrc === user.avatarUrl) {
+              setCustomFailed(true);
+            } else {
+              setProviderFailed(true);
+            }
+          }}
         />
       </div>
     );

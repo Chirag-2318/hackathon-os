@@ -1,5 +1,9 @@
 package com.hackathonos.backend.integrations;
 
+import com.hackathonos.backend.common.security.OAuthLinkStateService;
+import com.hackathonos.backend.common.security.OAuthLinkState;
+
+
 import com.hackathonos.backend.common.config.AppProperties;
 import com.hackathonos.backend.common.error.BadRequestException;
 import com.hackathonos.backend.common.security.SecretCipher;
@@ -18,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.net.HttpURLConnection;
 import java.net.URI;
@@ -40,6 +45,10 @@ public class IntegrationsService {
     private final RoomRepository roomRepository;
     private final SecretCipher secretCipher;
     private final AppProperties appProperties;
+    private final TransactionTemplate transactionTemplate;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private OAuthLinkStateService oAuthLinkStateService;
 
     private final Map<UUID, Instant> lastCheckTimes = new ConcurrentHashMap<>();
 
@@ -48,13 +57,15 @@ public class IntegrationsService {
                                RoomMemberRepository memberRepository,
                                RoomRepository roomRepository,
                                SecretCipher secretCipher,
-                               AppProperties appProperties) {
+                               AppProperties appProperties,
+                               TransactionTemplate transactionTemplate) {
         this.tokenRepository = tokenRepository;
         this.repoRepository = repoRepository;
         this.memberRepository = memberRepository;
         this.roomRepository = roomRepository;
         this.secretCipher = secretCipher;
         this.appProperties = appProperties;
+        this.transactionTemplate = transactionTemplate;
     }
 
     public record UsedInRoomDto(
@@ -178,14 +189,27 @@ public class IntegrationsService {
         }
 
         boolean privateRepos = "private".equalsIgnoreCase(access);
-        String state = UUID.randomUUID().toString();
-        HttpSession session = request.getSession(true);
-        session.setAttribute("gh_link_state", state);
-        session.setAttribute("gh_link_user_id", user.getId().toString());
-        session.setAttribute("gh_link_private_repos", privateRepos);
-        session.setAttribute("gh_link_return_path", "/app/settings/integrations");
-
-        String redirectUri = appProperties.getBaseUrl() + "/api/v1/github/link/callback";
+        String state;
+        String redirectUri;
+        if (oAuthLinkStateService != null) {
+            OAuthLinkState linkState = oAuthLinkStateService.createLinkState(
+                    "GITHUB",
+                    user.getId(),
+                    null,
+                    privateRepos ? "true" : "false",
+                    "/app/settings/integrations"
+            );
+            state = linkState.getState();
+            redirectUri = oAuthLinkStateService.buildRedirectUri("/api/v1/github/link/callback");
+        } else {
+            state = UUID.randomUUID().toString();
+            HttpSession session = request.getSession(true);
+            session.setAttribute("gh_link_state", state);
+            session.setAttribute("gh_link_user_id", user.getId().toString());
+            session.setAttribute("gh_link_private_repos", privateRepos);
+            session.setAttribute("gh_link_return_path", "/app/settings/integrations");
+            redirectUri = appProperties.getBaseUrl() + "/api/v1/github/link/callback";
+        }
         String scope = privateRepos ? "repo" : "read:user";
         String authorizeUrl = "https://github.com/login/oauth/authorize?client_id="
                 + URLEncoder.encode(clientId, StandardCharsets.UTF_8)
@@ -196,7 +220,6 @@ public class IntegrationsService {
         return new AuthorizeResponse(authorizeUrl);
     }
 
-    @Transactional
     public IntegrationsResponse connectWithToken(User user, ConnectGitHubTokenRequest req) {
         String token = req.token() != null ? req.token().trim() : "";
         String login = req.username() != null && !req.username().isBlank()
@@ -210,6 +233,7 @@ public class IntegrationsService {
         boolean isPrivate = Boolean.TRUE.equals(req.privateAccess());
         String scope = isPrivate ? "repo,read:user" : "read:user";
 
+        // External verification call outside transaction
         if (!token.isBlank() && !token.startsWith("ghp_dev_")) {
             try {
                 URL url = URI.create("https://api.github.com/user").toURL();
@@ -237,20 +261,24 @@ public class IntegrationsService {
             token = "ghp_dev_" + UUID.randomUUID().toString().replace("-", "");
         }
 
-        String encrypted = secretCipher.encrypt(token);
-        Instant now = Instant.now();
-        UserOAuthToken tokenEntity = tokenRepository.findByUserIdAndProvider(user.getId(), "GITHUB")
-                .orElse(new UserOAuthToken(user.getId(), "GITHUB", encrypted, scope, login, now));
-        tokenEntity.setAccessTokenEncrypted(encrypted);
-        tokenEntity.setScope(scope);
-        tokenEntity.setGithubLogin(login);
-        tokenEntity.setStatus("CONNECTED");
-        tokenEntity.setConnectedAt(now);
-        tokenEntity.setUpdatedAt(now);
-        tokenRepository.save(tokenEntity);
+        final String finalLogin = login;
+        final String encrypted = secretCipher.encrypt(token);
+        final Instant now = Instant.now();
 
-        log.info("Saved GitHub integration for user {} with login {}", user.getId(), login);
-        return getIntegrations(user);
+        return transactionTemplate.execute(status -> {
+            UserOAuthToken tokenEntity = tokenRepository.findByUserIdAndProvider(user.getId(), "GITHUB")
+                    .orElse(new UserOAuthToken(user.getId(), "GITHUB", encrypted, scope, finalLogin, now));
+            tokenEntity.setAccessTokenEncrypted(encrypted);
+            tokenEntity.setScope(scope);
+            tokenEntity.setGithubLogin(finalLogin);
+            tokenEntity.setStatus("CONNECTED");
+            tokenEntity.setConnectedAt(now);
+            tokenEntity.setUpdatedAt(now);
+            tokenRepository.save(tokenEntity);
+
+            log.info("Saved GitHub integration for user {} with login {}", user.getId(), finalLogin);
+            return getIntegrations(user);
+        });
     }
 
     @Transactional
@@ -281,7 +309,6 @@ public class IntegrationsService {
         }
     }
 
-    @Transactional
     public CheckConnectionResponse checkConnection(User user) {
         Instant now = Instant.now();
         Instant lastCheck = lastCheckTimes.get(user.getId());
@@ -300,11 +327,17 @@ public class IntegrationsService {
         try {
             plainToken = secretCipher.decrypt(token.getAccessTokenEncrypted());
         } catch (Exception ex) {
-            token.setStatus("NEEDS_RECONNECT");
-            tokenRepository.save(token);
+            transactionTemplate.execute(status -> {
+                tokenRepository.findByUserIdAndProvider(user.getId(), "GITHUB").ifPresent(t -> {
+                    t.setStatus("NEEDS_RECONNECT");
+                    tokenRepository.save(t);
+                });
+                return null;
+            });
             return new CheckConnectionResponse(false, "NEEDS_RECONNECT", "Unable to decrypt credentials. Please reconnect.");
         }
 
+        // External HTTP check outside transaction
         try {
             URL url = URI.create("https://api.github.com/user").toURL();
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -317,13 +350,23 @@ public class IntegrationsService {
 
             int responseCode = conn.getResponseCode();
             if (responseCode == 401) {
-                token.setStatus("NEEDS_RECONNECT");
-                tokenRepository.save(token);
+                transactionTemplate.execute(status -> {
+                    tokenRepository.findByUserIdAndProvider(user.getId(), "GITHUB").ifPresent(t -> {
+                        t.setStatus("NEEDS_RECONNECT");
+                        tokenRepository.save(t);
+                    });
+                    return null;
+                });
                 return new CheckConnectionResponse(false, "NEEDS_RECONNECT", "GitHub token expired or revoked. Please reconnect.");
             } else if (responseCode >= 200 && responseCode < 300) {
-                token.setStatus("CONNECTED");
-                token.setLastUsedAt(now);
-                tokenRepository.save(token);
+                transactionTemplate.execute(status -> {
+                    tokenRepository.findByUserIdAndProvider(user.getId(), "GITHUB").ifPresent(t -> {
+                        t.setStatus("CONNECTED");
+                        t.setLastUsedAt(now);
+                        tokenRepository.save(t);
+                    });
+                    return null;
+                });
                 return new CheckConnectionResponse(true, "CONNECTED", "GitHub connection operational.");
             } else {
                 return new CheckConnectionResponse(true, token.getStatus(), "GitHub responded with code " + responseCode);

@@ -1,20 +1,25 @@
 package com.hackathonos.backend.brief;
 
+import com.hackathonos.backend.common.concurrency.ExternalCallBulkhead;
 import com.hackathonos.backend.common.error.BadRequestException;
 import com.hackathonos.backend.common.error.PayloadTooLargeException;
+import com.hackathonos.backend.common.error.ServerBusyException;
 import com.hackathonos.backend.common.error.UnprocessableEntityException;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.io.MemoryUsageSetting;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 
 /**
- * Validates and extracts text from PDF files up to 200,000 characters.
+ * Validates and extracts text from PDF files up to 200,000 characters with memory protection.
  */
 @Component
 public class BriefPdfParser {
@@ -23,8 +28,24 @@ public class BriefPdfParser {
     private static final int MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
     private static final int MAX_CHARS = 200_000;
 
+    private final ExternalCallBulkhead bulkhead;
+    private final int maxPages;
+
+    @Autowired
+    public BriefPdfParser(
+            @Autowired(required = false) ExternalCallBulkhead bulkhead,
+            @Value("${PDF_MAX_PAGES:80}") int maxPages
+    ) {
+        this.bulkhead = bulkhead != null ? bulkhead : new ExternalCallBulkhead(6, 3, 2, 5000);
+        this.maxPages = maxPages > 0 ? maxPages : 80;
+    }
+
+    public BriefPdfParser() {
+        this(null, 80);
+    }
+
     /**
-     * Extracts text from PDF byte array.
+     * Extracts text from PDF byte array using temp-file stream cache and page limits.
      */
     public String extractText(byte[] bytes) {
         if (bytes == null || bytes.length == 0) {
@@ -37,31 +58,43 @@ public class BriefPdfParser {
             throw new BadRequestException("NOT_A_PDF", "File does not start with %PDF magic bytes");
         }
 
-        try (PDDocument document = Loader.loadPDF(bytes)) {
-            if (document.isEncrypted()) {
+        try (ExternalCallBulkhead.Permit permit = bulkhead.acquire(ExternalCallBulkhead.BULKHEAD_HEAVY_PARSE)) {
+            try (PDDocument document = Loader.loadPDF(bytes, null, null, null, MemoryUsageSetting.setupTempFileOnly().streamCache)) {
+                if (document.isEncrypted()) {
+                    throw new UnprocessableEntityException("PDF_PROTECTED", "This PDF is password protected");
+                }
+
+                int totalPages = document.getNumberOfPages();
+                if (totalPages == 0) {
+                    throw new UnprocessableEntityException("NO_TEXT_IN_PDF", "This PDF has no pages");
+                }
+
+                int pagesToExtract = Math.min(totalPages, maxPages);
+
+                PDFTextStripper stripper = new PDFTextStripper();
+                stripper.setStartPage(1);
+                stripper.setEndPage(pagesToExtract);
+                String text = stripper.getText(document);
+                if (text == null || text.trim().isEmpty()) {
+                    throw new UnprocessableEntityException("NO_TEXT_IN_PDF", "This PDF looks scanned (only images). Paste the text instead");
+                }
+                String result = text.trim();
+                if (result.length() > MAX_CHARS) {
+                    result = result.substring(0, MAX_CHARS);
+                }
+                return result;
+            } catch (InvalidPasswordException e) {
+                log.warn("Failed to parse PDF: {} - {}", e.getClass().getName(), e.getMessage());
                 throw new UnprocessableEntityException("PDF_PROTECTED", "This PDF is password protected");
+            } catch (UnprocessableEntityException | PayloadTooLargeException | BadRequestException e) {
+                throw e;
+            } catch (IOException e) {
+                log.warn("Failed to parse PDF: {} - {}", e.getClass().getName(), e.getMessage());
+                throw new BadRequestException("NOT_A_PDF", "Unable to read PDF: " + e.getMessage());
+            } catch (Exception e) {
+                log.warn("Failed to parse PDF: {} - {}", e.getClass().getName(), e.getMessage());
+                throw new BadRequestException("NOT_A_PDF", "Unable to parse PDF: " + e.getMessage());
             }
-            PDFTextStripper stripper = new PDFTextStripper();
-            String text = stripper.getText(document);
-            if (text == null || text.trim().isEmpty()) {
-                throw new UnprocessableEntityException("NO_TEXT_IN_PDF", "This PDF looks scanned (only images). Paste the text instead");
-            }
-            String result = text.trim();
-            if (result.length() > MAX_CHARS) {
-                result = result.substring(0, MAX_CHARS);
-            }
-            return result;
-        } catch (InvalidPasswordException e) {
-            log.warn("Failed to parse PDF: {} - {}", e.getClass().getName(), e.getMessage());
-            throw new UnprocessableEntityException("PDF_PROTECTED", "This PDF is password protected");
-        } catch (UnprocessableEntityException | PayloadTooLargeException | BadRequestException e) {
-            throw e;
-        } catch (IOException e) {
-            log.warn("Failed to parse PDF: {} - {}", e.getClass().getName(), e.getMessage());
-            throw new BadRequestException("NOT_A_PDF", "Unable to read PDF: " + e.getMessage());
-        } catch (Exception e) {
-            log.warn("Failed to parse PDF: {} - {}", e.getClass().getName(), e.getMessage());
-            throw new BadRequestException("NOT_A_PDF", "Unable to parse PDF: " + e.getMessage());
         }
     }
 }

@@ -30,6 +30,7 @@ import com.hackathonos.backend.rooms.RoomRepository;
 import com.hackathonos.backend.users.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -56,6 +57,7 @@ public class SubmissionService {
     private final NotificationService notificationService;
     private final AiService aiService;
     private final SafeHttpClient safeHttpClient;
+    private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper;
     private final com.hackathonos.backend.events.RoomEventService roomEventService;
     private final com.hackathonos.backend.activity.ActivityLogger activityLogger;
@@ -79,6 +81,7 @@ public class SubmissionService {
             NotificationService notificationService,
             AiService aiService,
             SafeHttpClient safeHttpClient,
+            TransactionTemplate transactionTemplate,
             ObjectMapper objectMapper,
             com.hackathonos.backend.events.RoomEventService roomEventService,
             @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -105,6 +108,7 @@ public class SubmissionService {
         this.notificationService = notificationService;
         this.aiService = aiService;
         this.safeHttpClient = safeHttpClient;
+        this.transactionTemplate = transactionTemplate;
         this.objectMapper = objectMapper;
         this.roomEventService = roomEventService;
         this.activityLogger = activityLogger;
@@ -319,7 +323,6 @@ public class SubmissionService {
     /**
      * Auto-populates empty draft fields from project documents, with optional AI polish.
      */
-    @Transactional
     public SubmissionDtos.SubmissionDraftDto generateDraft(UUID roomId, User user, SubmissionDtos.GenerateDraftRequest req) {
         roomAccess.requireMember(roomId, user);
         Submission sub = submissionRepository.findByRoomId(roomId)
@@ -444,20 +447,28 @@ public class SubmissionService {
     /**
      * Checks all submission links using SSRF-safe HTTP client.
      */
-    @Transactional
     public List<SubmissionDtos.SubmissionLinkDto> checkLinks(UUID roomId, User user) {
         roomAccess.requireMember(roomId, user);
         List<SubmissionLink> links = linkRepository.findByRoomIdOrderByLabelAsc(roomId);
 
+        // Slow external HTTP checks outside transaction
+        record LinkResult(SubmissionLink link, boolean ok, int httpStatus, Instant checkedAt) {}
+        List<LinkResult> results = new ArrayList<>();
         for (SubmissionLink link : links) {
             SafeHttpClient.SafeHttpResponse result = safeHttpClient.headOrGet(link.getUrl(), 5000);
-            link.setOk(result.ok());
-            link.setHttpStatus(result.httpStatus());
-            link.setLastCheckedAt(Instant.now());
+            results.add(new LinkResult(link, result.ok(), result.httpStatus(), Instant.now()));
         }
-        List<SubmissionLink> saved = linkRepository.saveAll(links);
 
-        return saved.stream().map(l ->
+        List<SubmissionLink> saved = transactionTemplate.execute(status -> {
+            for (LinkResult r : results) {
+                r.link().setOk(r.ok());
+                r.link().setHttpStatus(r.httpStatus());
+                r.link().setLastCheckedAt(r.checkedAt());
+            }
+            return linkRepository.saveAll(links);
+        });
+
+        return (saved != null ? saved : links).stream().map(l ->
                 new SubmissionDtos.SubmissionLinkDto(l.getId(), l.getLabel(), l.getUrl(), l.getOk(), l.getHttpStatus(), l.getLastCheckedAt())
         ).toList();
     }

@@ -163,7 +163,7 @@ public class RoomService {
                 template.getId(), creator.getId(), startsAt, endsAt, timezone, keyPrefix, joinCode);
         room.setDurationHours(duration);
         room.setFreezeAt(freezeAt);
-        roomRepository.save(room);
+        room = roomRepository.save(room);
 
         RoomMember leader = new RoomMember(room.getId(), creator.getId(), "LEADER");
         memberRepository.save(leader);
@@ -292,6 +292,17 @@ public class RoomService {
     public RoomDetailDto updateRoom(User user, UUID roomId, UpdateRoomRequest request) {
         RoomMember member = roomAccess.requireLeader(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
+
+        if (request.baseVersion() != null && !request.baseVersion().equals(room.getVersion())) {
+            throw new com.hackathonos.backend.common.error.EntityConflictException(
+                    "EDIT_CONFLICT",
+                    "Room was modified by another teammate",
+                    room.getVersion(),
+                    null,
+                    room.getUpdatedAt(),
+                    getRoomDetail(user, roomId)
+            );
+        }
         EventTemplate template = templateService.getOrThrow(room.getTemplateId());
 
         boolean scheduleChanged = (request.endsAt() != null && !request.endsAt().isBlank())

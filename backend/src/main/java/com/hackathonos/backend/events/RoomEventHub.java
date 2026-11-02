@@ -1,27 +1,41 @@
 package com.hackathonos.backend.events;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.hackathonos.backend.common.config.AppProperties;
+import com.hackathonos.backend.events.bus.EventBus;
+import com.hackathonos.backend.presence.PresenceService;
 import com.hackathonos.backend.users.User;
 import jakarta.annotation.PreDestroy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Central thread-safe SSE event hub managing per-room event streams, sequence ordering,
- * ring buffers for replay, presence tracking, and user notification streams.
+ * Hardened SSE event hub managing real-time room and user notification streams.
+ * Dispatches via virtual threads, protects emitters with concurrency locks and lag thresholds,
+ * persists durable events to PostgreSQL with global monotonic BIGSERIAL IDs,
+ * replays missed events or emits 'resync', and connects to local or multi-instance event buses.
  */
 @Component
 public class RoomEventHub {
 
-    private static final long TIMEOUT_MS = 30 * 60 * 1000L; // 30 minutes
-    private static final int MAX_STREAMS_PER_USER = 3;
+    private static final Logger log = LoggerFactory.getLogger(RoomEventHub.class);
+    private static final long SSE_TIMEOUT_MS = 30 * 60 * 1000L; // 30 minutes
     private static final int RING_BUFFER_SIZE = 200;
+    private static final int MAX_LAGGING_WRITES = 50;
 
     public record RoomEvent(
             long seq,
@@ -33,31 +47,101 @@ public class RoomEventHub {
             Instant at
     ) {}
 
-    public record UserEmitter(UUID userId, SseEmitter emitter, Instant createdAt) {}
+    public static class UserEmitter {
+        private final UUID userId;
+        private final SseEmitter emitter;
+        private final Instant createdAt;
+        private final Object writeLock = new Object();
+        private final AtomicInteger pendingWrites = new AtomicInteger(0);
+
+        public UserEmitter(UUID userId, SseEmitter emitter, Instant createdAt) {
+            this.userId = userId;
+            this.emitter = emitter;
+            this.createdAt = createdAt;
+        }
+
+        public UUID userId() { return userId; }
+        public SseEmitter emitter() { return emitter; }
+        public Instant createdAt() { return createdAt; }
+
+        public boolean trySend(SseEmitter.SseEventBuilder builder) {
+            if (pendingWrites.incrementAndGet() > MAX_LAGGING_WRITES) {
+                pendingWrites.decrementAndGet();
+                return false; // Lagging beyond threshold -> drop slow client
+            }
+            try {
+                synchronized (writeLock) {
+                    emitter.send(builder);
+                    return true;
+                }
+            } catch (Exception e) {
+                return false;
+            } finally {
+                pendingWrites.decrementAndGet();
+            }
+        }
+    }
 
     private final Map<UUID, List<UserEmitter>> roomEmitters = new ConcurrentHashMap<>();
-    private final Map<UUID, List<SseEmitter>> notificationEmitters = new ConcurrentHashMap<>();
-    private final Map<UUID, AtomicLong> roomSequences = new ConcurrentHashMap<>();
-    private final Map<UUID, Deque<RoomEvent>> roomRingBuffers = new ConcurrentHashMap<>();
-    private final Map<UUID, ScheduledFuture<?>> presenceDebounceMap = new ConcurrentHashMap<>();
+    private final Map<UUID, List<UserEmitter>> notificationEmitters = new ConcurrentHashMap<>();
 
-    private final ExecutorService sseExecutor = Executors.newFixedThreadPool(4);
+    private final Cache<UUID, Deque<RoomEvent>> roomRingBuffers = Caffeine.newBuilder()
+            .maximumSize(1000)
+            .expireAfterAccess(1, TimeUnit.HOURS)
+            .build();
+
+    private final Cache<UUID, AtomicLong> fallbackSequences = Caffeine.newBuilder()
+            .maximumSize(1000)
+            .expireAfterAccess(1, TimeUnit.HOURS)
+            .build();
+
+    private final Cache<UUID, ScheduledFuture<?>> presenceDebounceMap = Caffeine.newBuilder()
+            .maximumSize(1000)
+            .expireAfterAccess(10, TimeUnit.MINUTES)
+            .build();
+
+    private final ExecutorService sseExecutor = Executors.newVirtualThreadPerTaskExecutor();
     private final ScheduledExecutorService scheduledExecutor = Executors.newScheduledThreadPool(2);
 
-    /**
-     * Allocates next monotonic sequence number for a room.
-     */
+    private final AppProperties appProperties;
+    private EventBus eventBus;
+    private final RoomEventRepository eventRepository;
+    private final PresenceService presenceService;
+    private final TransactionTemplate transactionTemplate;
+
+    public void setEventBus(EventBus eventBus) {
+        this.eventBus = eventBus;
+    }
+
+    public RoomEventHub(AppProperties appProperties,
+                        @Lazy EventBus eventBus,
+                        RoomEventRepository eventRepository,
+                        PresenceService presenceService,
+                        TransactionTemplate transactionTemplate) {
+        this.appProperties = appProperties;
+        this.eventBus = eventBus;
+        this.eventRepository = eventRepository;
+        this.presenceService = presenceService;
+        this.transactionTemplate = transactionTemplate;
+    }
+
+    private int getMaxStreamsPerUser() {
+        return Math.max(1, appProperties.getEvents().getMaxStreamsPerUser());
+    }
+
     public long nextSeq(UUID roomId) {
-        return roomSequences.computeIfAbsent(roomId, k -> new AtomicLong(0)).incrementAndGet();
+        return fallbackSequences.asMap().computeIfAbsent(roomId, k -> new AtomicLong(0)).incrementAndGet();
     }
 
     /**
-     * Subscribes a user to room events stream with max 3 streams per user, sequence tracking, and replay.
+     * Subscribes a user to room events stream with configurable stream caps, lag protection, and replay.
      */
     public SseEmitter subscribe(UUID roomId, User user, String lastEventId) {
-        SseEmitter emitter = new SseEmitter(TIMEOUT_MS);
-        UserEmitter userEmitter = new UserEmitter(user.getId(), emitter, Instant.now());
+        return subscribe(roomId, user, lastEventId, new SseEmitter(SSE_TIMEOUT_MS));
+    }
 
+    public SseEmitter subscribe(UUID roomId, User user, String lastEventId, SseEmitter emitter) {
+        UserEmitter userEmitter = new UserEmitter(user.getId(), emitter, Instant.now());
         final boolean[] isFirstStream = {false};
 
         roomEmitters.compute(roomId, (k, list) -> {
@@ -71,9 +155,17 @@ public class RoomEventHub {
             if (userStreams.isEmpty()) {
                 isFirstStream[0] = true;
             }
-            if (userStreams.size() >= MAX_STREAMS_PER_USER) {
+            int cap = getMaxStreamsPerUser();
+            if (userStreams.size() >= cap) {
                 userStreams.sort(Comparator.comparing(UserEmitter::createdAt));
                 UserEmitter oldest = userStreams.get(0);
+                try {
+                    oldest.trySend(SseEmitter.event()
+                            .name("bye")
+                            .data(Map.of("reason", "evicted", "message", "Stream cap exceeded")));
+                } catch (Exception e) {
+                    log.debug("Could not send bye event to evicted client: {}", e.getMessage());
+                }
                 try {
                     oldest.emitter().complete();
                 } catch (Exception ignored) {}
@@ -92,21 +184,36 @@ public class RoomEventHub {
 
         emitter.onCompletion(cleanup);
         emitter.onTimeout(cleanup);
-        emitter.onError(e -> cleanup.run());
+        emitter.onError(e -> {
+            if (isExpectedDisconnect(e)) {
+                log.debug("SSE client disconnected: roomId={}, userId={}, error={}", roomId, user.getId(), e.getMessage());
+            } else {
+                log.warn("SSE error on client: roomId={}, userId={}, error={}", roomId, user.getId(), e.getMessage());
+            }
+            cleanup.run();
+        });
 
-        // Initial connect ack
+        // Send initial connect ack with retry hint and comment
         try {
-            emitter.send(SseEmitter.event().name("init").data(Map.of("connected", true, "at", Instant.now().toString())));
-        } catch (IOException e) {
+            boolean sent = userEmitter.trySend(SseEmitter.event()
+                    .reconnectTime(3000L)
+                    .comment("connected")
+                    .name("init")
+                    .data(Map.of("connected", true, "at", Instant.now().toString())));
+            if (!sent) {
+                emitter.complete();
+                return emitter;
+            }
+        } catch (Exception e) {
             emitter.complete();
             return emitter;
         }
 
-        // Replay events from ring buffer if Last-Event-ID header is present
+        // Replay events if Last-Event-ID header/param is present
         if (lastEventId != null && !lastEventId.isBlank()) {
             try {
                 long lastSeq = Long.parseLong(lastEventId.trim());
-                replayEventsAfter(roomId, lastSeq, emitter);
+                replayEventsAfter(roomId, lastSeq, userEmitter);
             } catch (NumberFormatException ignored) {}
         }
 
@@ -117,39 +224,51 @@ public class RoomEventHub {
         return emitter;
     }
 
-    /**
-     * Backward-compatible alias for subscribe.
-     */
     public SseEmitter subscribeRoom(UUID roomId, User user) {
         return subscribe(roomId, user, null);
     }
 
     /**
-     * Subscribes a user to their personal user-level notifications and room updates stream.
+     * Subscribes a user to their personal notification stream.
      */
     public SseEmitter subscribeNotifications(User user) {
-        SseEmitter emitter = new SseEmitter(TIMEOUT_MS);
+        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
+        UserEmitter userEmitter = new UserEmitter(user.getId(), emitter, Instant.now());
+
         notificationEmitters.compute(user.getId(), (k, list) -> {
-            List<SseEmitter> emitters = list != null ? list : new CopyOnWriteArrayList<>();
-            if (emitters.size() >= MAX_STREAMS_PER_USER) {
-                SseEmitter oldest = emitters.get(0);
+            List<UserEmitter> emitters = list != null ? list : new CopyOnWriteArrayList<>();
+            int cap = getMaxStreamsPerUser();
+            if (emitters.size() >= cap) {
+                UserEmitter oldest = emitters.get(0);
                 try {
-                    oldest.complete();
+                    oldest.trySend(SseEmitter.event().name("bye").data(Map.of("reason", "evicted")));
+                } catch (Exception ignored) {}
+                try {
+                    oldest.emitter().complete();
                 } catch (Exception ignored) {}
                 emitters.remove(oldest);
             }
-            emitters.add(emitter);
+            emitters.add(userEmitter);
             return emitters;
         });
 
-        Runnable cleanup = () -> removeNotificationEmitter(user.getId(), emitter);
+        Runnable cleanup = () -> removeNotificationEmitter(user.getId(), userEmitter);
         emitter.onCompletion(cleanup);
         emitter.onTimeout(cleanup);
-        emitter.onError(e -> cleanup.run());
+        emitter.onError(e -> {
+            if (!isExpectedDisconnect(e)) {
+                log.warn("Notification SSE error: userId={}, error={}", user.getId(), e.getMessage());
+            }
+            cleanup.run();
+        });
 
         try {
-            emitter.send(SseEmitter.event().name("init").data(Map.of("connected", true, "at", Instant.now().toString())));
-        } catch (IOException e) {
+            userEmitter.trySend(SseEmitter.event()
+                    .reconnectTime(3000L)
+                    .comment("connected")
+                    .name("init")
+                    .data(Map.of("connected", true, "at", Instant.now().toString())));
+        } catch (Exception e) {
             emitter.complete();
         }
 
@@ -157,21 +276,80 @@ public class RoomEventHub {
     }
 
     /**
-     * Publishes a RoomEvent to the ring buffer and asynchronously pushes to open emitters.
+     * Publishes a room event: persists to database as source of truth for monotonic ID,
+     * then broadcasts through configured EventBus (local or PostgreSQL LISTEN/NOTIFY).
      */
     public void publish(UUID roomId, RoomEvent event) {
         if (roomId == null || event == null) return;
+        eventBus.publish(event);
+    }
 
-        // Add to ring buffer
-        Deque<RoomEvent> ringBuffer = roomRingBuffers.computeIfAbsent(roomId, k -> new ConcurrentLinkedDeque<>());
-        synchronized (ringBuffer) {
-            while (ringBuffer.size() >= RING_BUFFER_SIZE) {
-                ringBuffer.pollFirst();
+    /**
+     * Constructs and publishes a new durable event for a room.
+     * Inserts into database off the request thread via virtual thread executor.
+     */
+    public void publish(UUID roomId, String topic, User actor, String entityId) {
+        if (roomId == null) return;
+        String safeTopic = topic != null ? topic : "room";
+        String actorName = actor != null ? actor.getName() : "System";
+        UUID actorId = actor != null ? actor.getId() : null;
+
+        sseExecutor.submit(() -> {
+            long seq;
+            try {
+                // Short independent transaction for durable event insert
+                com.hackathonos.backend.events.RoomEvent saved = transactionTemplate.execute(status -> {
+                    com.hackathonos.backend.events.RoomEvent dbEvent = new com.hackathonos.backend.events.RoomEvent(
+                            roomId,
+                            safeTopic,
+                            safeTopic,
+                            entityId != null ? entityId : roomId.toString(),
+                            actorId
+                    );
+                    return eventRepository.save(dbEvent);
+                });
+                seq = (saved != null && saved.getId() != null) ? saved.getId() : nextSeq(roomId);
+            } catch (Exception e) {
+                log.warn("Database event insert failed, falling back to in-memory sequence for room {}: {}", roomId, e.getMessage());
+                seq = nextSeq(roomId);
             }
-            ringBuffer.addLast(event);
+
+            RoomEvent roomEvent = new RoomEvent(
+                    seq,
+                    safeTopic,
+                    roomId,
+                    actorId,
+                    actorName,
+                    entityId,
+                    Instant.now()
+            );
+            publish(roomId, roomEvent);
+        });
+    }
+
+    public void publish(UUID roomId, String eventType) {
+        publish(roomId, eventType, null, null);
+    }
+
+    /**
+     * Local fanout to emitters connected to this JVM instance.
+     * Appends to hot in-memory ring buffer and pushes to open emitters using virtual threads.
+     */
+    public void fanoutLocal(RoomEvent event) {
+        if (event == null || event.roomId() == null) return;
+        UUID roomId = event.roomId();
+
+        // Add to hot ring buffer cache
+        Deque<RoomEvent> ringBuffer = roomRingBuffers.get(roomId, k -> new ConcurrentLinkedDeque<>());
+        if (ringBuffer != null) {
+            synchronized (ringBuffer) {
+                while (ringBuffer.size() >= RING_BUFFER_SIZE) {
+                    ringBuffer.pollFirst();
+                }
+                ringBuffer.addLast(event);
+            }
         }
 
-        // Asynchronously broadcast to emitters
         List<UserEmitter> emitters = roomEmitters.get(roomId);
         if (emitters == null || emitters.isEmpty()) return;
 
@@ -179,83 +357,53 @@ public class RoomEventHub {
         sseExecutor.submit(() -> {
             List<UserEmitter> failed = new ArrayList<>();
             for (UserEmitter ue : snapshot) {
-                try {
-                    ue.emitter().send(SseEmitter.event()
-                            .id(String.valueOf(event.seq()))
-                            .name("room")
-                            .data(event));
-                } catch (Exception e) {
+                boolean sent = ue.trySend(SseEmitter.event()
+                        .id(String.valueOf(event.seq()))
+                        .name("room")
+                        .data(event));
+                if (!sent) {
                     failed.add(ue);
                 }
             }
             for (UserEmitter ue : failed) {
+                try { ue.emitter().complete(); } catch (Exception ignored) {}
                 removeRoomEmitter(roomId, ue);
             }
         });
     }
 
-    /**
-     * Constructs and publishes a new event for a room.
-     */
-    public void publish(UUID roomId, String topic, User actor, String entityId) {
-        long seq = nextSeq(roomId);
-        RoomEvent event = new RoomEvent(
-                seq,
-                topic != null ? topic : "room",
-                roomId,
-                actor != null ? actor.getId() : null,
-                actor != null ? actor.getName() : "System",
-                entityId,
-                Instant.now()
-        );
-        publish(roomId, event);
-    }
-
-    /**
-     * Backward-compatible publishing with topic string.
-     */
-    public void publish(UUID roomId, String eventType) {
-        publish(roomId, eventType, null, null);
-    }
-
-    /**
-     * Publishes user-level room update event.
-     */
     public void publishUser(UUID userId, String topic) {
         if (userId == null) return;
-        List<SseEmitter> emitters = notificationEmitters.get(userId);
+        List<UserEmitter> emitters = notificationEmitters.get(userId);
         if (emitters == null || emitters.isEmpty()) return;
 
-        List<SseEmitter> snapshot = new ArrayList<>(emitters);
+        List<UserEmitter> snapshot = new ArrayList<>(emitters);
         Map<String, Object> data = Map.of(
                 "topic", topic != null ? topic : "rooms",
                 "at", Instant.now().toString()
         );
 
         sseExecutor.submit(() -> {
-            List<SseEmitter> failed = new ArrayList<>();
-            for (SseEmitter emitter : snapshot) {
-                try {
-                    emitter.send(SseEmitter.event().name("user").data(data));
-                } catch (Exception e) {
-                    failed.add(emitter);
+            List<UserEmitter> failed = new ArrayList<>();
+            for (UserEmitter ue : snapshot) {
+                boolean sent = ue.trySend(SseEmitter.event().name("user").data(data));
+                if (!sent) {
+                    failed.add(ue);
                 }
             }
-            for (SseEmitter emitter : failed) {
-                removeNotificationEmitter(userId, emitter);
+            for (UserEmitter ue : failed) {
+                try { ue.emitter().complete(); } catch (Exception ignored) {}
+                removeNotificationEmitter(userId, ue);
             }
         });
     }
 
-    /**
-     * Sends a notification event to a specific user on user stream.
-     */
     public void publishNotification(UUID userId) {
         if (userId == null) return;
-        List<SseEmitter> emitters = notificationEmitters.get(userId);
+        List<UserEmitter> emitters = notificationEmitters.get(userId);
         if (emitters == null || emitters.isEmpty()) return;
 
-        List<SseEmitter> snapshot = new ArrayList<>(emitters);
+        List<UserEmitter> snapshot = new ArrayList<>(emitters);
         Map<String, Object> data = Map.of(
                 "topic", "notification",
                 "type", "notification",
@@ -263,66 +411,35 @@ public class RoomEventHub {
         );
 
         sseExecutor.submit(() -> {
-            List<SseEmitter> failed = new ArrayList<>();
-            for (SseEmitter emitter : snapshot) {
-                try {
-                    emitter.send(SseEmitter.event().name("user").data(data));
-                    emitter.send(SseEmitter.event().name("notification").data(data));
-                } catch (Exception e) {
-                    failed.add(emitter);
+            List<UserEmitter> failed = new ArrayList<>();
+            for (UserEmitter ue : snapshot) {
+                boolean sent1 = ue.trySend(SseEmitter.event().name("user").data(data));
+                boolean sent2 = ue.trySend(SseEmitter.event().name("notification").data(data));
+                if (!sent1 || !sent2) {
+                    failed.add(ue);
                 }
             }
-            for (SseEmitter emitter : failed) {
-                removeNotificationEmitter(userId, emitter);
+            for (UserEmitter ue : failed) {
+                try { ue.emitter().complete(); } catch (Exception ignored) {}
+                removeNotificationEmitter(userId, ue);
             }
         });
     }
 
-    /**
-     * Returns online user IDs with active SSE connections in the room.
-     */
     public Set<UUID> onlineUserIds(UUID roomId) {
-        List<UserEmitter> emitters = roomEmitters.get(roomId);
-        if (emitters == null || emitters.isEmpty()) return Collections.emptySet();
-        Set<UUID> ids = new HashSet<>();
-        for (UserEmitter ue : emitters) {
-            ids.add(ue.userId());
-        }
-        return ids;
+        return presenceService.getOnlineUserIds(roomId);
     }
 
-    /**
-     * Checks if a user is online in a specific room.
-     */
     public boolean isUserOnline(UUID roomId, UUID userId) {
-        if (roomId == null || userId == null) return false;
-        List<UserEmitter> emitters = roomEmitters.get(roomId);
-        if (emitters == null || emitters.isEmpty()) return false;
-        for (UserEmitter ue : emitters) {
-            if (ue.userId().equals(userId)) return true;
-        }
-        return false;
+        return presenceService.isUserOnline(roomId, userId);
     }
 
-    /**
-     * Checks if a user has an active connection anywhere.
-     */
     public boolean isUserOnlineAnywhere(UUID userId) {
-        if (userId == null) return false;
-        for (List<UserEmitter> list : roomEmitters.values()) {
-            for (UserEmitter ue : list) {
-                if (ue.userId().equals(userId)) return true;
-            }
-        }
-        List<SseEmitter> notifs = notificationEmitters.get(userId);
-        return notifs != null && !notifs.isEmpty();
+        return presenceService.isUserOnlineAnywhere(userId);
     }
 
-    /**
-     * Debounces presence event broadcast by 2 seconds to avoid reconnection flicker.
-     */
     private void schedulePresenceDebounce(UUID roomId) {
-        presenceDebounceMap.compute(roomId, (k, existing) -> {
+        presenceDebounceMap.asMap().compute(roomId, (k, existing) -> {
             if (existing != null && !existing.isDone()) {
                 existing.cancel(false);
             }
@@ -333,24 +450,48 @@ public class RoomEventHub {
     }
 
     /**
-     * Replays missed events from ring buffer or emits a resync event.
+     * Replays missed events from database and hot cache, or emits 'resync' if gap exceeds 200.
      */
-    private void replayEventsAfter(UUID roomId, long lastSeq, SseEmitter targetEmitter) {
-        Deque<RoomEvent> ringBuffer = roomRingBuffers.get(roomId);
-        if (ringBuffer == null) return;
-
-        List<RoomEvent> toSend = new ArrayList<>();
+    private void replayEventsAfter(UUID roomId, long lastSeq, UserEmitter targetEmitter) {
         boolean needsResync = false;
+        List<RoomEvent> toSend = new ArrayList<>();
 
-        synchronized (ringBuffer) {
-            if (ringBuffer.isEmpty()) return;
-            long oldestSeq = ringBuffer.peekFirst().seq();
-            if (lastSeq < oldestSeq) {
+        try {
+            Optional<Long> oldestOpt = eventRepository.findOldestEventId(roomId);
+            long countAfter = eventRepository.countEventsAfter(roomId, lastSeq);
+
+            if (countAfter > 200 || (oldestOpt.isPresent() && lastSeq < oldestOpt.get())) {
                 needsResync = true;
             } else {
-                for (RoomEvent ev : ringBuffer) {
-                    if (ev.seq() > lastSeq) {
-                        toSend.add(ev);
+                List<com.hackathonos.backend.events.RoomEvent> missed = eventRepository.findEventsAfter(roomId, lastSeq, PageRequest.of(0, 200));
+                for (com.hackathonos.backend.events.RoomEvent ev : missed) {
+                    toSend.add(new RoomEvent(
+                            ev.getId(),
+                            ev.getType(),
+                            ev.getRoomId(),
+                            ev.getActorUserId(),
+                            "Member",
+                            ev.getEntityId(),
+                            ev.getCreatedAt()
+                    ));
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Database replay query failed, falling back to hot ring buffer: {}", e.getMessage());
+            Deque<RoomEvent> ringBuffer = roomRingBuffers.getIfPresent(roomId);
+            if (ringBuffer != null) {
+                synchronized (ringBuffer) {
+                    if (!ringBuffer.isEmpty()) {
+                        long oldestSeq = ringBuffer.peekFirst().seq();
+                        if (lastSeq < oldestSeq) {
+                            needsResync = true;
+                        } else {
+                            for (RoomEvent ev : ringBuffer) {
+                                if (ev.seq() > lastSeq) {
+                                    toSend.add(ev);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -360,56 +501,59 @@ public class RoomEventHub {
             long seq = nextSeq(roomId);
             RoomEvent resync = new RoomEvent(seq, "resync", roomId, null, "System", null, Instant.now());
             try {
-                targetEmitter.send(SseEmitter.event().id(String.valueOf(seq)).name("room").data(resync));
+                targetEmitter.trySend(SseEmitter.event().id(String.valueOf(seq)).name("room").data(resync));
             } catch (Exception ignored) {}
         } else {
             for (RoomEvent ev : toSend) {
-                try {
-                    targetEmitter.send(SseEmitter.event().id(String.valueOf(ev.seq())).name("room").data(ev));
-                } catch (Exception ignored) {
-                    break;
-                }
+                boolean sent = targetEmitter.trySend(SseEmitter.event().id(String.valueOf(ev.seq())).name("room").data(ev));
+                if (!sent) break;
             }
         }
     }
 
     /**
-     * Sends keep-alive ping comment every 25 seconds.
+     * Sends keep-alive ping comment every 15 seconds to prevent proxy socket timeout.
      */
-    @Scheduled(fixedDelay = 25000)
+    @Scheduled(fixedDelay = 15000)
     public void pingAll() {
         for (Map.Entry<UUID, List<UserEmitter>> entry : roomEmitters.entrySet()) {
             List<UserEmitter> failed = new ArrayList<>();
             for (UserEmitter ue : entry.getValue()) {
-                try {
-                    ue.emitter().send(SseEmitter.event().comment("ping"));
-                } catch (Exception e) {
+                boolean sent = ue.trySend(SseEmitter.event().comment("ping"));
+                if (!sent) {
                     failed.add(ue);
                 }
             }
             for (UserEmitter ue : failed) {
+                try { ue.emitter().complete(); } catch (Exception ignored) {}
                 removeRoomEmitter(entry.getKey(), ue);
             }
         }
 
-        for (Map.Entry<UUID, List<SseEmitter>> entry : notificationEmitters.entrySet()) {
-            List<SseEmitter> failed = new ArrayList<>();
-            for (SseEmitter emitter : entry.getValue()) {
-                try {
-                    emitter.send(SseEmitter.event().comment("ping"));
-                } catch (Exception e) {
-                    failed.add(emitter);
+        for (Map.Entry<UUID, List<UserEmitter>> entry : notificationEmitters.entrySet()) {
+            List<UserEmitter> failed = new ArrayList<>();
+            for (UserEmitter ue : entry.getValue()) {
+                boolean sent = ue.trySend(SseEmitter.event().comment("ping"));
+                if (!sent) {
+                    failed.add(ue);
                 }
             }
-            for (SseEmitter emitter : failed) {
-                removeNotificationEmitter(entry.getKey(), emitter);
+            for (UserEmitter ue : failed) {
+                try { ue.emitter().complete(); } catch (Exception ignored) {}
+                removeNotificationEmitter(entry.getKey(), ue);
             }
         }
     }
 
     /**
-     * Closes all active connections gracefully on application shutdown.
+     * Periodically cleans up empty rooms from per-room structures.
      */
+    @Scheduled(fixedRate = 300_000)
+    public void pruneEmptyRooms() {
+        roomEmitters.entrySet().removeIf(e -> e.getValue() == null || e.getValue().isEmpty());
+        notificationEmitters.entrySet().removeIf(e -> e.getValue() == null || e.getValue().isEmpty());
+    }
+
     @PreDestroy
     public void shutdown() {
         for (List<UserEmitter> list : roomEmitters.values()) {
@@ -418,14 +562,44 @@ public class RoomEventHub {
             }
         }
         roomEmitters.clear();
-        for (List<SseEmitter> list : notificationEmitters.values()) {
-            for (SseEmitter emitter : list) {
-                try { emitter.complete(); } catch (Exception ignored) {}
+        for (List<UserEmitter> list : notificationEmitters.values()) {
+            for (UserEmitter ue : list) {
+                try { ue.emitter().complete(); } catch (Exception ignored) {}
             }
         }
         notificationEmitters.clear();
         sseExecutor.shutdown();
         scheduledExecutor.shutdown();
+    }
+
+    public int getActiveConnectionCount() {
+        int count = 0;
+        for (List<UserEmitter> list : roomEmitters.values()) {
+            count += list.size();
+        }
+        for (List<UserEmitter> list : notificationEmitters.values()) {
+            count += list.size();
+        }
+        return count;
+    }
+
+    public Map<String, Object> getRealtimeStats() {
+        Map<String, Integer> perRoom = new HashMap<>();
+        for (Map.Entry<UUID, List<UserEmitter>> entry : roomEmitters.entrySet()) {
+            if (!entry.getValue().isEmpty()) {
+                perRoom.put(entry.getKey().toString(), entry.getValue().size());
+            }
+        }
+        int notifCount = 0;
+        for (List<UserEmitter> list : notificationEmitters.values()) {
+            notifCount += list.size();
+        }
+        return Map.of(
+                "totalConnections", getActiveConnectionCount(),
+                "roomConnections", perRoom,
+                "userNotificationStreams", notifCount,
+                "busType", appProperties.getEvents().getBus()
+        );
     }
 
     private void removeRoomEmitter(UUID roomId, UserEmitter userEmitter) {
@@ -438,13 +612,30 @@ public class RoomEventHub {
         }
     }
 
-    private void removeNotificationEmitter(UUID userId, SseEmitter emitter) {
-        List<SseEmitter> list = notificationEmitters.get(userId);
+    private void removeNotificationEmitter(UUID userId, UserEmitter userEmitter) {
+        List<UserEmitter> list = notificationEmitters.get(userId);
         if (list != null) {
-            list.remove(emitter);
+            list.remove(userEmitter);
             if (list.isEmpty()) {
                 notificationEmitters.remove(userId);
             }
         }
+    }
+
+    private boolean isExpectedDisconnect(Throwable t) {
+        if (t == null) return false;
+        String name = t.getClass().getName();
+        if (name.contains("ClientAbortException") || name.contains("AsyncRequestTimeoutException")) {
+            return true;
+        }
+        String msg = t.getMessage();
+        if (msg != null) {
+            String lower = msg.toLowerCase();
+            if (lower.contains("broken pipe") || lower.contains("connection reset")
+                    || lower.contains("connection was aborted") || lower.contains("closed by peer")) {
+                return true;
+            }
+        }
+        return isExpectedDisconnect(t.getCause());
     }
 }

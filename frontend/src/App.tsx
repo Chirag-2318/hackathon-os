@@ -9,6 +9,8 @@ import { Toaster } from '@/components/ui/sonner';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { SessionExpiryDialog } from '@/components/SessionExpiryDialog';
 import { SoundEffects } from '@/shared/sound/sound-effects';
+import { useNotificationStream } from '@/api/useNotificationStream';
+import { useCurrentUser } from '@/features/auth/useCurrentUser';
 
 const lastErrorToastTimes = new Map<string, number>();
 
@@ -65,6 +67,17 @@ if (import.meta.env.DEV) {
   import('@/utils/contrast-checker').then((m) => m.initContrastChecker());
 }
 
+function NotificationStreamWatcher() {
+  useNotificationStream();
+  return null;
+}
+
+function AuthenticatedNotificationStream() {
+  const { data: currentUser } = useCurrentUser();
+  if (!currentUser) return null;
+  return <NotificationStreamWatcher />;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -72,6 +85,7 @@ function App() {
         <TooltipProvider delayDuration={300}>
           <SoundEffects>
             <MotionTreeWrapper>
+              <AuthenticatedNotificationStream />
               <OfflineBanner />
               <AppRouter />
               <SessionExpiryDialog />

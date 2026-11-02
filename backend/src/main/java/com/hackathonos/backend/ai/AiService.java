@@ -6,6 +6,7 @@ import com.hackathonos.backend.brief.BriefRepository;
 import com.hackathonos.backend.common.error.*;
 import com.hackathonos.backend.common.security.CurrentUser;
 import com.hackathonos.backend.common.security.RateLimiter;
+import com.hackathonos.backend.common.concurrency.ExternalCallBulkhead;
 import com.hackathonos.backend.users.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +45,7 @@ public class AiService {
     private final UserAiKeyService userAiKeyService;
     private final CurrentUser currentUser;
     private final Semaphore concurrencyLimiter;
+    private final ExternalCallBulkhead bulkhead;
     private final ConcurrentHashMap<UUID, Semaphore> userConcurrencyLimiters = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Boolean> lastCallOkMap = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper;
@@ -59,6 +61,22 @@ public class AiService {
             CurrentUser currentUser,
             @org.springframework.beans.factory.annotation.Autowired(required = false)
             AiUsageDailyRepository usageRepository) {
+        this(llmClient, properties, circuitBreaker, rateLimiter, briefRepository, userAiKeyService, currentUser, usageRepository, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AiService(
+            LlmClient llmClient,
+            AiProperties properties,
+            AiCircuitBreaker circuitBreaker,
+            RateLimiter rateLimiter,
+            BriefRepository briefRepository,
+            UserAiKeyService userAiKeyService,
+            CurrentUser currentUser,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            AiUsageDailyRepository usageRepository,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            ExternalCallBulkhead bulkhead) {
         this.llmClient = llmClient;
         this.properties = properties;
         this.circuitBreaker = circuitBreaker;
@@ -67,6 +85,7 @@ public class AiService {
         this.userAiKeyService = userAiKeyService;
         this.currentUser = currentUser;
         this.usageRepository = usageRepository;
+        this.bulkhead = bulkhead != null ? bulkhead : new ExternalCallBulkhead(6, 3, 2, 5000);
         this.concurrencyLimiter = new Semaphore(properties.getMaxConcurrency(), true);
         this.objectMapper = new ObjectMapper()
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -287,7 +306,7 @@ public class AiService {
         }
 
         Semaphore userLimiter = actingUserId != null
-                ? userConcurrencyLimiters.computeIfAbsent(actingUserId, k -> new Semaphore(2, true))
+                ? userConcurrencyLimiters.computeIfAbsent(actingUserId, k -> new Semaphore(4, true))
                 : null;
 
         boolean userAcquired = false;
@@ -299,13 +318,13 @@ public class AiService {
             }
         }
 
+        ExternalCallBulkhead.Permit bulkheadPermit;
         try {
-            concurrencyLimiter.acquire();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            bulkheadPermit = bulkhead.acquire(ExternalCallBulkhead.BULKHEAD_AI_LLM);
+        } catch (Exception e) {
             if (userAcquired && userLimiter != null) userLimiter.release();
             recordUsage(actingUserId, false);
-            throw new BadGatewayException("AI_FAILED", "AI execution interrupted while acquiring concurrency permit");
+            throw e;
         }
 
         long start = System.currentTimeMillis();
@@ -378,7 +397,9 @@ public class AiService {
             if (lastException instanceof RuntimeException re) throw re;
             throw new BadGatewayException("AI_UNAVAILABLE", "AI provider call failed: " + (lastException != null ? lastException.getMessage() : "Unknown error"));
         } finally {
-            concurrencyLimiter.release();
+            if (bulkheadPermit != null) {
+                bulkheadPermit.close();
+            }
             if (userAcquired && userLimiter != null) {
                 userLimiter.release();
             }
@@ -390,7 +411,8 @@ public class AiService {
     }
 
     public String transcribeAudio(UUID userId, String filename, byte[] audioBytes, String promptHint) {
-        ResolvedUserKey resolved = resolveUserAndKey(userId);
+        try (ExternalCallBulkhead.Permit permit = bulkhead.acquire(ExternalCallBulkhead.BULKHEAD_AI_STT)) {
+            ResolvedUserKey resolved = resolveUserAndKey(userId);
         String sttUrl = properties.getSttBaseUrl().replaceAll("/+$", "") + "/audio/transcriptions";
 
         RestClient sttClient = RestClient.builder().build();
@@ -425,8 +447,10 @@ public class AiService {
             }
             return "";
         } catch (Exception e) {
+            if (e instanceof ServerBusyException) throw (ServerBusyException) e;
             log.error("Audio transcription failed: {}", e.getMessage());
             throw new BadGatewayException("AI_UNAVAILABLE", "Audio transcription failed: " + e.getMessage());
+        }
         }
     }
 

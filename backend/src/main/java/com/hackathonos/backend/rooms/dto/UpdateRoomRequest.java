@@ -24,5 +24,21 @@ public record UpdateRoomRequest(
         String startsAt,
         String freezeAt,
         String endsAt,
-        Boolean deadlineOverridden
-) {}
+        Boolean deadlineOverridden,
+        Long baseVersion
+) {
+    public UpdateRoomRequest(
+            String name,
+            String description,
+            String projectDescription,
+            String eventStart,
+            String timezone,
+            Integer durationHours,
+            String startsAt,
+            String freezeAt,
+            String endsAt,
+            Boolean deadlineOverridden
+    ) {
+        this(name, description, projectDescription, eventStart, timezone, durationHours, startsAt, freezeAt, endsAt, deadlineOverridden, null);
+    }
+}

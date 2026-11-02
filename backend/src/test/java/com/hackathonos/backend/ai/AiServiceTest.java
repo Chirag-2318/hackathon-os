@@ -1,63 +1,121 @@
 package com.hackathonos.backend.ai;
 
-import com.hackathonos.backend.common.error.BadRequestException;
+import com.hackathonos.backend.brief.BriefRepository;
+import com.hackathonos.backend.common.error.AiKeyMissingException;
 import com.hackathonos.backend.common.error.TooManyRequestsException;
-import com.hackathonos.backend.common.security.SecretCipher;
-import com.hackathonos.backend.users.User;
-import com.hackathonos.backend.users.UserApiKey;
-import com.hackathonos.backend.users.UserApiKeyRepository;
-import com.hackathonos.backend.users.UserRepository;
+import com.hackathonos.backend.common.security.CurrentUser;
+import com.hackathonos.backend.common.security.RateLimiter;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
 
-@SpringBootTest
-@ActiveProfiles("dev")
+@ExtendWith(MockitoExtension.class)
 class AiServiceTest {
 
-    @Autowired
+    @Mock
+    private LlmClient llmClient;
+
+    @Mock
+    private BriefRepository briefRepository;
+
+    @Mock
+    private UserAiKeyService userAiKeyService;
+
+    @Mock
+    private CurrentUser currentUser;
+
+    private AiProperties properties;
+    private AiCircuitBreaker circuitBreaker;
+    private RateLimiter rateLimiter;
     private AiService aiService;
 
-    @Autowired
-    private UserRepository userRepository;
+    private final Instant baseTime = Instant.parse("2026-10-10T12:00:00Z");
 
-    @Autowired
-    private UserApiKeyRepository apiKeyRepository;
+    @BeforeEach
+    void setUp() {
+        Clock clock = Clock.fixed(baseTime, ZoneId.of("UTC"));
+        rateLimiter = new RateLimiter(clock);
+        circuitBreaker = new AiCircuitBreaker();
+        // default properties: userRatePerMinute = 10, fallback = false
+        properties = new AiProperties(
+                "https://api.groq.com/openai/v1",
+                "",
+                false,
+                null,
+                "llama-3.3-70b-versatile",
+                null,
+                null,
+                true,
+                45,
+                2,
+                4,
+                10,
+                true,
+                "https://api.groq.com/openai/v1",
+                "whisper-large-v3"
+        );
 
-    @Autowired
-    private SecretCipher secretCipher;
-
-    @Test
-    void testThrowsNoApiKeyWhenUserHasNoKey() {
-        User user = userRepository.save(new User("DEV", "ai_nokey_" + UUID.randomUUID() + "@dev.com", "No Key User", null, null, null));
-        BadRequestException ex = assertThrows(BadRequestException.class, () ->
-                aiService.complete(user.getId(), "Hello AI"));
-        assertEquals("NO_API_KEY", ex.getCode());
+        aiService = new AiService(
+                llmClient,
+                properties,
+                circuitBreaker,
+                rateLimiter,
+                briefRepository,
+                userAiKeyService,
+                currentUser,
+                null
+        );
     }
 
     @Test
-    void testAiCompletionAndRateLimiter() {
-        User user = userRepository.save(new User("DEV", "ai_limiter_" + UUID.randomUUID() + "@dev.com", "AI User", null, null, null));
-        String rawSecret = "sk-test-secret-key-123456789";
-        apiKeyRepository.save(new UserApiKey(user.getId(), "OPENAI", "OpenAI Key", secretCipher.encrypt(rawSecret), "6789"));
+    @DisplayName("Should throw AiKeyMissingException when user has no API key configured")
+    void testThrowsNoApiKeyWhenUserHasNoKey() {
+        UUID userId = UUID.randomUUID();
+        when(userAiKeyService.getDecryptedKey(userId)).thenReturn(Optional.empty());
 
-        aiService.setOverrideClient(prompt -> "AI Response to: " + prompt);
+        AiKeyMissingException ex = assertThrows(AiKeyMissingException.class, () ->
+                aiService.complete(userId, "Hello AI"));
+        assertTrue(ex.getMessage().contains("You haven't added your API key yet"));
+    }
+
+    @Test
+    @DisplayName("Should execute completions and enforce rate limit after 10 requests per minute")
+    void testAiCompletionAndRateLimiter() {
+        UUID userId = UUID.randomUUID();
+        String rawSecret = "sk-test-secret-key-123456789";
+        when(userAiKeyService.getDecryptedKey(userId)).thenReturn(Optional.of(rawSecret));
+        when(llmClient.chat(any(LlmRequest.class), eq(rawSecret)))
+                .thenAnswer(inv -> {
+                    LlmRequest req = inv.getArgument(0);
+                    return new LlmResult("AI Response to: " + req.messages().get(0).content(), 10, 10, 20, "stop");
+                });
 
         // Run 10 calls successfully
         for (int i = 0; i < 10; i++) {
-            String res = aiService.complete(user.getId(), "Prompt " + i);
+            String res = aiService.complete(userId, "Prompt " + i);
             assertNotNull(res);
+            assertThat(res).isEqualTo("AI Response to: Prompt " + i);
             assertFalse(res.contains(rawSecret), "API key must never appear in response");
         }
 
-        // 11th call exceeds rate limit (10 per hour)
+        // 11th call exceeds rate limit (10 per minute)
         TooManyRequestsException ex = assertThrows(TooManyRequestsException.class, () ->
-                aiService.complete(user.getId(), "Prompt 11"));
-        assertEquals("AI_RATE_LIMIT", ex.getCode());
+                aiService.complete(userId, "Prompt 11"));
+        assertEquals("TOO_MANY_REQUESTS", ex.getCode());
     }
 }

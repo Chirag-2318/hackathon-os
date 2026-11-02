@@ -47,11 +47,49 @@ public class IdeasController {
         return ideasService.createIdea(roomId, request, currentUser.get());
     }
 
+    @PostMapping("/ideas/{ideaId}/vote")
+    public ResponseEntity<java.util.Map<String, Object>> voteIdea(
+            @PathVariable UUID roomId,
+            @PathVariable UUID ideaId) {
+        int count = ideasService.voteIdea(roomId, ideaId, currentUser.get());
+        return ResponseEntity.ok(java.util.Map.of("ideaId", ideaId.toString(), "votes", count, "hasVoted", true));
+    }
+
+    @DeleteMapping("/ideas/{ideaId}/vote")
+    public ResponseEntity<java.util.Map<String, Object>> unvoteIdea(
+            @PathVariable UUID roomId,
+            @PathVariable UUID ideaId) {
+        int count = ideasService.unvoteIdea(roomId, ideaId, currentUser.get());
+        return ResponseEntity.ok(java.util.Map.of("ideaId", ideaId.toString(), "votes", count, "hasVoted", false));
+    }
+
     @PatchMapping("/ideas/{ideaId}")
     public IdeaDto updateIdea(
             @PathVariable UUID roomId,
             @PathVariable UUID ideaId,
+            @RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
             @RequestBody PostIdeaRequest request) {
+        PostIdeaRequest effRequest = request;
+        if (effRequest.baseVersion() == null && ifMatch != null && !ifMatch.isBlank()) {
+            try {
+                String clean = ifMatch.replace("\"", "").replace("W/", "").trim();
+                Long parsed = Long.parseLong(clean);
+                effRequest = new PostIdeaRequest(
+                        request.text(),
+                        request.links(),
+                        request.notes(),
+                        request.anonymous(),
+                        parsed
+                );
+            } catch (NumberFormatException ignored) {}
+        }
+        return ideasService.updateIdea(roomId, ideaId, effRequest, currentUser.get());
+    }
+
+    private IdeaDto _unused_old_updateIdea(
+            UUID roomId,
+            UUID ideaId,
+            PostIdeaRequest request) {
         return ideasService.updateIdea(roomId, ideaId, request, currentUser.get());
     }
 

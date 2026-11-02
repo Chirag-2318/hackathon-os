@@ -298,7 +298,6 @@ public class PitchDeckService {
     /**
      * Uses AI to propose draft content for a slide based on PRD and the slide's guide question.
      */
-    @Transactional(readOnly = true)
     public PitchDtos.DraftSlideResponse draftSlide(UUID roomId, UUID slideId, User user) {
         roomAccess.requireMember(roomId, user);
         PitchSlide slide = slideRepository.findById(slideId)

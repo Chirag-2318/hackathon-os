@@ -45,14 +45,6 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addInterceptor(roomChangeInterceptor).addPathPatterns("/api/v1/**");
     }
 
-    @Override
-    public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        String uploadDir = new File(appProperties.getUploadDir()).getAbsolutePath();
-        registry.addResourceHandler("/uploads/**")
-                .addResourceLocations("file:" + uploadDir + "/")
-                .setCacheControl(CacheControl.maxAge(Duration.ofDays(365)).cachePublic());
-    }
-
     private static HandlerMethodArgumentResolver createUserResolver(CurrentUser currentUser) {
         return new HandlerMethodArgumentResolver() {
             @Override

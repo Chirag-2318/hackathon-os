@@ -13,6 +13,7 @@ public class Pitch {
     private UUID roomId;
 
     @Column(name = "version", nullable = false)
+    @Version
     private int version = 1;
 
     @Column(name = "beats", nullable = false, columnDefinition = "jsonb")

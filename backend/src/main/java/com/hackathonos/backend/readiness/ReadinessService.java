@@ -226,7 +226,6 @@ public class ReadinessService {
     /**
      * Evaluates simulated defense answers using the pure HeuristicJudge or AI model.
      */
-    @Transactional
     public ReadinessDtos.ValidateSimulationResponse validateSimulation(UUID roomId, User user, ReadinessDtos.ValidateSimulationRequest req) {
         roomAccess.requireMember(roomId, user);
         List<BriefRubricItem> rubrics = briefRepository.findByRoomId(roomId)

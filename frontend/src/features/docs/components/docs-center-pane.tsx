@@ -27,10 +27,50 @@ export function DocsCenterPane({ file, onSaveContent, roomId }: DocsCenterPanePr
   const debounceTimerRef = useRef<any>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  const [activeEditors, setActiveEditors] = useState<string[]>([]);
+
   useEffect(() => {
     setEditText(file.content);
     setSaveStatus('idle');
   }, [file.id, file.content]);
+
+  // Ephemeral editing presence heartbeat (every 15s) and active editors polling (every 10s)
+  useEffect(() => {
+    if (!roomId || !file.name) return;
+
+    const sendHeartbeat = () => {
+      if (mode === 'edit') {
+        fetch(`/api/v1/rooms/${roomId}/docs/${encodeURIComponent(file.name)}/editing`, {
+          method: 'POST',
+          credentials: 'include',
+        }).catch(() => {});
+      }
+    };
+
+    const checkEditors = () => {
+      fetch(`/api/v1/rooms/${roomId}/docs/${encodeURIComponent(file.name)}/editors`, {
+        credentials: 'include',
+      })
+        .then((res) => (res.ok ? res.json() : []))
+        .then((editors: string[]) => {
+          if (Array.isArray(editors)) {
+            setActiveEditors(editors);
+          }
+        })
+        .catch(() => {});
+    };
+
+    sendHeartbeat();
+    checkEditors();
+
+    const heartbeatInterval = setInterval(sendHeartbeat, 15000);
+    const pollInterval = setInterval(checkEditors, 10000);
+
+    return () => {
+      clearInterval(heartbeatInterval);
+      clearInterval(pollInterval);
+    };
+  }, [roomId, file.name, mode]);
 
   // Restore return state if coming back from Diagram Studio
   useEffect(() => {
@@ -167,6 +207,12 @@ export function DocsCenterPane({ file, onSaveContent, roomId }: DocsCenterPanePr
           <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
             v{file.version || 1}
           </span>
+          {activeEditors.length > 0 && (
+            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 flex items-center gap-1.5 shrink-0">
+              <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
+              {activeEditors.join(', ')} is editing
+            </span>
+          )}
 
           {/* Health Chip with Popover */}
           <Popover>

@@ -58,9 +58,11 @@ public class PlanValidationService {
             "tech", List.of("TECH_STACK.md", "ARCHITECTURE.md"),
             "phases-design", List.of("PHASES.md", "DESIGN.md"),
             "phases", List.of("PHASES.md", "DESIGN.md"),
+            "tasks", List.of("TASKS.md"),
             "demo-qna", List.of("DEMO_SCRIPT.md", "QNA.md"),
             "demo", List.of("DEMO_SCRIPT.md", "QNA.md")
     );
+
 
     public static final Map<String, Set<String>> CRITICAL_HEADINGS = Map.of(
             "PRD.md", Set.of("functional requirements"),
@@ -373,32 +375,56 @@ public class PlanValidationService {
             throw new ConflictException("PLAN_LOCKED", "Plan is locked");
         }
 
-        int stepNumber = resolveStepNumber(stepIdentifier);
-        String stepKey = PlanPromptService.STEP_KEYS.get(stepNumber - 1);
+        int stepNumber;
+        String stepKey;
+        if ("tasks".equalsIgnoreCase(stepIdentifier) || "task".equalsIgnoreCase(stepIdentifier)) {
+            stepNumber = 4;
+            stepKey = "tasks";
+        } else {
+            stepNumber = resolveStepNumber(stepIdentifier);
+            stepKey = PlanPromptService.STEP_KEYS.get(stepNumber - 1);
+        }
 
         // Enforce step ordering
         if (stepNumber > 1) {
-            String prevKey = PlanPromptService.STEP_KEYS.get(stepNumber - 2);
-            PlanStep prev = planStepRepository.findByRoomIdAndStepKey(roomId, prevKey).orElse(null);
-            if (prev == null || !prev.isValidated()) {
+            String prevKey = "tasks".equals(stepKey) ? "phases-design" : PlanPromptService.STEP_KEYS.get(stepNumber - 2);
+            boolean prevValidated = planStepRepository.findByRoomIdAndStepKey(roomId, prevKey)
+                    .map(PlanStep::isValidated)
+                    .orElse(false);
+            if (!prevValidated) {
+                String alias = switch (prevKey) {
+                    case "prd-mvp" -> "prd";
+                    case "stack-arch" -> "tech";
+                    case "phases-design" -> "phases";
+                    case "demo-qna" -> "demo";
+                    default -> null;
+                };
+                if (alias != null) {
+                    prevValidated = planStepRepository.findByRoomIdAndStepKey(roomId, alias)
+                            .map(PlanStep::isValidated)
+                            .orElse(false);
+                }
+            }
+            if (!prevValidated) {
                 throw new ConflictException("STEP_ORDER", "Previous step (" + prevKey + ") must be validated first");
             }
         }
 
-        List<ValidationIssueDto> issues = new ArrayList<>();
 
-        // Sanity gates for plan steps 1, 2, 3, 5
-        if (checkNotADocument(rawContent, issues)) {
-            return buildEarlyFailureResponse(stepKey, issues, diagnostics);
-        }
-        if (checkLooksLikePrompt(rawContent, issues)) {
-            return buildEarlyFailureResponse(stepKey, issues, diagnostics);
-        }
+        List<ValidationIssueDto> issues = new ArrayList<>();
 
         // a) Normalise
         String normalized = normalizeInput(rawContent);
         if (normalized.trim().startsWith("[")) {
             normalized = convertJsonArrayToMarkdown(stepKey, normalized);
+        }
+
+        // Sanity gates for plan steps 1, 2, 3, 5
+        if (checkNotADocument(normalized, issues)) {
+            return buildEarlyFailureResponse(stepKey, issues, diagnostics);
+        }
+        if (checkLooksLikePrompt(normalized, issues)) {
+            return buildEarlyFailureResponse(stepKey, issues, diagnostics);
         }
 
         // b) Split into documents by markers
@@ -495,7 +521,8 @@ public class PlanValidationService {
 
         if (!ok && override) {
             roomAccess.requireLeader(roomId, user);
-            if (stepNumber != 4) {
+            boolean isTasksStep = "tasks".equalsIgnoreCase(stepKey) || "task".equalsIgnoreCase(stepKey);
+            if (!isTasksStep) {
                 boolean onlyStructure = issues.stream()
                         .filter(i -> "BLOCK".equalsIgnoreCase(i.severity()))
                         .allMatch(this::isStructureBlockIssue);
@@ -569,8 +596,8 @@ public class PlanValidationService {
                 planComplete = true;
             }
 
-            // Trigger prepare for step n+1 if n < 5
-            if (stepNumber < 5) {
+            // Trigger prepare for step n+1 if n < PlanPromptService.STEP_KEYS.size()
+            if (stepNumber < PlanPromptService.STEP_KEYS.size()) {
                 planPrepareServiceProvider.ifAvailable(svc -> {
                     svc.triggerPrepareAsync(roomId, stepNumber + 1);
                 });
@@ -772,11 +799,13 @@ public class PlanValidationService {
                 if (n == 5) return 4;
             } catch (Exception ignored) {}
         }
+        if ("tasks".equals(s) || "task".equals(s)) return 4;
         String normalized = PlanPromptService.normalizeStepKey(s);
         int idx = PlanPromptService.STEP_KEYS.indexOf(normalized);
         if (idx >= 0) return idx + 1;
         throw new BadRequestException("INVALID_STEP", "Unknown step: " + stepIdentifier);
     }
+
 
     private String normalizeInput(String content) {
         if (content == null) return "";
@@ -1940,7 +1969,7 @@ public class PlanValidationService {
 
     private String convertJsonArrayToMarkdown(String stepKey, String json) {
         try {
-            if ("phases".equalsIgnoreCase(stepKey)) {
+            if ("phases".equalsIgnoreCase(stepKey) || "phases-design".equalsIgnoreCase(stepKey)) {
                 com.fasterxml.jackson.databind.JsonNode arr = objectMapper.readTree(json);
                 if (arr.isArray()) {
                     StringBuilder sb = new StringBuilder();

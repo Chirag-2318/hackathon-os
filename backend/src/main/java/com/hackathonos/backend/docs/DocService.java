@@ -232,6 +232,32 @@ The following items are intentionally cut from the initial hackathon sprint to p
 
     private record DocTemplate(String title, String content) {}
 
+    public record ActiveEditor(UUID userId, String displayName, Instant expiresAt) {}
+    private final Map<String, Map<UUID, ActiveEditor>> activeDocEditors = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public void touchEditingDoc(UUID roomId, String fileName, User user) {
+        if (roomId == null || fileName == null || user == null) return;
+        String key = roomId + ":" + fileName.toLowerCase();
+        activeDocEditors.computeIfAbsent(key, k -> new java.util.concurrent.ConcurrentHashMap<>())
+                .put(user.getId(), new ActiveEditor(user.getId(), user.getDisplayName(), Instant.now().plusSeconds(120)));
+    }
+
+    public List<String> getActiveEditors(UUID roomId, String fileName, User user) {
+        if (roomId == null || fileName == null) return List.of();
+        String key = roomId + ":" + fileName.toLowerCase();
+        Map<UUID, ActiveEditor> editors = activeDocEditors.get(key);
+        if (editors == null || editors.isEmpty()) return List.of();
+        Instant now = Instant.now();
+        List<String> names = new ArrayList<>();
+        editors.entrySet().removeIf(e -> now.isAfter(e.getValue().expiresAt()));
+        for (var entry : editors.values()) {
+            if (user == null || !entry.userId().equals(user.getId())) {
+                names.add(entry.displayName());
+            }
+        }
+        return names;
+    }
+
     private final DocRepository docRepository;
     private final DocVersionRepository versionRepository;
     private final DocCommentRepository commentRepository;
@@ -393,7 +419,8 @@ The following items are intentionally cut from the initial hackathon sprint to p
                 versionDtos,
                 doc.getId().toString(),
                 health,
-                commentsCount
+                commentsCount,
+                doc.getVersion() != null ? doc.getVersion() : (long) doc.getCurrentVersion()
         );
     }
 
@@ -421,7 +448,11 @@ The following items are intentionally cut from the initial hackathon sprint to p
         String currentContent = versions.isEmpty() ? "" : versions.get(0).getContent();
 
         if (req.baseVersion() != null && req.baseVersion() != doc.getCurrentVersion()) {
-            throw new DocConflictException(currentContent, doc.getCurrentVersion());
+            String lastEditor = "teammate";
+            if (doc.getLastEditedBy() != null) {
+                lastEditor = userRepository.findById(doc.getLastEditedBy()).map(User::getDisplayName).orElse("teammate");
+            }
+            throw new DocConflictException(currentContent, doc.getCurrentVersion(), lastEditor, doc.getUpdatedAt());
         }
 
         int nextVersion = doc.getCurrentVersion() + 1;
@@ -433,6 +464,7 @@ The following items are intentionally cut from the initial hackathon sprint to p
 
         doc.setCurrentVersion(nextVersion);
         doc.setUpdatedAt(Instant.now());
+        doc.setLastEditedBy(user != null ? user.getId() : null);
         docRepository.save(doc);
 
         activityLogger.log(room, user, "DOC_EDITED", "edited " + fileName);
@@ -485,6 +517,7 @@ The following items are intentionally cut from the initial hackathon sprint to p
 
         doc.setCurrentVersion(nextVersion);
         doc.setUpdatedAt(Instant.now());
+        doc.setLastEditedBy(user != null ? user.getId() : null);
         docRepository.save(doc);
 
         activityLogger.log(room, user, "DOC_RESTORED", "restored " + fileName + " to v" + version);
@@ -709,7 +742,6 @@ The following items are intentionally cut from the initial hackathon sprint to p
     /**
      * Executes Groq AI assistance for a specific document or highlighted selection.
      */
-    @Transactional
     public DocAiResponse askDocAi(UUID roomId, String fileName, DocAiRequest req, User user) {
         roomAccess.requireMember(roomId, user);
         long start = System.currentTimeMillis();

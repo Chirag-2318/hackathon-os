@@ -25,14 +25,27 @@ export const ideaService = {
     });
   },
 
-  async updateIdea(idea: Idea): Promise<Idea> {
+  async updateIdea(idea: Idea & { baseVersion?: number }): Promise<Idea> {
     return apiFetch<Idea>(`/api/v1/rooms/${idea.roomId}/ideas/${idea.id}`, {
       method: 'PATCH',
       body: JSON.stringify({
         text: idea.text,
         links: idea.links,
         notes: idea.notes,
+        baseVersion: idea.baseVersion ?? (idea as any).version ?? null,
       }),
+    });
+  },
+
+  async voteIdea(roomId: string, ideaId: string): Promise<{ ideaId: string; votes: number; hasVoted: boolean }> {
+    return apiFetch<{ ideaId: string; votes: number; hasVoted: boolean }>(`/api/v1/rooms/${roomId}/ideas/${ideaId}/vote`, {
+      method: 'POST',
+    });
+  },
+
+  async unvoteIdea(roomId: string, ideaId: string): Promise<{ ideaId: string; votes: number; hasVoted: boolean }> {
+    return apiFetch<{ ideaId: string; votes: number; hasVoted: boolean }>(`/api/v1/rooms/${roomId}/ideas/${ideaId}/vote`, {
+      method: 'DELETE',
     });
   },
 

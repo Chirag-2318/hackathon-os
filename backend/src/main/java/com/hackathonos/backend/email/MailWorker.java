@@ -64,7 +64,7 @@ public class MailWorker {
 
     @Scheduled(fixedDelay = 5000)
     public void processOutbox() {
-        advisoryLockService.tryLockAndRun(1004L, this::doProcessOutbox);
+        doProcessOutbox();
     }
 
     private void doProcessOutbox() {
@@ -101,11 +101,20 @@ public class MailWorker {
             boolean limitNear = mailProperties.getDailyLimit() > 0 &&
                     dailySent >= (mailProperties.getDailyLimit() - 50);
 
-            List<EmailOutbox> pending = outboxRepository.findByStatusAndNextAttemptAtLessThanEqualOrderByPriorityDescNextAttemptAtAsc(
-                    EmailOutbox.Status.PENDING,
-                    Instant.now(),
-                    PageRequest.of(0, 20)
-            );
+            // Claim pending items inside a short transaction using transaction-scoped advisory lock.
+            // This releases the pooled DB connection immediately before slow SMTP I/O begins.
+            List<EmailOutbox> pending = advisoryLockService.tryXactLockAndClaim(1004L, () -> {
+                List<EmailOutbox> items = outboxRepository.findByStatusAndNextAttemptAtLessThanEqualOrderByPriorityDescNextAttemptAtAsc(
+                        EmailOutbox.Status.PENDING,
+                        Instant.now(),
+                        PageRequest.of(0, 20)
+                );
+                for (EmailOutbox item : items) {
+                    item.setNextAttemptAt(Instant.now().plus(Duration.ofMinutes(5)));
+                    outboxRepository.save(item);
+                }
+                return items;
+            }).orElse(Collections.emptyList());
 
             if (pending.isEmpty()) {
                 return;

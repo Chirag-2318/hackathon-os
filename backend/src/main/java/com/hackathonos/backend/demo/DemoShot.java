@@ -32,6 +32,10 @@ public class DemoShot {
     @Column(name = "proof_url", columnDefinition = "TEXT")
     private String proofUrl;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     public DemoShot() {}
 
     public DemoShot(UUID roomId, int position, String title, int durationSec, String notes, boolean done) {
@@ -66,4 +70,7 @@ public class DemoShot {
 
     public String getProofUrl() { return proofUrl; }
     public void setProofUrl(String proofUrl) { this.proofUrl = proofUrl; }
+
+    public Long getVersion() { return version; }
+    public void setVersion(Long version) { this.version = version; }
 }

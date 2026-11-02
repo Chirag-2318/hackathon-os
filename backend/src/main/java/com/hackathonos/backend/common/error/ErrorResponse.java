@@ -44,4 +44,12 @@ public record ErrorResponse(
     public ErrorResponse(String timestamp, int status, String code, String message, String requestId, Map<String, String> fieldErrors, List<String> details) {
         this(code, message, fieldErrors != null ? fieldErrors : details, requestId, timestamp, status);
     }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("fieldErrors")
+    public Object fieldErrors() {
+        if (details instanceof java.util.Map<?, ?>) {
+            return details;
+        }
+        return null;
+    }
 }

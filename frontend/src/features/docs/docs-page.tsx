@@ -10,7 +10,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { PanelRightClose, PanelRightOpen, FileText } from 'lucide-react';
 import { toast } from 'sonner';
-import { saveCachedDocs, getCachedDocs, EmptyState, ErrorState, ConflictBanner, apiFetch } from '@/design';
+import { saveCachedDocs, getCachedDocs, EmptyState, ErrorState, ConflictBanner, apiFetch, useLiveContext } from '@/design';
+import { ConflictDialog } from '@/components/conflict/ConflictDialog';
 import { exportRoomZip } from '@/shared/utils/room-export';
 
 export function DocsPage() {
@@ -89,38 +90,93 @@ export function DocsPage() {
 
   const selectedFile = files.find(f => f.id === selectedFileId);
 
-  const [conflictState, setConflictState] = useState<{
-    remoteContent: string;
-    localContent: string;
-    lastEditedBy?: string;
+  const { lastEvent } = useLiveContext();
+  const [remoteUpdateBanner, setRemoteUpdateBanner] = useState<{
+    editorName: string;
+    serverVersion: number;
+    serverContent: string;
+    updatedAt?: string;
   } | null>(null);
 
+  const [conflictDialogState, setConflictDialogState] = useState<{
+    open: boolean;
+    localContent: string;
+    remoteContent: string;
+    serverVersion: number;
+    lastEditorName?: string;
+    updatedAt?: string;
+  }>({
+    open: false,
+    localContent: '',
+    remoteContent: '',
+    serverVersion: 0,
+  });
+
+  // SSE Collision Avoidance: non-blocking banner if current doc updated by teammate
+  useEffect(() => {
+    if (!lastEvent || !selectedFile || !roomId) return;
+    if (lastEvent.type === 'docs' || lastEvent.resource === 'doc' || lastEvent.resource === 'docs') {
+      const isCurrentDoc = !lastEvent.id || lastEvent.id === selectedFile.id || lastEvent.id === selectedFile.name;
+      if (isCurrentDoc) {
+        docsService.getDoc(roomId, selectedFile.name).then((fresh) => {
+          if (fresh && (fresh.version || 1) > (selectedFile.version || 1)) {
+            setRemoteUpdateBanner({
+              editorName: fresh.lastEditedBy?.displayName || fresh.lastEditedBy?.login || 'A teammate',
+              serverVersion: fresh.version || 1,
+              serverContent: fresh.content || '',
+              updatedAt: fresh.updatedAt,
+            });
+          }
+        }).catch(() => {});
+      }
+    }
+  }, [lastEvent, roomId, selectedFile?.id, selectedFile?.name, selectedFile?.version]);
+
   // Save new version
-  const handleSaveContent = async (newContent: string) => {
+  const handleSaveContent = async (newContent: string, explicitVersion?: number) => {
     if (!roomId || !selectedFile) return;
 
     try {
+      const targetVersion = explicitVersion !== undefined ? explicitVersion : selectedFile.version;
       const updated = await docsService.updateDoc(roomId, selectedFile.name, {
         content: newContent,
-        baseVersion: selectedFile.version,
+        baseVersion: targetVersion,
       });
-      setConflictState(null);
+      setConflictDialogState(prev => ({ ...prev, open: false }));
+      setRemoteUpdateBanner(null);
       setFiles(prev => prev.map(f => f.id === selectedFile.id ? {
         ...f,
         content: updated.content,
-        version: updated.currentVersion ?? ((f.version || 1) + 1),
+        version: updated.version ?? updated.currentVersion ?? ((f.version || 1) + 1),
         versions: updated.versions || f.versions,
         health: updated.health || (f as any).health,
       } : f));
       toast.success(`Saved ${selectedFile.name}`);
     } catch (err: any) {
-      if (err?.status === 409 || err?.message?.includes('DOC_CHANGED')) {
-        const fresh = await docsService.getDoc(roomId, selectedFile.name);
-        setConflictState({
-          remoteContent: fresh.content,
+      if (err?.status === 409 || err?.code === 'EDIT_CONFLICT' || err?.message?.includes('DOC_CHANGED')) {
+        const fresh = await docsService.getDoc(roomId, selectedFile.name).catch(() => null);
+        const serverVersion = Number(err?.details?.currentVersion ?? err?.details?.version ?? fresh?.version ?? (selectedFile.version || 1) + 1);
+        const remoteContent = err?.details?.currentContent ?? fresh?.content ?? '';
+        const editorName = err?.details?.lastEditorName ?? err?.details?.lastEditedBy?.displayName ?? fresh?.lastEditedBy?.displayName ?? 'A teammate';
+        const updatedAt = err?.details?.updatedAt ?? fresh?.updatedAt ?? new Date().toISOString();
+
+        // Stash local draft
+        try {
+          localStorage.setItem(`hos:doc:conflict:${selectedFile.name}`, JSON.stringify({
+            content: newContent,
+            timestamp: Date.now()
+          }));
+        } catch {}
+
+        setConflictDialogState({
+          open: true,
           localContent: newContent,
-          lastEditedBy: err?.lastEditedBy || fresh?.lastEditedBy || (fresh as any)?.updatedBy || 'teammate',
+          remoteContent,
+          serverVersion,
+          lastEditorName: editorName,
+          updatedAt,
         });
+
         toast.error('This document was updated by another team member.');
       } else {
         toast.error(err?.message || 'Failed to save document');
@@ -262,24 +318,59 @@ export function DocsPage() {
         {/* CENTER document pane (flex-1) */}
         {selectedFile ? (
           <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-            {conflictState && (
-              <ConflictBanner
-                lastEditedBy={conflictState.lastEditedBy || 'Another teammate'}
-                remoteContent={conflictState.remoteContent}
-                localContent={conflictState.localContent}
-                onKeepMine={() => {
-                  handleSaveContent(conflictState.localContent);
-                }}
-                onUseRemote={() => {
-                  setFiles(prev => prev.map(f => f.id === selectedFile.id ? { ...f, content: conflictState.remoteContent } : f));
-                  setConflictState(null);
-                  toast.info('Loaded latest document version.');
-                }}
-                onManualMerge={(merged) => {
-                  handleSaveContent(merged);
-                }}
-              />
+            {remoteUpdateBanner && (
+              <div className="flex items-center justify-between gap-3 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-xs text-amber-900 dark:text-amber-200 shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="size-2 rounded-full bg-amber-500 animate-pulse" />
+                  <span>Updated by <strong>@{remoteUpdateBanner.editorName}</strong> just now.</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConflictDialogState({
+                        open: true,
+                        localContent: selectedFile.content || '',
+                        remoteContent: remoteUpdateBanner.serverContent,
+                        serverVersion: remoteUpdateBanner.serverVersion,
+                        lastEditorName: remoteUpdateBanner.editorName,
+                        updatedAt: remoteUpdateBanner.updatedAt,
+                      });
+                    }}
+                    className="px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-700 text-white font-medium transition-colors"
+                  >
+                    View changes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRemoteUpdateBanner(null)}
+                    className="px-2 py-0.5 rounded hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 transition-colors"
+                  >
+                    Ignore
+                  </button>
+                </div>
+              </div>
             )}
+
+            <ConflictDialog
+              open={conflictDialogState.open}
+              onOpenChange={(open) => setConflictDialogState(prev => ({ ...prev, open }))}
+              entityType="document"
+              entityName={selectedFile?.name}
+              localContent={conflictDialogState.localContent}
+              remoteContent={conflictDialogState.remoteContent}
+              serverVersion={conflictDialogState.serverVersion}
+              lastEditorName={conflictDialogState.lastEditorName}
+              updatedAt={conflictDialogState.updatedAt}
+              onKeepMine={(serverVersion) => handleSaveContent(conflictDialogState.localContent, serverVersion)}
+              onTakeTheirs={(serverContent, serverVersion) => {
+                setFiles(prev => prev.map(f => f.id === selectedFile.id ? { ...f, content: serverContent, version: serverVersion } : f));
+                setConflictDialogState(prev => ({ ...prev, open: false }));
+                setRemoteUpdateBanner(null);
+                toast.info('Loaded latest document version.');
+              }}
+              onSaveMerged={(mergedContent, serverVersion) => handleSaveContent(mergedContent, serverVersion)}
+            />
             <div className="flex-1 min-h-0">
               <DocsCenterPane
                 file={selectedFile}

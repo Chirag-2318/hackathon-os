@@ -32,6 +32,10 @@ public class MvpLedgerRow {
     @Column(columnDefinition = "TEXT")
     private String notes;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     protected MvpLedgerRow() {}
 
     public MvpLedgerRow(UUID roomId, int position, String part, String status, UUID ownerId, UUID taskId, String notes) {
@@ -67,4 +71,7 @@ public class MvpLedgerRow {
 
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
+
+    public Long getVersion() { return version; }
+    public void setVersion(Long version) { this.version = version; }
 }

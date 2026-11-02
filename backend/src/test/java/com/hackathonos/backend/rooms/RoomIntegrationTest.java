@@ -82,7 +82,7 @@ class RoomIntegrationTest {
         assertThat(roomDto.myRole()).isEqualTo("LEADER");
         assertThat(roomDto.isLeader()).isTrue();
         assertThat(roomDto.keyPrefix()).isEqualTo("CG");
-        assertThat(roomDto.joinCode()).isNotNull().hasSize(4);
+        assertThat(roomDto.joinCode()).isNotNull().hasSize(8);
 
         // Verify database persistence
         Room savedRoom = roomRepository.findById(roomDto.id()).orElseThrow();

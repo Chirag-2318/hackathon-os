@@ -62,7 +62,8 @@ public class RoomMapper {
                 unlockRules != null ? unlockRules : List.of(),
                 room.getWorkflowStage(),
                 nextStep != null ? nextStep : new com.hackathonos.backend.rooms.dto.NextStepDto("Continue setup", "/app/rooms/" + room.getId(), "Work on project"),
-                phases != null ? phases : List.of()
+                phases != null ? phases : List.of(),
+                room.getVersion() != null ? room.getVersion() : 0L
         );
     }
 

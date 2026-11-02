@@ -30,6 +30,10 @@ public class PrepItem {
     @Column(name = "done_by")
     private UUID doneBy;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     public PrepItem() {}
 
     public PrepItem(UUID roomId, int position, String label, boolean done, Instant dueAt, UUID doneBy) {
@@ -61,4 +65,7 @@ public class PrepItem {
 
     public UUID getDoneBy() { return doneBy; }
     public void setDoneBy(UUID doneBy) { this.doneBy = doneBy; }
+
+    public Long getVersion() { return version; }
+    public void setVersion(Long version) { this.version = version; }
 }

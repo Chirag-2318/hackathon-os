@@ -1328,7 +1328,6 @@ public class PhaseService {
      * Calls AI model to generate tasks for the active phase via AiService,
      * with high-quality fallback generator when AI is unconfigured or unavailable.
      */
-    @Transactional
     public String generatePhaseTasks(UUID roomId, String phaseKey, User user) {
         roomAccess.requireLeader(roomId, user);
         if (!isAiAllowed(roomId)) {

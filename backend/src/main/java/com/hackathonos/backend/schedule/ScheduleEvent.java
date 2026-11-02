@@ -33,6 +33,10 @@ public class ScheduleEvent {
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     public ScheduleEvent() {}
 
     public ScheduleEvent(UUID roomId, String title, String kind, Instant startsAt, Instant endsAt, String notes, UUID createdBy) {
@@ -68,4 +72,7 @@ public class ScheduleEvent {
 
     public UUID getCreatedBy() { return createdBy; }
     public void setCreatedBy(UUID createdBy) { this.createdBy = createdBy; }
+
+    public Long getVersion() { return version; }
+    public void setVersion(Long version) { this.version = version; }
 }

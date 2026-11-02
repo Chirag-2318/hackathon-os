@@ -16,11 +16,16 @@ public class DevController {
     private final DevService devService;
     private final DemoRoomSeeder demoRoomSeeder;
     private final CurrentUser currentUser;
+    private final com.hackathonos.backend.mcp.McpTokenService mcpTokenService;
 
-    public DevController(DevService devService, DemoRoomSeeder demoRoomSeeder, CurrentUser currentUser) {
+    public DevController(DevService devService,
+                         DemoRoomSeeder demoRoomSeeder,
+                         CurrentUser currentUser,
+                         com.hackathonos.backend.mcp.McpTokenService mcpTokenService) {
         this.devService = devService;
         this.demoRoomSeeder = demoRoomSeeder;
         this.currentUser = currentUser;
+        this.mcpTokenService = mcpTokenService;
     }
 
     @PostMapping("/demo-room")
@@ -79,4 +84,24 @@ public class DevController {
         User user = currentUser.get();
         return devService.seedPresent(user, roomId);
     }
+
+    public record DevMcpTokenResponse(String token, String tokenType, String scope, java.time.Instant expiresAt) {}
+
+    @PostMapping("/mcp-token")
+    public DevMcpTokenResponse createDevMcpToken() {
+        User user = currentUser.get();
+        var gen = mcpTokenService.createAccessToken(
+                user.getId(),
+                java.time.Duration.ofHours(24),
+                "dev-client",
+                "mcp"
+        );
+        return new DevMcpTokenResponse(
+                gen.rawToken(),
+                "Bearer",
+                gen.tokenEntity().getScope(),
+                gen.tokenEntity().getExpiresAt()
+        );
+    }
 }
+

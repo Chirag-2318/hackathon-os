@@ -93,9 +93,22 @@
 			<version>5.4.0</version>
 		</dependency>
 		<dependency>
+			<groupId>org.springframework.session</groupId>
+			<artifactId>spring-session-jdbc</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>s3</artifactId>
+			<version>2.29.51</version>
+		</dependency>
+		<dependency>
+			<groupId>com.github.ben-manes.caffeine</groupId>
+			<artifactId>caffeine</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
-			<scope>runtime</scope>
+			
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -138,17 +151,6 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
-				<configuration>
-					<testExcludes>
-						<testExclude>**/checkpoints/**</testExclude>
-						<testExclude>**/invites/**</testExclude>
-						<testExclude>**/overview/**</testExclude>
-						<testExclude>**/tasks/**</testExclude>
-						<testExclude>**/templates/**</testExclude>
-						<testExclude>**/users/**</testExclude>
-						<testExclude>**/ai/**</testExclude>
-					</testExcludes>
-				</configuration>
 			</plugin>
 		</plugins>
 	</build>

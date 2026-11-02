@@ -18,12 +18,21 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.core.annotation.Order;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import com.hackathonos.backend.mcp.McpBearerAuthFilter;
+import com.hackathonos.backend.common.error.ErrorResponse;
+import com.hackathonos.backend.common.http.RequestIdFilter;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.MDC;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Configuration
 @EnableWebSecurity
@@ -48,6 +57,30 @@ public class SecurityConfig {
     }
 
     @Bean
+    @Order(1)
+    public SecurityFilterChain mcpFilterChain(HttpSecurity http, McpBearerAuthFilter mcpBearerAuthFilter) throws Exception {
+        http
+            .securityMatcher("/api/v1/mcp/**")
+            .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .csrf(csrf -> csrf.disable())
+            .cors(cors -> cors.disable())
+            .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+            .addFilterBefore(mcpBearerAuthFilter, UsernamePasswordAuthenticationFilter.class)
+            .exceptionHandling(exceptions -> exceptions
+                .authenticationEntryPoint((request, response, authException) -> {
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType("application/json");
+                    String reqId = MDC.get(RequestIdFilter.MDC_KEY);
+                    if (reqId == null || reqId.isBlank()) reqId = UUID.randomUUID().toString();
+                    ErrorResponse err = new ErrorResponse(Instant.now().toString(), 401, "UNAUTHORIZED", "Authentication required", reqId);
+                    response.getWriter().write(new ObjectMapper().writeValueAsString(err));
+                })
+            );
+        return http.build();
+    }
+
+    @Bean
+    @Order(2)
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         boolean isProd = environment.acceptsProfiles(Profiles.of("prod"));
 
@@ -71,14 +104,22 @@ public class SecurityConfig {
                         "/mock/**",
                         "/api/v1/mentor/**",
                         "/api/v1/public/**",
-                        "/api/v1/client-errors"
+                        "/api/v1/client-errors",
+                        "/.well-known/**",
+                        "/oauth/register",
+                        "/oauth/token",
+                        "/oauth/revoke"
                 )
                 .csrfTokenRepository(csrfTokenRepository)
                 .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
             )
+            .requestCache(rc -> rc.requestCache(new org.springframework.security.web.savedrequest.HttpSessionRequestCache()))
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint((request, response, authException) -> {
-                    if (request.getRequestURI().startsWith("/api/")) {
+                    if (request.getRequestURI().startsWith("/oauth/authorize")) {
+                        new org.springframework.security.web.savedrequest.HttpSessionRequestCache().saveRequest(request, response);
+                        response.sendRedirect(appProperties.getPublicUrl() + "/login");
+                    } else if (request.getRequestURI().startsWith("/api/")) {
                         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                         response.setContentType("application/json");
                         response.getWriter().write("{\"timestamp\":\"" + Instant.now() + "\",\"status\":401,\"code\":\"UNAUTHORIZED\",\"message\":\"Authentication required\"}");
@@ -103,6 +144,10 @@ public class SecurityConfig {
                         "/api/v1/health",
                         "/login/**",
                         "/oauth2/**",
+                        "/.well-known/**",
+                        "/oauth/register",
+                        "/oauth/token",
+                        "/oauth/revoke",
                         "/api/v1/mentor/**",
                         "/api/v1/public/**",
                         "/api/v1/client-errors",

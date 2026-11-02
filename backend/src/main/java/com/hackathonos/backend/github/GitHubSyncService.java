@@ -79,7 +79,6 @@ public class GitHubSyncService {
      * Executes the capped 10-step synchronization for a room's GitHub repository.
      * Keeps old data intact on unexpected errors and updates sync error and timestamps.
      */
-    @Transactional
     public void sync(Room room, UUID connectingUserId) {
         GithubRepo repo = repoRepository.findById(room.getId()).orElse(null);
         if (repo == null) return;

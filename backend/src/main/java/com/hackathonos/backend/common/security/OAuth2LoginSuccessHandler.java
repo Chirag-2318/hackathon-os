@@ -95,6 +95,24 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             } catch (Exception ignored) {}
         }
 
+        org.springframework.security.web.savedrequest.RequestCache requestCache =
+                new org.springframework.security.web.savedrequest.HttpSessionRequestCache();
+        org.springframework.security.web.savedrequest.SavedRequest savedRequest =
+                requestCache.getRequest(request, response);
+        if (savedRequest != null) {
+            String redirectUrl = savedRequest.getRedirectUrl();
+            if (redirectUrl != null) {
+                try {
+                    java.net.URI uri = java.net.URI.create(redirectUrl);
+                    if ("/oauth/authorize".equals(uri.getPath())) {
+                        requestCache.removeRequest(request, response);
+                        response.sendRedirect(redirectUrl);
+                        return;
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+
         String targetUrl = appProperties.getPublicUrl() + "/app";
         response.sendRedirect(targetUrl);
     }

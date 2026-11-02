@@ -5,6 +5,7 @@ import com.hackathonos.backend.common.security.RoomAccess;
 import com.hackathonos.backend.rooms.dto.*;
 import com.hackathonos.backend.users.User;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -66,10 +67,35 @@ public class RoomController {
         return roomService.getRoomDetail(user, roomId);
     }
 
+
+
     @PatchMapping("/{roomId}")
-    public RoomDetailDto updateRoom(@PathVariable UUID roomId, @Valid @RequestBody UpdateRoomRequest request) {
+    public RoomDetailDto updateRoom(
+            @PathVariable UUID roomId,
+            @RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
+            @Valid @RequestBody UpdateRoomRequest request) {
         User user = currentUser.get();
-        return roomService.updateRoom(user, roomId, request);
+        UpdateRoomRequest effReq = request;
+        if (effReq.baseVersion() == null && ifMatch != null && !ifMatch.isBlank()) {
+            try {
+                String clean = ifMatch.replace("\"", "").replace("W/", "").trim();
+                Long parsed = Long.parseLong(clean);
+                effReq = new UpdateRoomRequest(
+                        request.name(),
+                        request.description(),
+                        request.projectDescription(),
+                        request.eventStart(),
+                        request.timezone(),
+                        request.durationHours(),
+                        request.startsAt(),
+                        request.freezeAt(),
+                        request.endsAt(),
+                        request.deadlineOverridden(),
+                        parsed
+                );
+            } catch (NumberFormatException ignored) {}
+        }
+        return roomService.updateRoom(user, roomId, effReq);
     }
 
     @DeleteMapping("/{roomId}")
@@ -110,6 +136,8 @@ public class RoomController {
         return roomService.getRoomDetail(user, roomId);
     }
 
+
+
     @PostMapping("/{roomId}/stage/revert")
     public RoomDetailDto revertStage(@PathVariable UUID roomId) {
         User user = currentUser.get();
@@ -117,4 +145,6 @@ public class RoomController {
         stageService.transitionBackward(room, user);
         return roomService.getRoomDetail(user, roomId);
     }
+
+
 }

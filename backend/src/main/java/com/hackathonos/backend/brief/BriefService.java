@@ -58,6 +58,7 @@ public class BriefService {
     private final ObjectMapper objectMapper;
 
     private final UserRepository userRepository;
+    private final org.springframework.transaction.support.TransactionTemplate transactionTemplate;
 
     @Value("${app.upload-dir:./uploads}")
     private String uploadDir;
@@ -81,6 +82,30 @@ public class BriefService {
             AiService aiService,
             ObjectMapper objectMapper,
             UserRepository userRepository) {
+        this(briefRepository, rubricRepository, uploadedFileRepository, roomRepository, roomAccess, stageService,
+                activityLogger, notificationService, ssrfGuard, pdfParser, fileTextExtractor, briefMapper, aiService,
+                objectMapper, userRepository, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public BriefService(
+            BriefRepository briefRepository,
+            BriefRubricItemRepository rubricRepository,
+            UploadedFileRepository uploadedFileRepository,
+            RoomRepository roomRepository,
+            RoomAccess roomAccess,
+            RoomStageService stageService,
+            ActivityLogger activityLogger,
+            NotificationService notificationService,
+            SsrfGuard ssrfGuard,
+            BriefPdfParser pdfParser,
+            FileTextExtractor fileTextExtractor,
+            BriefMapper briefMapper,
+            AiService aiService,
+            ObjectMapper objectMapper,
+            UserRepository userRepository,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            org.springframework.transaction.PlatformTransactionManager transactionManager) {
         this.briefRepository = briefRepository;
         this.rubricRepository = rubricRepository;
         this.uploadedFileRepository = uploadedFileRepository;
@@ -96,6 +121,9 @@ public class BriefService {
         this.aiService = aiService;
         this.objectMapper = objectMapper;
         this.userRepository = userRepository;
+        this.transactionTemplate = transactionManager != null
+                ? new org.springframework.transaction.support.TransactionTemplate(transactionManager)
+                : new org.springframework.transaction.support.TransactionTemplate();
     }
 
     /**
@@ -211,7 +239,6 @@ public class BriefService {
     /**
      * Ingests a public URL source using SSRF-safe HTTP client and saves readable raw text.
      */
-    @Transactional
     public BriefResponseDto setLinkSource(UUID roomId, String url, User user) {
         roomAccess.requireLeader(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
@@ -221,23 +248,29 @@ public class BriefService {
 
         String rawText = ssrfGuard.fetchReadableText(url);
 
-        Brief brief = briefRepository.findByRoomId(roomId).orElseGet(() -> new Brief(roomId, "link"));
-        brief.setSource("link");
-        brief.setSourceUrl(url);
-        brief.setRawText(rawText);
-        brief.setConfirmed(false);
-        brief.setConfirmedFields(null);
-        brief.setUpdatedAt(Instant.now());
-        brief = briefRepository.save(brief);
+        return transactionTemplate.execute(status -> {
+            Room r = roomAccess.getActiveRoomOrThrow(roomId);
+            if (r.getBuildStartedAt() != null || r.getPlanStartedAt() != null) {
+                throw new ConflictException("BRIEF_LOCKED", "Cannot modify brief source once planning or build has started");
+            }
 
-        List<BriefRubricItem> rubric = rubricRepository.findByBriefIdOrderByPositionAsc(brief.getId());
-        return briefMapper.toDto(brief, rubric, true, true);
+            Brief brief = briefRepository.findByRoomId(roomId).orElseGet(() -> new Brief(roomId, "link"));
+            brief.setSource("link");
+            brief.setSourceUrl(url);
+            brief.setRawText(rawText);
+            brief.setConfirmed(false);
+            brief.setConfirmedFields(null);
+            brief.setUpdatedAt(Instant.now());
+            brief = briefRepository.save(brief);
+
+            List<BriefRubricItem> rubric = rubricRepository.findByBriefIdOrderByPositionAsc(brief.getId());
+            return briefMapper.toDto(brief, rubric, true, true);
+        });
     }
 
     /**
      * Ingests a document (.pdf, .docx, .md, or .txt), extracts text via FileTextExtractor, and saves file.
      */
-    @Transactional
     public BriefResponseDto setPdfSource(UUID roomId, MultipartFile file, User user) {
         roomAccess.requireLeader(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
@@ -275,35 +308,36 @@ public class BriefService {
             throw new BadRequestException("UPLOAD_FAILED", "Failed to store uploaded file");
         }
 
-        UploadedFile uploadedFile = new UploadedFile(
-                roomId,
-                user.getId(),
-                origName,
-                file.getContentType() != null ? file.getContentType() : "application/octet-stream",
-                file.getSize(),
-                targetFile.getAbsolutePath(),
-                "brief"
-        );
-        uploadedFileRepository.save(uploadedFile);
+        return transactionTemplate.execute(status -> {
+            UploadedFile uploadedFile = new UploadedFile(
+                    roomId,
+                    user.getId(),
+                    origName,
+                    file.getContentType() != null ? file.getContentType() : "application/octet-stream",
+                    file.getSize(),
+                    targetFile.getAbsolutePath(),
+                    "brief"
+            );
+            uploadedFileRepository.save(uploadedFile);
 
-        Brief brief = briefRepository.findByRoomId(roomId).orElseGet(() -> new Brief(roomId, lowerName.endsWith(".pdf") ? "pdf" : "file"));
-        brief.setSource(lowerName.endsWith(".pdf") ? "pdf" : "file");
-        brief.setFileName(origName);
-        brief.setRawText(rawText);
-        brief.setConfirmed(false);
-        brief.setConfirmedFields(null);
-        brief.setUpdatedAt(Instant.now());
-        brief = briefRepository.save(brief);
+            Brief brief = briefRepository.findByRoomId(roomId).orElseGet(() -> new Brief(roomId, lowerName.endsWith(".pdf") ? "pdf" : "file"));
+            brief.setSource(lowerName.endsWith(".pdf") ? "pdf" : "file");
+            brief.setFileName(origName);
+            brief.setRawText(rawText);
+            brief.setConfirmed(false);
+            brief.setConfirmedFields(null);
+            brief.setUpdatedAt(Instant.now());
+            brief = briefRepository.save(brief);
 
-        List<BriefRubricItem> rubric = rubricRepository.findByBriefIdOrderByPositionAsc(brief.getId());
-        return briefMapper.toDto(brief, rubric, true, true);
+            List<BriefRubricItem> rubric = rubricRepository.findByBriefIdOrderByPositionAsc(brief.getId());
+            return briefMapper.toDto(brief, rubric, true, true);
+        });
     }
 
     /**
      * Unified file intake: extracts text from PDF, DOCX, or text/markdown using FileTextExtractor.
      * Updates Brief rawText when executed by a leader, and optionally runs AI extraction if requested and allowed.
      */
-    @Transactional
     public FileIntakeResponse intakeFile(UUID roomId, MultipartFile file, boolean extract, User user) {
         roomAccess.requireMember(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
@@ -396,7 +430,6 @@ public class BriefService {
     /**
      * Ingests up to 5 images (PNG, JPG, JPEG, WEBP) up to 10MB each, calls vision AI to extract text, and saves files.
      */
-    @Transactional
     public BriefResponseDto setImagesSource(UUID roomId, List<MultipartFile> files, User user) {
         roomAccess.requireLeader(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);
@@ -419,6 +452,9 @@ public class BriefService {
         List<String> allowedTypes = List.of("image/png", "image/jpeg", "image/jpg", "image/webp");
         long maxSizeBytes = 10 * 1024 * 1024; // 10MB
         StringBuilder combinedText = new StringBuilder();
+
+        record SavedImg(String origName, String contentType, long size, String targetPath) {}
+        List<SavedImg> savedImgList = new ArrayList<>();
 
         for (MultipartFile file : files) {
             if (file.isEmpty()) continue;
@@ -630,7 +666,6 @@ public class BriefService {
     /**
      * Performs automated AI extraction using user's saved API key and parses structured brief fields.
      */
-    @Transactional
     public ValidateExtractResponse autoExtract(UUID roomId, User user) {
         ExtractionPromptResponse promptResp = getExtractionPrompt(roomId, user);
         String completion = aiService.complete(user.getId(), promptResp.prompt());
@@ -640,7 +675,6 @@ public class BriefService {
     /**
      * Extracts structured brief parameters using AI gateway from raw pasted event details.
      */
-    @Transactional
     public ExtractBriefResponseDto extractBrief(UUID roomId, String text, User user) {
         roomAccess.requireMember(roomId, user);
         boolean isLeader = roomAccess.isLeader(roomId, user.getId());

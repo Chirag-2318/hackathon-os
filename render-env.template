@@ -15,11 +15,35 @@ DB_PORT=5432
 DB_NAME=REPLACE_ME
 DB_USERNAME=REPLACE_ME
 DB_PASSWORD=REPLACE_ME
-DB_POOL_SIZE=5
+DB_POOL_SIZE=10
+
+# Resource Protection & Concurrency Bulkheads
+AI_MAX_CONCURRENT=6
+STT_MAX_CONCURRENT=3
+HEAVY_PARSE_MAX_CONCURRENT=2
+BULKHEAD_ACQUIRE_TIMEOUT_MS=5000
+PDF_MAX_PAGES=80
+PPTX_MAX_SLIDES=60
 
 # Cookies and Security
 COOKIE_SECURE=true
 COOKIE_SAME_SITE=Lax
+SESSION_TIMEOUT=8h
+
+# Real-Time Events & SSE Streaming Engine
+# Maximum concurrent SSE streams allowed per user across tabs/devices
+SSE_MAX_STREAMS_PER_USER=6
+# Event bus implementation: 'local' (single container) or 'postgres' (multi-instance cluster via LISTEN/NOTIFY)
+EVENTS_BUS=postgres
+
+# Object Storage (S3 / Cloudflare R2 / MinIO)
+STORAGE_PROVIDER=s3
+S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+S3_REGION=auto
+S3_BUCKET=bracket-uploads
+S3_ACCESS_KEY=REPLACE_ME
+S3_SECRET_KEY=REPLACE_ME
+S3_PATH_STYLE=false
 
 # AES-256-GCM Token Encryption Key (32 random bytes, base64 or 64 hex characters)
 APP_ENCRYPTION_KEY=REPLACE_ME
@@ -33,12 +57,14 @@ GOOGLE_CLIENT_ID=REPLACE_ME
 GOOGLE_CLIENT_SECRET=REPLACE_ME
 
 # GitHub Repository Syncing Integration
+# GitHub OAuth link callback: https://<VERCEL-APP-DOMAIN>/api/v1/github/link/callback
 APP_GITHUB_TOKEN=REPLACE_ME
 APP_GITHUB_USE_FAKE=false
 GITHUB_LINK_CLIENT_ID=REPLACE_ME
 GITHUB_LINK_CLIENT_SECRET=REPLACE_ME
 
 # Canva Integration
+# Canva developer console redirect URL: https://<VERCEL-APP-DOMAIN>/api/v1/integrations/canva/callback
 CANVA_CLIENT_ID=REPLACE_ME
 CANVA_CLIENT_SECRET=REPLACE_ME
 

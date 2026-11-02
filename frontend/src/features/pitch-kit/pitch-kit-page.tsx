@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { roomService } from '@/services/roomService';
 import { fetchQa, apiFetch } from '@/api/client';
-import { useRoomEvents } from '@/api/useRoomEvents';
+import { useLiveContext } from '@/design';
 import { useCurrentUser } from '@/features/auth/useCurrentUser';
 
 import {
@@ -50,7 +50,7 @@ export function PitchKitPage() {
   const queryClient = useQueryClient();
   const shouldReduceMotion = useReducedMotion();
   const { data: currentUser } = useCurrentUser();
-  const { lastEvent } = useRoomEvents(roomId, currentUser?.id);
+  const { lastEvent } = useLiveContext();
 
   const [lastUpdatedBy, setLastUpdatedBy] = useState<string | null>(null);
 

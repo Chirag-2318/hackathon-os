@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Crown, MoreHorizontal, UserPlus, Share2, AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useLiveContext } from '@/design';
 import { apiFetch } from '@/design/api';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { Button } from '@/components/ui/button';
@@ -121,6 +122,7 @@ export function TeamPage() {
   const [targetRevokeInvite, setTargetRevokeInvite] = useState<EmailInviteItemDto | null>(null);
 
   const { data: currentUser } = useCurrentUser();
+  const { isConnected } = useLiveContext();
 
   // 1. Fetch Room Details
   const { data: room } = useQuery<RoomDetailDto>({
@@ -153,7 +155,7 @@ export function TeamPage() {
       return [];
     },
     enabled: Boolean(activeRoomId),
-    refetchInterval: 15000,
+    refetchInterval: isConnected ? 300_000 : 15_000,
   });
 
   // 4. Fetch Invites (leader only)

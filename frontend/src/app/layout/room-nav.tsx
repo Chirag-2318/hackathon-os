@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRoomEvents } from '@/api/useRoomEvents';
+import { useLiveContext } from '@/design';
 import { useHome } from '@/features/home/hooks/use-home';
 import { useRoomOverview } from '@/features/room-overview/hooks/use-room-overview';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -52,6 +52,7 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
     queryFn: () => ideaService.listIdeas(roomId),
   });
 
+  const { isConnected } = useLiveContext();
   const { data: prepData = [] } = useQuery({
     queryKey: ['prep', roomId],
     queryFn: () => prepService.getPrepItems(roomId),
@@ -60,7 +61,7 @@ export function RoomNav({ roomId, isCollapsed }: RoomNavProps) {
   const { data: navBadges } = useQuery({
     queryKey: ['nav-badges', roomId],
     queryFn: () => roomService.getNavBadges(roomId),
-    refetchInterval: isSampleRoom ? false : 60000,
+    refetchInterval: isSampleRoom ? false : (isConnected ? 300_000 : 60_000),
   });
 
   // Heartbeat

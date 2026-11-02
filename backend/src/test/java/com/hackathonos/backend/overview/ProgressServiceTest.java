@@ -64,6 +64,7 @@ class ProgressServiceTest {
         // Task 1: 60m estimate, due at hour 10, done at hour 8
         Task t1 = new Task(room.getId(), "TST-1", 1, "Task 1", null, "DONE", null, null, "MEDIUM", null, "Frontend", 60, baseStart.plus(Duration.ofHours(10)), 0, "MANUAL");
         t1.setCompletedAt(baseStart.plus(Duration.ofHours(8)));
+        t1.setReviewState("CONFIRMED");
 
         // Task 2: 60m estimate, due at hour 15, still in TODO
         Task t2 = new Task(room.getId(), "TST-2", 2, "Task 2", null, "TODO", null, null, "MEDIUM", null, "Backend", 60, baseStart.plus(Duration.ofHours(15)), 1, "MANUAL");

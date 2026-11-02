@@ -339,9 +339,28 @@ export function BoardPage() {
       // Revert optimistic update on failure
       setTasks(prev => prev.map(t => (t.id === taskId ? prevTask : t)));
 
-      if (err?.status === 409 || err?.message?.includes('TASK_CHANGED')) {
-        toast.error('Task was updated by another team member. Reloading board...');
-        loadData();
+      if (err?.status === 409 || err?.code === 'EDIT_CONFLICT' || err?.message?.includes('TASK_CHANGED')) {
+        toast.info('Teammate updated this task - board refreshed');
+        loadData().then(async (freshTasks) => {
+          const freshTask = Array.isArray(freshTasks) ? freshTasks.find((t: any) => t.id === taskId) : null;
+          if (freshTask && freshTask.status !== newStatus) {
+            try {
+              const retried = await boardService.moveTask(
+                roomId,
+                taskId,
+                newStatus,
+                targetIndex,
+                (freshTask as any).version
+              );
+              if (retried) {
+                setTasks(prev => prev.map(t => t.id === taskId ? retried : t));
+                toast.success(`Moved ${freshTask.key || 'task'} to ${newStatus}`);
+              }
+            } catch {
+              // Gracefully fallback to reloaded board state
+            }
+          }
+        }).catch(() => {});
       } else {
         toast.error(err?.message || 'Failed to update status');
       }

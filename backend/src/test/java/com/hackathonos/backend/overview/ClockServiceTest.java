@@ -2,6 +2,7 @@ package com.hackathonos.backend.overview;
 
 import com.hackathonos.backend.plan.PlanPhase;
 import com.hackathonos.backend.rooms.Room;
+import com.hackathonos.backend.rooms.RoomTimeService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -26,6 +27,7 @@ class ClockServiceTest {
         r.setName("Sprint 2026");
         r.setEventStart(baseStart);
         r.setEventEnd(baseEnd);
+        r.setDurationHours(48);
         return r;
     }
 
@@ -41,7 +43,7 @@ class ClockServiceTest {
     void testBeforeStart() {
         Instant before = baseStart.minus(Duration.ofHours(2));
         Clock clock = Clock.fixed(before, ZoneId.of("UTC"));
-        ClockService service = new ClockService(clock);
+        ClockService service = new ClockService(new RoomTimeService(clock));
 
         Room room = createTestRoom();
         List<PlanPhase> phases = createTestPhases(room.getId());
@@ -60,7 +62,7 @@ class ClockServiceTest {
     void testMidway() {
         Instant midway = baseStart.plus(Duration.ofHours(24)); // 50%
         Clock clock = Clock.fixed(midway, ZoneId.of("UTC"));
-        ClockService service = new ClockService(clock);
+        ClockService service = new ClockService(new RoomTimeService(clock));
 
         Room room = createTestRoom();
         List<PlanPhase> phases = createTestPhases(room.getId());
@@ -85,7 +87,7 @@ class ClockServiceTest {
         // 40 hours in -> 8h left -> 8/48 = 16.6% left -> DUE_SOON (<= 25% and >= 10%)
         Instant hour40 = baseStart.plus(Duration.ofHours(40));
         Clock clock1 = Clock.fixed(hour40, ZoneId.of("UTC"));
-        ClockService service1 = new ClockService(clock1);
+        ClockService service1 = new ClockService(new RoomTimeService(clock1));
 
         Room room = createTestRoom();
         List<PlanPhase> phases = createTestPhases(room.getId());
@@ -96,7 +98,7 @@ class ClockServiceTest {
         // 45 hours in -> 3h left -> 3/48 = 6.25% left -> FINAL_STRETCH (< 10%)
         Instant hour45 = baseStart.plus(Duration.ofHours(45));
         Clock clock2 = Clock.fixed(hour45, ZoneId.of("UTC"));
-        ClockService service2 = new ClockService(clock2);
+        ClockService service2 = new ClockService(new RoomTimeService(clock2));
 
         ClockService.ClockCalculation calc2 = service2.calculate(room, phases);
         assertEquals("FINAL_STRETCH", calc2.clockStatus().status());
@@ -107,7 +109,7 @@ class ClockServiceTest {
     void testEnded() {
         Instant past = baseEnd.plus(Duration.ofHours(1));
         Clock clock = Clock.fixed(past, ZoneId.of("UTC"));
-        ClockService service = new ClockService(clock);
+        ClockService service = new ClockService(new RoomTimeService(clock));
 
         Room room = createTestRoom();
         List<PlanPhase> phases = createTestPhases(room.getId());

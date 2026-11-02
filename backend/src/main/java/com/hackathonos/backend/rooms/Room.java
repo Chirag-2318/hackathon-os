@@ -105,6 +105,10 @@ public class Room {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt = Instant.now();
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     public Room() {}
 
     public Room(String name, String description, String projectDescription, String templateId,
@@ -233,4 +237,7 @@ public class Room {
 
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+
+    public Long getVersion() { return version; }
+    public void setVersion(Long version) { this.version = version; }
 }

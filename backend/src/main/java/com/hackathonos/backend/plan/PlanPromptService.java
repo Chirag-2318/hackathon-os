@@ -182,6 +182,7 @@ public class PlanPromptService {
     }
 
     private String phaseTasksTemplate;
+    private String tasksTemplate;
 
     @PostConstruct
     public void init() {
@@ -225,8 +226,15 @@ public class PlanPromptService {
         verifyPlaceholders(phaseTemplateFile, phaseTemplateContent, phasePlaceholders);
         this.phaseTasksTemplate = phaseTemplateContent;
 
-        log.info("PlanPromptService initialized successfully with 4 prompt templates, groq briefs, and phase-tasks template.");
+        // TASKS.md template check
+        String tasksTemplateFile = "step4-tasks.template.md";
+        String tasksTemplateContent = readClasspathFile(resolver, "classpath:plan-prompts/" + tasksTemplateFile);
+        verifyPlaceholders(tasksTemplateFile, tasksTemplateContent, planStepPlaceholders);
+        this.tasksTemplate = tasksTemplateContent;
+
+        log.info("PlanPromptService initialized successfully with 5 prompt templates, groq briefs, and phase-tasks template.");
     }
+
 
     public void verifyPlaceholders(String fileName, String content, Set<String> requiredPlaceholders) {
         for (String ph : requiredPlaceholders) {
@@ -303,7 +311,6 @@ public class PlanPromptService {
                 .orElse(false);
     }
 
-    @Transactional
     public PlanPromptResponseDto getOrBuildPrompt(UUID roomId, int stepIndex, User user, boolean forceRefresh) {
         roomAccess.requireMember(roomId, user);
         if (stepIndex < 1 || stepIndex > 4) {
@@ -397,6 +404,70 @@ public class PlanPromptService {
         return getOrBuildPrompt(roomId, stepIndex, user, forceRefresh);
     }
 
+    public String buildStepPrompt(UUID roomId, String step, User user) {
+        roomAccess.requireMember(roomId, user);
+        Room room = roomAccess.getActiveRoomOrThrow(roomId);
+        Brief brief = briefRepository.findByRoomId(roomId).orElse(null);
+        List<BriefRubricItem> rubric = brief != null ? rubricRepository.findByBriefIdOrderByPositionAsc(brief.getId()) : Collections.emptyList();
+        List<Idea> approvedIdeas = ideaRepository.findByRoomIdAndStatus(roomId, "APPROVED");
+        List<Idea> pendingIdeas = ideaRepository.findByRoomIdAndStatus(roomId, "PENDING");
+        List<Idea> rejectedIdeas = ideaRepository.findByRoomIdAndStatus(roomId, "REJECTED");
+        List<RoomMember> members = memberRepository.findByRoomId(roomId);
+        List<TeamCharterResponse> charters = charterRepository.findByRoomId(roomId);
+        Map<UUID, User> memberUsers = userRepository.findAllById(members.stream().map(RoomMember::getUserId).filter(Objects::nonNull).toList())
+                .stream().collect(Collectors.toMap(User::getId, u -> u));
+        Map<UUID, List<String>> memberSkills = new HashMap<>();
+        for (RoomMember m : members) {
+            List<String> s = skillRepository.findByMemberId(m.getId()).stream().map(RoomMemberSkill::getSkill).toList();
+            memberSkills.put(m.getId(), s);
+        }
+
+        String factsHash = computeFactsHash(room, brief, rubric, approvedIdeas, pendingIdeas, rejectedIdeas, members, memberUsers, memberSkills, charters);
+        List<String> missingInputs = computeMissingInputs(brief, rubric, approvedIdeas, members, memberUsers, room);
+        String factsText = buildFacts(room, brief, rubric, approvedIdeas, pendingIdeas, rejectedIdeas,
+                members, memberUsers, memberSkills, charters, missingInputs, false);
+
+        String s = step != null ? step.trim().toLowerCase() : "prd";
+        int stepIndex = switch (s) {
+            case "prd", "1", "prd-mvp" -> 1;
+            case "tech", "2", "stack", "stack-arch" -> 2;
+            case "phases", "3", "phase", "phases-design" -> 3;
+            case "tasks", "4", "task" -> 4;
+            case "demo", "5", "demo-qna", "qna" -> 5;
+            default -> 1;
+        };
+
+        if (stepIndex == 4 && "tasks".equals(s)) {
+            AnalysisResult analysis = getOrComputeAnalysis(room, brief, rubric, approvedIdeas, pendingIdeas, rejectedIdeas,
+                    members, memberUsers, memberSkills, charters, 3, factsHash, user, false);
+            String priorText = buildPrior(roomId, 3);
+            String analysisBlock = analysis != null ? analysis.analysisBlock() : "MODE: BALANCED\nDETAIL_LEVEL: MODERATE\nIDEA_VERDICT: 5/10. Standard concept.\n";
+            if (analysisBlock.length() > 3500) analysisBlock = analysisBlock.substring(0, 3500);
+
+            String template = tasksTemplate != null ? tasksTemplate : readClasspathFile(new PathMatchingResourcePatternResolver(), "classpath:plan-prompts/step4-tasks.template.md");
+            String fused = template.replace("{{FACTS}}", factsText)
+                    .replace("{{ANALYSIS}}", analysisBlock)
+                    .replace("{{PRIOR}}", priorText != null ? priorText : "");
+            if (!fused.contains("=== OUTPUT DELIVERY")) {
+                fused = fused + buildOutputDeliveryBlock("TASKS.md", List.of("TASKS.md"));
+            }
+            return fused;
+        }
+
+        int internalIndex = stepIndex == 5 ? 4 : stepIndex;
+        AnalysisResult analysis = getOrComputeAnalysis(room, brief, rubric, approvedIdeas, pendingIdeas, rejectedIdeas,
+                members, memberUsers, memberSkills, charters, internalIndex, factsHash, user, false);
+        String priorText = buildPrior(roomId, internalIndex);
+        return fusePrompt(roomId, internalIndex, factsText, analysis, priorText, factsHash);
+    }
+
+    public String buildStep1Prompt(UUID roomId, User user) { return buildStepPrompt(roomId, "prd", user); }
+    public String buildStep2Prompt(UUID roomId, User user) { return buildStepPrompt(roomId, "tech", user); }
+    public String buildStep3Prompt(UUID roomId, User user) { return buildStepPrompt(roomId, "phases", user); }
+    public String buildStep4Prompt(UUID roomId, User user) { return buildStepPrompt(roomId, "tasks", user); }
+    public String buildStep5Prompt(UUID roomId, User user) { return buildStepPrompt(roomId, "demo", user); }
+
+
     public String fusePrompt(UUID roomId, int stepIndex, String factsText, AnalysisResult analysis, String priorText, String factsHash) {
         String template = stepTemplates.get(stepIndex);
         String analysisBlock = analysis != null ? analysis.analysisBlock() : "MODE: BALANCED\nDETAIL_LEVEL: MODERATE\nIDEA_VERDICT: 5/10. Standard concept.\n";
@@ -429,40 +500,24 @@ public class PlanPromptService {
         promptCache.put(promptKey, fused);
 
         final String finalFused = fused;
-        // Persist to DB
-        Optional<PlanStepPrompt> existingOpt = promptRepository.findByRoomIdAndStepIndex(roomId, stepIndex);
-        PlanStepPrompt toSave = existingOpt.orElseGet(() -> new PlanStepPrompt(
-                roomId, stepIndex, STEP_KEYS.get(stepIndex - 1), finalFused, finalFused.length(),
-                analysis != null ? analysis.mode() : "BALANCED",
-                analysis != null ? analysis.ideaVerdict() : "5/10. Standard concept.",
-                "[]", false, factsHash, analysis != null ? analysis.assessmentLocked() : null
-        ));
-        toSave.setPrompt(fused);
-        toSave.setCharCount(fused.length());
-        if (analysis != null) {
-            toSave.setMode(analysis.mode());
-            toSave.setIdeaVerdict(analysis.ideaVerdict());
-            toSave.setAssessmentLocked(analysis.assessmentLocked());
-        }
-        toSave.setInputHash(factsHash);
-        toSave.setStale(false);
-        toSave.setUpdatedAt(Instant.now());
+        // Persist to DB atomically to prevent concurrent insert collisions
         try {
-            promptRepository.save(toSave);
-        } catch (org.springframework.dao.DataIntegrityViolationException dive) {
-            promptRepository.findByRoomIdAndStepIndex(roomId, stepIndex).ifPresent(p -> {
-                p.setPrompt(finalFused);
-                p.setCharCount(finalFused.length());
-                if (analysis != null) {
-                    p.setMode(analysis.mode());
-                    p.setIdeaVerdict(analysis.ideaVerdict());
-                    p.setAssessmentLocked(analysis.assessmentLocked());
-                }
-                p.setInputHash(factsHash);
-                p.setStale(false);
-                p.setUpdatedAt(Instant.now());
-                promptRepository.save(p);
-            });
+            promptRepository.upsertPrompt(
+                    roomId,
+                    stepIndex,
+                    STEP_KEYS.get(stepIndex - 1),
+                    finalFused,
+                    finalFused.length(),
+                    analysis != null ? analysis.mode() : "BALANCED",
+                    analysis != null ? analysis.ideaVerdict() : "5/10. Standard concept.",
+                    "[]",
+                    false,
+                    factsHash,
+                    analysis != null ? analysis.assessmentLocked() : null,
+                    Instant.now()
+            );
+        } catch (Exception ex) {
+            log.warn("Failed to persist prompt for room={} step={}: {}", roomId, stepIndex, ex.getMessage());
         }
 
         return fused;

@@ -26,6 +26,10 @@ public class DemoSection {
     @Column(name = "text", columnDefinition = "TEXT")
     private String text;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     public DemoSection() {}
 
     public DemoSection(UUID roomId, int position, String title, int seconds, String text) {
@@ -53,4 +57,7 @@ public class DemoSection {
 
     public String getText() { return text; }
     public void setText(String text) { this.text = text; }
+
+    public Long getVersion() { return version; }
+    public void setVersion(Long version) { this.version = version; }
 }

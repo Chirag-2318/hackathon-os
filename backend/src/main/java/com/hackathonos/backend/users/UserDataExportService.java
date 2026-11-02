@@ -1,5 +1,9 @@
 package com.hackathonos.backend.users;
 
+import com.hackathonos.backend.common.storage.FileStorage;
+import java.io.InputStream;
+
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hackathonos.backend.brief.UploadedFile;
 import com.hackathonos.backend.brief.UploadedFileRepository;
@@ -61,6 +65,9 @@ public class UserDataExportService {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.hackathonos.backend.docs.DocVersionRepository docVersionRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private FileStorage fileStorage;
 
     public UserDataExportService(ObjectMapper objectMapper,
                                  AppProperties appProperties,
@@ -240,9 +247,25 @@ public class UserDataExportService {
             // User avatar if local file exists
             if (user.getAvatarUrl() != null && user.getAvatarUrl().startsWith("/uploads/avatars/")) {
                 String sub = user.getAvatarUrl().substring("/uploads/avatars/".length());
-                File avatarFile = new File(appProperties.getUploadDir(), "avatars/" + sub);
-                if (avatarFile.exists() && avatarFile.isFile()) {
-                    writePhysicalFile(zos, "uploads/avatar-" + sub, avatarFile);
+                String key = "avatars/" + sub;
+                if (fileStorage != null && fileStorage.exists(key)) {
+                    fileStorage.get(key).ifPresent(sf -> {
+                        try {
+                            ZipEntry entry = new ZipEntry("uploads/avatar-" + sub);
+                            zos.putNextEntry(entry);
+                            try (InputStream in = sf.inputStream()) {
+                                in.transferTo(zos);
+                            }
+                            zos.closeEntry();
+                        } catch (IOException e) {
+                            log.warn("Failed to stream avatar to export zip: {}", e.getMessage());
+                        }
+                    });
+                } else {
+                    File avatarFile = new File(appProperties.getUploadDir(), "avatars/" + sub);
+                    if (avatarFile.exists() && avatarFile.isFile()) {
+                        writePhysicalFile(zos, "uploads/avatar-" + sub, avatarFile);
+                    }
                 }
             }
 

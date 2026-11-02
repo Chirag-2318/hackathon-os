@@ -1,5 +1,7 @@
 package com.hackathonos.backend.events;
 
+import com.hackathonos.backend.admin.AppSettingsService;
+import com.hackathonos.backend.common.error.ForbiddenException;
 import com.hackathonos.backend.common.security.CurrentUser;
 import com.hackathonos.backend.common.security.RoomAccess;
 import com.hackathonos.backend.users.User;
@@ -18,11 +20,16 @@ public class EventStreamController {
     private final RoomEventHub eventHub;
     private final RoomAccess roomAccess;
     private final CurrentUser currentUser;
+    private final AppSettingsService appSettingsService;
 
-    public EventStreamController(RoomEventHub eventHub, RoomAccess roomAccess, CurrentUser currentUser) {
+    public EventStreamController(RoomEventHub eventHub,
+                                 RoomAccess roomAccess,
+                                 CurrentUser currentUser,
+                                 AppSettingsService appSettingsService) {
         this.eventHub = eventHub;
         this.roomAccess = roomAccess;
         this.currentUser = currentUser;
+        this.appSettingsService = appSettingsService;
     }
 
     /**
@@ -31,15 +38,20 @@ public class EventStreamController {
     @GetMapping(value = "/rooms/{roomId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter getRoomEvents(
             @PathVariable UUID roomId,
-            @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId,
+            @RequestHeader(value = "Last-Event-ID", required = false) String lastEventIdHeader,
+            @RequestParam(value = "lastEventId", required = false) String lastEventIdParam,
             HttpServletResponse response
     ) {
         User user = currentUser.get();
         roomAccess.requireMember(roomId, user);
 
-        response.setHeader("Cache-Control", "no-cache");
+        response.setHeader("Content-Type", "text/event-stream");
+        response.setHeader("Cache-Control", "no-cache, no-transform");
         response.setHeader("Connection", "keep-alive");
         response.setHeader("X-Accel-Buffering", "no");
+
+        String lastEventId = (lastEventIdHeader != null && !lastEventIdHeader.isBlank())
+                ? lastEventIdHeader : lastEventIdParam;
 
         return eventHub.subscribe(roomId, user, lastEventId);
     }
@@ -60,9 +72,24 @@ public class EventStreamController {
     @GetMapping(value = "/notifications/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter getNotificationStream(HttpServletResponse response) {
         User user = currentUser.get();
-        response.setHeader("Cache-Control", "no-cache");
+
+        response.setHeader("Content-Type", "text/event-stream");
+        response.setHeader("Cache-Control", "no-cache, no-transform");
         response.setHeader("Connection", "keep-alive");
         response.setHeader("X-Accel-Buffering", "no");
+
         return eventHub.subscribeNotifications(user);
+    }
+
+    /**
+     * Admin diagnostic endpoint showing active real-time connections per room.
+     */
+    @GetMapping("/admin/realtime/stats")
+    public Map<String, Object> getRealtimeStats() {
+        User user = currentUser.get();
+        if (user == null || appSettingsService == null || !appSettingsService.isAdmin(user.getEmail())) {
+            throw new ForbiddenException("admin_required");
+        }
+        return eventHub.getRealtimeStats();
     }
 }

@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 export interface FieldErrors {
   [field: string]: string;
 }
@@ -111,8 +112,54 @@ export async function apiClient<T>(path: string, options: RequestInit = {}): Pro
       body = { message: res.statusText };
     }
 
-    const message = body?.message || body?.detail || (res.status === 429 ? 'Too many attempts, try again in a few minutes' : 'Request failed');
     const code = body?.code || 'UNKNOWN';
+
+    // Auto-retry ONCE for AI actions on SERVER_BUSY (503)
+    const isAiAction = Boolean(
+      headers['X-AI-ACTION'] === 'true' ||
+      normalizedPath.includes('/ai') ||
+      normalizedPath.includes('/plan/generate') ||
+      normalizedPath.includes('/brief/extract') ||
+      normalizedPath.includes('/brief/auto-extract') ||
+      normalizedPath.includes('/brief/images') ||
+      normalizedPath.includes('/pitch/deck/audit') ||
+      normalizedPath.includes('/pitch/deck/slides/draft') ||
+      normalizedPath.includes('/pitch/rehearse/audio') ||
+      normalizedPath.includes('/pitch/rehearse/coach') ||
+      normalizedPath.includes('/pitch/qa/grade') ||
+      normalizedPath.includes('/pitch/qa/generate') ||
+      normalizedPath.includes('/pitch/edit') ||
+      normalizedPath.includes('/docs/ask') ||
+      normalizedPath.includes('/diagrams/fix') ||
+      normalizedPath.includes('/phases/generate-tasks') ||
+      normalizedPath.includes('/qna/session/audio') ||
+      normalizedPath.includes('/qna/grade') ||
+      normalizedPath.includes('/qna/generate') ||
+      normalizedPath.includes('/readiness/simulate') ||
+      normalizedPath.includes('/submission/generate-draft')
+    );
+
+    if ((res.status === 503 || code === 'SERVER_BUSY') && isAiAction && !headers['X-SERVER-BUSY-RETRIED']) {
+      const retryHeader = res.headers.get('Retry-After');
+      const retrySec = retryHeader ? parseInt(retryHeader, 10) : (body?.details?.retryAfterSeconds ?? 5);
+      const waitMs = Math.max(1, Math.min(15, isNaN(retrySec) ? 5 : retrySec)) * 1000;
+
+      try {
+        toast.info('Our AI helper is busy - trying again in a few seconds');
+      } catch {}
+
+      await new Promise(resolve => setTimeout(resolve, waitMs));
+
+      return apiClient<T>(path, {
+        ...options,
+        headers: {
+          ...headers,
+          'X-SERVER-BUSY-RETRIED': 'true',
+        },
+      });
+    }
+
+    const message = body?.message || body?.detail || (res.status === 429 ? 'Too many attempts, try again in a few minutes' : 'Request failed');
     const fieldErrors = body?.fieldErrors;
     const details = body?.details;
 

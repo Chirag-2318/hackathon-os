@@ -30,6 +30,10 @@ public class RetroItem {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     public RetroItem() {}
 
     public RetroItem(UUID roomId, String kind, String text, String tag, UUID authorId, Instant createdAt) {
@@ -61,4 +65,7 @@ public class RetroItem {
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+
+    public Long getVersion() { return version; }
+    public void setVersion(Long version) { this.version = version; }
 }

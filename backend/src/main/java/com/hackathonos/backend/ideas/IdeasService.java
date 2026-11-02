@@ -50,6 +50,7 @@ public class IdeasService {
     private final ActivityLogger activityLogger;
     private final NotificationService notificationService;
     private final IdeasMapper ideasMapper;
+    private final org.springframework.jdbc.core.simple.JdbcClient jdbcClient;
     private final com.hackathonos.backend.events.RoomEventService roomEventService;
     private final org.springframework.beans.factory.ObjectProvider<com.hackathonos.backend.plan.PlanPrepareService> planPrepareServiceProvider;
 
@@ -68,6 +69,7 @@ public class IdeasService {
             ActivityLogger activityLogger,
             NotificationService notificationService,
             IdeasMapper ideasMapper,
+            org.springframework.jdbc.core.simple.JdbcClient jdbcClient,
             com.hackathonos.backend.events.RoomEventService roomEventService,
             org.springframework.beans.factory.ObjectProvider<com.hackathonos.backend.plan.PlanPrepareService> planPrepareServiceProvider) {
         this.ideaRepository = ideaRepository;
@@ -84,6 +86,7 @@ public class IdeasService {
         this.activityLogger = activityLogger;
         this.notificationService = notificationService;
         this.ideasMapper = ideasMapper;
+        this.jdbcClient = jdbcClient;
         this.roomEventService = roomEventService;
         this.planPrepareServiceProvider = planPrepareServiceProvider;
     }
@@ -230,6 +233,15 @@ public class IdeasService {
         }
 
         validateIdeaInput(req);
+
+        if (req.baseVersion() != null && idea.getVersion() != null && !req.baseVersion().equals(idea.getVersion())) {
+            List<IdeaLink> currentLinks = linkRepository.findByIdeaId(idea.getId());
+            List<IdeaNote> currentNotes = noteRepository.findByIdeaId(idea.getId());
+            IdeaDto currentCopy = ideasMapper.toDto(idea, currentLinks, currentNotes, user, user.getId());
+            throw new com.hackathonos.backend.common.error.EntityConflictException(
+                    "EDIT_CONFLICT", "Idea was updated by another team member", idea.getVersion(), (String) null, idea.getUpdatedAt(), currentCopy
+            );
+        }
 
         idea.setText(req.text().trim());
         idea.setUpdatedAt(Instant.now());
@@ -631,6 +643,75 @@ public class IdeasService {
             }
         }
         return saved;
+    }
+
+    @Transactional
+    public int voteIdea(UUID roomId, UUID ideaId, User user) {
+        roomAccess.requireMember(roomId, user);
+        int inserted = jdbcClient.sql("""
+                INSERT INTO idea_votes (idea_id, user_id, created_at)
+                VALUES (:ideaId, :userId, now())
+                ON CONFLICT (idea_id, user_id) DO NOTHING
+                """)
+                .param("ideaId", ideaId)
+                .param("userId", user.getId())
+                .update();
+
+        if (inserted > 0) {
+            jdbcClient.sql("""
+                    UPDATE ideas
+                    SET vote_count = vote_count + 1
+                    WHERE id = :ideaId
+                    """)
+                    .param("ideaId", ideaId)
+                    .update();
+            roomEventService.recordEvent(roomId, "ideas.voted", "idea", ideaId.toString(), user.getId());
+        }
+
+        return getVoteCount(ideaId);
+    }
+
+    @Transactional
+    public int unvoteIdea(UUID roomId, UUID ideaId, User user) {
+        roomAccess.requireMember(roomId, user);
+        int deleted = jdbcClient.sql("""
+                DELETE FROM idea_votes
+                WHERE idea_id = :ideaId AND user_id = :userId
+                """)
+                .param("ideaId", ideaId)
+                .param("userId", user.getId())
+                .update();
+
+        if (deleted > 0) {
+            jdbcClient.sql("""
+                    UPDATE ideas
+                    SET vote_count = GREATEST(0, vote_count - 1)
+                    WHERE id = :ideaId
+                    """)
+                    .param("ideaId", ideaId)
+                    .update();
+            roomEventService.recordEvent(roomId, "ideas.unvoted", "idea", ideaId.toString(), user.getId());
+        }
+
+        return getVoteCount(ideaId);
+    }
+
+    public int getVoteCount(UUID ideaId) {
+        Integer count = jdbcClient.sql("SELECT COUNT(*) FROM idea_votes WHERE idea_id = :ideaId")
+                .param("ideaId", ideaId)
+                .query(Integer.class)
+                .single();
+        return count != null ? count : 0;
+    }
+
+    public boolean hasUserVoted(UUID ideaId, UUID userId) {
+        if (ideaId == null || userId == null) return false;
+        Integer count = jdbcClient.sql("SELECT COUNT(*) FROM idea_votes WHERE idea_id = :ideaId AND user_id = :userId")
+                .param("ideaId", ideaId)
+                .param("userId", userId)
+                .query(Integer.class)
+                .single();
+        return count != null && count > 0;
     }
 
     private String extractFirstSentence(String text) {

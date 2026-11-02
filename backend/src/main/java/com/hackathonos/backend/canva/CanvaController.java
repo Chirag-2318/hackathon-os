@@ -1,5 +1,10 @@
 package com.hackathonos.backend.canva;
 
+import com.hackathonos.backend.common.security.OAuthLinkStateService;
+import com.hackathonos.backend.common.security.OAuthLinkState;
+import com.hackathonos.backend.common.error.BadRequestException;
+
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hackathonos.backend.common.config.AppProperties;
@@ -35,17 +40,20 @@ public class CanvaController {
     private final CurrentUser currentUser;
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
+    private final OAuthLinkStateService oAuthLinkStateService;
 
     public CanvaController(
             CanvaService canvaService,
             CurrentUser currentUser,
             AppProperties appProperties,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            OAuthLinkStateService oAuthLinkStateService
     ) {
         this.canvaService = canvaService;
         this.currentUser = currentUser;
         this.appProperties = appProperties;
         this.objectMapper = objectMapper;
+        this.oAuthLinkStateService = oAuthLinkStateService;
     }
 
     private User resolveUser(User user) {
@@ -85,16 +93,16 @@ public class CanvaController {
         byte[] digest = md.digest(codeVerifier.getBytes(StandardCharsets.US_ASCII));
         String codeChallenge = Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
 
-        String state = UUID.randomUUID().toString();
-        HttpSession session = request.getSession(true);
-        session.setAttribute("canva_oauth_state", state);
-        session.setAttribute("canva_code_verifier", codeVerifier);
-        session.setAttribute("canva_user_id", u.getId());
-        if (roomId != null) {
-            session.setAttribute("canva_room_id", roomId.toString());
-        }
+        String returnPath = roomId != null ? "/app/room/" + roomId + "/deck" : "/app/rooms";
+        OAuthLinkState linkState = oAuthLinkStateService.createLinkState(
+                "CANVA",
+                u.getId(),
+                roomId,
+                codeVerifier,
+                returnPath
+        );
 
-        String callbackUrl = appProperties.getBaseUrl() + "/api/v1/integrations/canva/callback";
+        String callbackUrl = oAuthLinkStateService.buildRedirectUri("/api/v1/integrations/canva/callback");
         String scope = "design:content:read design:meta:read";
 
         String authUrl = "https://www.canva.com/api/oauth/authorize"
@@ -104,7 +112,7 @@ public class CanvaController {
                 + "&scope=" + URLEncoder.encode(scope, StandardCharsets.UTF_8)
                 + "&code_challenge=" + URLEncoder.encode(codeChallenge, StandardCharsets.UTF_8)
                 + "&code_challenge_method=s256"
-                + "&state=" + URLEncoder.encode(state, StandardCharsets.UTF_8);
+                + "&state=" + URLEncoder.encode(linkState.getState(), StandardCharsets.UTF_8);
 
         response.sendRedirect(authUrl);
     }
@@ -114,26 +122,37 @@ public class CanvaController {
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String state,
             @RequestParam(required = false) String error,
+            @AuthenticationPrincipal User currentUserAuth,
             HttpServletRequest request,
             HttpServletResponse response
     ) throws Exception {
-        HttpSession session = request.getSession(false);
-        String savedState = session != null ? (String) session.getAttribute("canva_oauth_state") : null;
-        String codeVerifier = session != null ? (String) session.getAttribute("canva_code_verifier") : null;
-        UUID userId = session != null ? (UUID) session.getAttribute("canva_user_id") : null;
-        String roomId = session != null ? (String) session.getAttribute("canva_room_id") : null;
-
-        String redirectTarget = roomId != null
-                ? appProperties.getFrontendUrl() + "/app/room/" + roomId + "/deck"
-                : appProperties.getFrontendUrl() + "/app/rooms";
+        String defaultTarget = appProperties.getFrontendUrl() + "/app/rooms";
 
         if (error != null) {
-            response.sendRedirect(redirectTarget + "?canva=error&reason=" + URLEncoder.encode(error, StandardCharsets.UTF_8));
+            response.sendRedirect(defaultTarget + "?canva=error&reason=" + URLEncoder.encode(error, StandardCharsets.UTF_8));
             return;
         }
 
-        if (savedState == null || state == null || !savedState.equals(state) || userId == null || codeVerifier == null) {
-            response.sendRedirect(redirectTarget + "?canva=error&reason=state_mismatch");
+        OAuthLinkState linkState;
+        try {
+            User resolved = null;
+            try { resolved = resolveUser(currentUserAuth); } catch (Exception ignored) {}
+            UUID currentUserId = resolved != null ? resolved.getId() : null;
+            linkState = oAuthLinkStateService.consumeState(state, "CANVA", currentUserId);
+        } catch (BadRequestException ex) {
+            response.sendRedirect(defaultTarget + "?canva=error&reason=" + URLEncoder.encode(ex.getCode() != null ? ex.getCode().toLowerCase() : "state_mismatch", StandardCharsets.UTF_8));
+            return;
+        }
+
+        UUID userId = linkState.getUserId();
+        String codeVerifier = linkState.getCodeVerifier();
+        UUID roomId = linkState.getRoomId();
+        String redirectTarget = appProperties.getFrontendUrl() + (linkState.getReturnPath() != null
+                ? linkState.getReturnPath()
+                : (roomId != null ? "/app/room/" + roomId + "/deck" : "/app/rooms"));
+
+        if (code == null || code.isBlank() || codeVerifier == null) {
+            response.sendRedirect(redirectTarget + "?canva=error&reason=no_code");
             return;
         }
 
@@ -149,7 +168,7 @@ public class CanvaController {
             String authHeader = Base64.getEncoder().encodeToString((clientId + ":" + clientSecret).getBytes(StandardCharsets.UTF_8));
             conn.setRequestProperty("Authorization", "Basic " + authHeader);
 
-            String callbackUrl = appProperties.getBaseUrl() + "/api/v1/integrations/canva/callback";
+            String callbackUrl = oAuthLinkStateService.buildRedirectUri("/api/v1/integrations/canva/callback");
             String formBody = "grant_type=authorization_code"
                     + "&code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
                     + "&code_verifier=" + URLEncoder.encode(codeVerifier, StandardCharsets.UTF_8)
@@ -179,6 +198,7 @@ public class CanvaController {
                 canvaService.saveToken(userId, accessToken, refreshToken, expiresIn, scope);
             }
 
+            HttpSession session = request.getSession(false);
             if (session != null) {
                 session.removeAttribute("canva_oauth_state");
                 session.removeAttribute("canva_code_verifier");

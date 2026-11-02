@@ -1,3 +1,4 @@
+import { ConflictDialog } from '@/components/conflict/ConflictDialog';
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
@@ -49,6 +50,19 @@ export function LeaderRoomSettingsDialog({
   const [description, setDescription] = useState('');
   const [durationHours, setDurationHours] = useState<number>(36);
   const [isSavingDetails, setIsSavingDetails] = useState(false);
+  const [settingsConflict, setSettingsConflict] = useState<{
+    open: boolean;
+    localDesc: string;
+    remoteDesc: string;
+    serverVersion: number;
+    lastEditorName?: string;
+    updatedAt?: string;
+  }>({
+    open: false,
+    localDesc: '',
+    remoteDesc: '',
+    serverVersion: 0,
+  });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // Confirmation modals state
@@ -107,12 +121,27 @@ export function LeaderRoomSettingsDialog({
         name,
         description,
         durationHours: Number(durationHours),
+        baseVersion: (room as any)?.version,
       } as any);
 
       toast.success('Room settings updated');
       onUpdated?.();
     } catch (err: any) {
-      if (err?.details && typeof err.details === 'object') {
+      if (err?.status === 409 || err?.code === 'EDIT_CONFLICT') {
+        const serverVersion = Number(err?.details?.currentVersion ?? err?.details?.version ?? ((room as any)?.version || 0) + 1);
+        const editorName = err?.details?.lastEditorName ?? 'A teammate';
+        const remoteCopy = err?.details?.latestData || err?.details?.currentCopy || {};
+        const remoteDesc = remoteCopy.description || description;
+
+        setSettingsConflict({
+          open: true,
+          localDesc: description,
+          remoteDesc,
+          serverVersion,
+          lastEditorName: editorName,
+          updatedAt: err?.details?.updatedAt,
+        });
+      } else if (err?.details && typeof err.details === 'object') {
         setFieldErrors(err.details);
       } else {
         toast.error(err?.message || 'Failed to update room');

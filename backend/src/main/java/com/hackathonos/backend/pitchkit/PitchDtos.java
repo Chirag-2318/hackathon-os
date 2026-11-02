@@ -36,8 +36,13 @@ public final class PitchDtos {
     public record UpdatePitchRequest(
             Integer expectedVersion,
             List<PitchBeatDto> beats,
-            Integer timeLimitSec
-    ) {}
+            Integer timeLimitSec,
+            Long baseVersion
+    ) {
+        public UpdatePitchRequest(Integer expectedVersion, List<PitchBeatDto> beats, Integer timeLimitSec) {
+            this(expectedVersion, beats, timeLimitSec, null);
+        }
+    }
 
     public record PullFromDocResponse(
             String diff,

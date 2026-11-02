@@ -435,13 +435,14 @@ public class PlanService {
      */
     @Transactional
     public ValidatePlanResponse validateStep(UUID roomId, ValidatePlanRequest req, User user) {
-        return planValidationService.validateStepText(roomId, req.stepKey(), req.answer(), Boolean.TRUE.equals(req.confirmWarnings()), user);
+        boolean confirm = Boolean.TRUE.equals(req.confirmWarnings());
+        boolean override = Boolean.TRUE.equals(req.override());
+        return planValidationService.validateStepText(roomId, req.stepKey(), req.answer(), confirm, override, user);
     }
 
     /**
      * Generates a draft answer using caller's API key, attaching ideas.md and preceding answers.
      */
-    @Transactional
     public GenerateStepResponse generateStep(UUID roomId, String stepKey, User user) {
         roomAccess.requireMember(roomId, user);
         Room room = roomAccess.getActiveRoomOrThrow(roomId);

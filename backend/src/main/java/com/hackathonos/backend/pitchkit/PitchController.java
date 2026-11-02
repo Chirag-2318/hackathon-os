@@ -3,6 +3,7 @@ package com.hackathonos.backend.pitchkit;
 import com.hackathonos.backend.pitchkit.PitchDtos.*;
 import com.hackathonos.backend.users.User;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -29,10 +30,24 @@ public class PitchController {
     @PutMapping
     public PitchDetailResponse updatePitch(
             @PathVariable UUID roomId,
+            @RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
             @RequestBody UpdatePitchRequest req,
             @AuthenticationPrincipal User user
     ) {
-        return pitchService.updatePitch(roomId, req, user);
+        UpdatePitchRequest effectiveReq = req;
+        if (effectiveReq.baseVersion() == null && ifMatch != null && !ifMatch.isBlank()) {
+            try {
+                String clean = ifMatch.replace("\"", "").replace("W/", "").trim();
+                Long parsed = Long.parseLong(clean);
+                effectiveReq = new UpdatePitchRequest(
+                        req.expectedVersion(),
+                        req.beats(),
+                        req.timeLimitSec(),
+                        parsed
+                );
+            } catch (NumberFormatException ignored) {}
+        }
+        return pitchService.updatePitch(roomId, effectiveReq, user);
     }
 
     @PostMapping("/pull-from-doc")

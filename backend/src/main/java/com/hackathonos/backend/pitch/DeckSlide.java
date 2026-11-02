@@ -27,6 +27,10 @@ public class DeckSlide {
     @Column(name = "chars", nullable = false)
     private int chars = 0;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     public DeckSlide() {}
 
     public DeckSlide(UUID roomId, int pageNo, String title, String text, int chars) {
@@ -71,6 +75,14 @@ public class DeckSlide {
 
     public int getChars() {
         return chars;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
     }
 
     public void setChars(int chars) {

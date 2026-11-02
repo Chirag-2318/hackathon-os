@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5433/hackathon_os?options=-c%20TimeZone=UTC
-    username: hackathon
-    password: hackathon
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/hackathon_os?options=-c%20TimeZone=UTC}
+    username: ${SPRING_DATASOURCE_USERNAME:hackathon}
+    password: ${SPRING_DATASOURCE_PASSWORD:hackathon}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:

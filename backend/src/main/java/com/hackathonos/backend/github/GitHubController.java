@@ -1,5 +1,10 @@
 package com.hackathonos.backend.github;
 
+import com.hackathonos.backend.common.security.OAuthLinkStateService;
+import com.hackathonos.backend.common.security.OAuthLinkState;
+import com.hackathonos.backend.common.error.BadRequestException;
+
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hackathonos.backend.common.config.AppProperties;
@@ -31,15 +36,18 @@ public class GitHubController {
     private final CurrentUser currentUser;
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
+    private final OAuthLinkStateService oAuthLinkStateService;
 
     public GitHubController(GitHubService gitHubService,
                             CurrentUser currentUser,
                             AppProperties appProperties,
-                            ObjectMapper objectMapper) {
+                            ObjectMapper objectMapper,
+                            OAuthLinkStateService oAuthLinkStateService) {
         this.gitHubService = gitHubService;
         this.currentUser = currentUser;
         this.appProperties = appProperties;
         this.objectMapper = objectMapper;
+        this.oAuthLinkStateService = oAuthLinkStateService;
     }
 
     private User resolveUser(User user) {
@@ -257,6 +265,7 @@ public class GitHubController {
     public void startLink(
             @RequestParam(required = false) UUID roomId,
             @RequestParam(defaultValue = "false") boolean privateRepos,
+            @RequestParam(required = false) String returnPath,
             @AuthenticationPrincipal User user,
             HttpServletRequest request,
             HttpServletResponse response
@@ -269,24 +278,29 @@ public class GitHubController {
 
         String clientId = appProperties.getGithub().getLinkClientId();
         if (clientId == null || clientId.isBlank()) {
-            String fallback = appProperties.getFrontendUrl() + (roomId != null ? "/app/room/" + roomId + "/github?github=error&reason=NOT_CONFIGURED" : "");
+            String fallback = appProperties.getFrontendUrl() + (roomId != null ? "/app/room/" + roomId + "/github?github=error&reason=NOT_CONFIGURED" : "/app/settings/integrations?github=error&reason=NOT_CONFIGURED");
             response.sendRedirect(fallback);
             return;
         }
 
-        String state = UUID.randomUUID().toString();
-        HttpSession session = request.getSession(true);
-        session.setAttribute("gh_link_state", state);
-        session.setAttribute("gh_link_room_id", roomId != null ? roomId.toString() : "");
-        session.setAttribute("gh_link_user_id", resolved.getId().toString());
-        session.setAttribute("gh_link_private_repos", privateRepos);
+        String defaultReturn = returnPath != null && !returnPath.isBlank()
+                ? returnPath
+                : (roomId != null ? "/app/room/" + roomId + "/github" : "/app/settings/integrations");
 
-        String redirectUri = appProperties.getBaseUrl() + "/api/v1/github/link/callback";
+        OAuthLinkState linkState = oAuthLinkStateService.createLinkState(
+                "GITHUB",
+                resolved.getId(),
+                roomId,
+                privateRepos ? "true" : "false",
+                defaultReturn
+        );
+
+        String redirectUri = oAuthLinkStateService.buildRedirectUri("/api/v1/github/link/callback");
         String scope = privateRepos ? "repo" : "read:user";
         String authorizeUrl = "https://github.com/login/oauth/authorize?client_id="
                 + URLEncoder.encode(clientId, StandardCharsets.UTF_8)
                 + "&redirect_uri=" + URLEncoder.encode(redirectUri, StandardCharsets.UTF_8)
-                + "&state=" + URLEncoder.encode(state, StandardCharsets.UTF_8)
+                + "&state=" + URLEncoder.encode(linkState.getState(), StandardCharsets.UTF_8)
                 + "&scope=" + URLEncoder.encode(scope, StandardCharsets.UTF_8);
 
         response.setStatus(HttpServletResponse.SC_FOUND);
@@ -297,39 +311,48 @@ public class GitHubController {
     public void linkCallback(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String state,
+            @RequestParam(required = false) String error,
+            @AuthenticationPrincipal User currentUserAuth,
             HttpServletRequest request,
             HttpServletResponse response
     ) throws IOException {
-        HttpSession session = request.getSession(false);
-        String roomId = session != null ? (String) session.getAttribute("gh_link_room_id") : null;
-        String returnPath = session != null ? (String) session.getAttribute("gh_link_return_path") : null;
+        String defaultFallback = appProperties.getFrontendUrl() + "/app/settings/integrations";
+
+        if (error != null) {
+            response.sendRedirect(defaultFallback + "?github=error&reason=" + URLEncoder.encode(error, StandardCharsets.UTF_8));
+            return;
+        }
+
+        if (code == null || code.isBlank()) {
+            response.sendRedirect(defaultFallback + "?github=error&reason=no_code");
+            return;
+        }
+
+        OAuthLinkState linkState;
+        try {
+            User resolved = null;
+            try { resolved = resolveUser(currentUserAuth); } catch (Exception ignored) {}
+            UUID currentUserId = resolved != null ? resolved.getId() : null;
+            linkState = oAuthLinkStateService.consumeState(state, "GITHUB", currentUserId);
+        } catch (BadRequestException ex) {
+            response.sendRedirect(defaultFallback + "?github=error&reason=" + URLEncoder.encode(ex.getCode() != null ? ex.getCode().toLowerCase() : "state_mismatch", StandardCharsets.UTF_8));
+            return;
+        }
+
+        UUID roomId = linkState.getRoomId();
+        String returnPath = linkState.getReturnPath();
         String fallbackRedirect = appProperties.getFrontendUrl() + (returnPath != null && !returnPath.isBlank()
                 ? returnPath
-                : (roomId != null && !roomId.isBlank() ? "/app/room/" + roomId + "/github" : "/app/settings/integrations"));
+                : (roomId != null ? "/app/room/" + roomId + "/github" : "/app/settings/integrations"));
 
         try {
-            if (session == null || state == null || !state.equals(session.getAttribute("gh_link_state"))) {
-                response.sendRedirect(fallbackRedirect + "?github=error&reason=state_mismatch");
-                return;
-            }
-
-            if (code == null || code.isBlank()) {
-                response.sendRedirect(fallbackRedirect + "?github=error&reason=no_code");
-                return;
-            }
-
-            String userIdStr = (String) session.getAttribute("gh_link_user_id");
-            if (userIdStr == null || userIdStr.isBlank()) {
-                response.sendRedirect(fallbackRedirect + "?github=error&reason=no_session_user");
-                return;
-            }
-            UUID userId = UUID.fromString(userIdStr);
-            boolean privateRepos = Boolean.TRUE.equals(session.getAttribute("gh_link_private_repos"));
+            UUID userId = linkState.getUserId();
+            boolean privateRepos = "true".equalsIgnoreCase(linkState.getCodeVerifier());
             String defaultScope = privateRepos ? "repo" : "read:user";
 
             String clientId = appProperties.getGithub().getLinkClientId();
             String clientSecret = appProperties.getGithub().getLinkClientSecret();
-            String redirectUri = appProperties.getBaseUrl() + "/api/v1/github/link/callback";
+            String redirectUri = oAuthLinkStateService.buildRedirectUri("/api/v1/github/link/callback");
 
             URL tokenUrl = URI.create("https://github.com/login/oauth/access_token").toURL();
             HttpURLConnection conn = (HttpURLConnection) tokenUrl.openConnection();
@@ -391,11 +414,14 @@ public class GitHubController {
 
             gitHubService.saveLinkedToken(userId, accessToken, scope, githubLogin);
 
-            session.removeAttribute("gh_link_state");
-            session.removeAttribute("gh_link_room_id");
-            session.removeAttribute("gh_link_user_id");
-            session.removeAttribute("gh_link_private_repos");
-            session.removeAttribute("gh_link_return_path");
+            HttpSession session = request.getSession(false);
+            if (session != null) {
+                session.removeAttribute("gh_link_state");
+                session.removeAttribute("gh_link_room_id");
+                session.removeAttribute("gh_link_user_id");
+                session.removeAttribute("gh_link_private_repos");
+                session.removeAttribute("gh_link_return_path");
+            }
 
             response.sendRedirect(fallbackRedirect + "?github=connected");
         } catch (Exception e) {

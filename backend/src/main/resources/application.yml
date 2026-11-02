@@ -12,7 +12,9 @@ server:
     max-connections: 8192
   servlet:
     session:
+      timeout: ${SESSION_TIMEOUT:8h}
       cookie:
+        name: JSESSIONID
         http-only: true
         same-site: ${COOKIE_SAME_SITE:Lax}
         secure: ${COOKIE_SECURE:false}
@@ -33,6 +35,14 @@ spring:
     virtual:
       enabled: true
 
+  session:
+    store-type: jdbc
+    jdbc:
+      initialize-schema: never
+      table-name: SPRING_SESSION
+      cleanup-cron: "0 * * * * *"
+      flush-mode: on_save
+      save-mode: on_set_attribute
   servlet:
     multipart:
       max-file-size: 12MB
@@ -65,7 +75,7 @@ spring:
         size: 4
 
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/hackathon_os?options=-c%20TimeZone=UTC}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/hackathon_os?options=-c%20TimeZone=UTC}
     username: ${SPRING_DATASOURCE_USERNAME:hackathon}
     password: ${SPRING_DATASOURCE_PASSWORD:hackathon}
     driver-class-name: org.postgresql.Driver
@@ -75,8 +85,10 @@ spring:
       connection-timeout: 10000
       idle-timeout: 600000
       max-lifetime: 1800000
+      leak-detection-threshold: 30000
 
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: validate
     properties:
@@ -126,6 +138,15 @@ springdoc:
     path: /v3/api-docs
 
 app:
+  storage:
+    provider: ${STORAGE_PROVIDER:local}
+    s3:
+      endpoint: ${S3_ENDPOINT:}
+      region: ${S3_REGION:us-east-1}
+      bucket: ${S3_BUCKET:}
+      access-key: ${S3_ACCESS_KEY:}
+      secret-key: ${S3_SECRET_KEY:}
+      path-style: ${S3_PATH_STYLE:false}
   public-url: ${APP_PUBLIC_URL:${APP_FRONTEND_URL:http://localhost:5173}}
   api-public-url: ${API_PUBLIC_URL:${APP_BASE_URL:http://localhost:8080}}
   cookie-domain: ${COOKIE_DOMAIN:}
@@ -137,6 +158,9 @@ app:
   frontend-url: ${APP_PUBLIC_URL:${APP_FRONTEND_URL:http://localhost:5173}}
   base-url: ${APP_BASE_URL:http://localhost:8080}
   upload-dir: ${APP_UPLOAD_DIR:./uploads}
+  events:
+    max-streams-per-user: ${SSE_MAX_STREAMS_PER_USER:6}
+    bus: ${EVENTS_BUS:local}
   encryption-key: ${APP_ENCRYPTION_KEY:}
   user-cap: ${APP_USER_CAP:1000}
   admin-emails: ${ADMIN_EMAILS:}

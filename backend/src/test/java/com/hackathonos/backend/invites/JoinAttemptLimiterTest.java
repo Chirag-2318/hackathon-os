@@ -35,7 +35,7 @@ class JoinAttemptLimiterTest {
             limiter.checkAndRecord(userId);
         }
 
-        limiter.clear(userId);
+        limiter.clear("user:" + userId);
 
         // After clear, attempts should be allowed again
         assertThatCode(() -> limiter.checkAndRecord(userId)).doesNotThrowAnyException();

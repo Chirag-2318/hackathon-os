@@ -2,12 +2,14 @@ package com.hackathonos.backend.tasks;
 
 import com.hackathonos.backend.activity.ActivityLogger;
 import com.hackathonos.backend.common.error.BadRequestException;
+import com.hackathonos.backend.common.error.ConflictException;
 import com.hackathonos.backend.common.security.RoomAccess;
 import com.hackathonos.backend.members.RoomMemberRepository;
 import com.hackathonos.backend.notifications.NotificationService;
 import com.hackathonos.backend.overview.ClockService;
 import com.hackathonos.backend.plan.PlanPhaseRepository;
 import com.hackathonos.backend.rooms.Room;
+import com.hackathonos.backend.rooms.RoomRepository;
 import com.hackathonos.backend.tasks.dto.MoveTaskRequest;
 import com.hackathonos.backend.tasks.dto.UpdateDependenciesRequest;
 import com.hackathonos.backend.tasks.dto.UpdateTaskRequest;
@@ -55,6 +57,8 @@ class TaskServiceTest {
     @Mock private ClockService clockService;
     @Mock private com.hackathonos.backend.github.GithubBranchTaskRepository branchTaskRepository;
     @Mock private com.hackathonos.backend.github.GithubBranchRepository branchRepository;
+    @Mock private com.hackathonos.backend.events.RoomEventService roomEventService;
+    @Mock private RoomRepository roomRepository;
 
     private Clock clock;
     private TaskService taskService;
@@ -72,7 +76,8 @@ class TaskServiceTest {
                 dependencyRepository, commentRepository, historyRepository, phaseRepository,
                 memberRepository, userRepository, roomAccess, taskKeyService,
                 taskDtoMapper, cycleDetector, activityLogger, notificationService,
-                clockService, clock, branchTaskRepository, branchRepository
+                clockService, clock, branchTaskRepository, branchRepository,
+                roomEventService, roomRepository
         );
 
         testUser = new User("DEV", "dev@brackit.com", "Dev Lead", null, null, null);
@@ -111,20 +116,21 @@ class TaskServiceTest {
 
         Task taskA = new Task(roomId, "TR-1", 1, "Task A", null, "TODO", null, userId, "HIGH", null, "Backend", 60, null, 0, "MANUAL");
         taskA.setId(taskIdA);
+        taskA.setAssigneeId(userId);
 
         Task taskB = new Task(roomId, "TR-2", 2, "Task B", null, "TODO", null, userId, "HIGH", null, "Frontend", 60, null, 1, "MANUAL");
         taskB.setId(taskIdB);
 
         when(taskRepository.findByIdAndRoomId(taskIdA, roomId)).thenReturn(Optional.of(taskA));
         when(taskRepository.findById(taskIdB)).thenReturn(Optional.of(taskB));
-        when(dependencyRepository.findAll()).thenReturn(Collections.emptyList());
+        when(dependencyRepository.findByRoomId(roomId)).thenReturn(Collections.emptyList());
 
         when(cycleDetector.detectCycle(eq(taskIdA), eq(List.of(taskIdB)), any()))
                 .thenReturn(new DependencyCycleDetector.CycleCheckResult(true, List.of(taskIdA, taskIdB, taskIdA)));
 
         UpdateDependenciesRequest req = new UpdateDependenciesRequest(List.of(taskIdB));
 
-        BadRequestException ex = assertThrows(BadRequestException.class, () ->
+        ConflictException ex = assertThrows(ConflictException.class, () ->
                 taskService.updateDependencies(roomId, testUser, taskIdA, req)
         );
 

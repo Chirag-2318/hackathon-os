@@ -6,9 +6,14 @@ public record PostIdeaRequest(
         String text,
         List<IdeaLinkDto> links,
         List<String> notes,
-        Boolean anonymous
+        Boolean anonymous,
+        Long baseVersion
 ) {
     public PostIdeaRequest(String text, List<IdeaLinkDto> links, List<String> notes) {
-        this(text, links, notes, false);
+        this(text, links, notes, false, null);
+    }
+
+    public PostIdeaRequest(String text, List<IdeaLinkDto> links, List<String> notes, Boolean anonymous) {
+        this(text, links, notes, anonymous, null);
     }
 }

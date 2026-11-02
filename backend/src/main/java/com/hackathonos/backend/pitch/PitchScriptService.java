@@ -26,6 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.*;
@@ -50,6 +51,7 @@ public class PitchScriptService {
     private final RoomAccess roomAccess;
     private final AiService aiService;
     private final ObjectMapper objectMapper;
+    private final TransactionTemplate transactionTemplate;
 
     public PitchScriptService(
             PitchScriptRepository scriptRepository,
@@ -63,7 +65,8 @@ public class PitchScriptService {
             UserRepository userRepository,
             RoomAccess roomAccess,
             AiService aiService,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            TransactionTemplate transactionTemplate
     ) {
         this.scriptRepository = scriptRepository;
         this.slideRepository = slideRepository;
@@ -77,6 +80,7 @@ public class PitchScriptService {
         this.roomAccess = roomAccess;
         this.aiService = aiService;
         this.objectMapper = objectMapper;
+        this.transactionTemplate = transactionTemplate;
     }
 
     /**
@@ -91,7 +95,6 @@ public class PitchScriptService {
     /**
      * Generates a timed, multi-speaker pitch script from project context using AI.
      */
-    @Transactional
     public PitchDtos.PitchScriptDto generateScript(UUID roomId, User user, PitchDtos.GeneratePitchScriptRequest req) {
         roomAccess.requireMember(roomId, user);
         if (req == null || req.type() == null) {
@@ -163,6 +166,7 @@ public class PitchScriptService {
         prompt.append("  ]\n");
         prompt.append("}\n");
 
+        // External AI call outside transaction
         String rawResponse = aiService.complete(user.getId(), prompt.toString());
         Map<String, Object> parsed = parseScriptJson(rawResponse);
 
@@ -181,32 +185,35 @@ public class PitchScriptService {
         List<PitchDtos.PitchSlidePlanDto> slideDtos = extractSlideDtos(parsed.get("slides"));
 
         int totalSec = slideDtos.stream().mapToInt(PitchDtos.PitchSlidePlanDto::seconds).sum();
+        final String finalInstructions = instructions;
 
-        PitchScript script = scriptRepository.findById(roomId).orElseGet(() -> {
-            PitchScript s = new PitchScript();
-            s.setRoomId(roomId);
-            return s;
+        return transactionTemplate.execute(status -> {
+            PitchScript script = scriptRepository.findById(roomId).orElseGet(() -> {
+                PitchScript s = new PitchScript();
+                s.setRoomId(roomId);
+                return s;
+            });
+
+            script.setType(req.type());
+            script.setSpeakerCount(speakerCount);
+            try {
+                script.setSpeakers(objectMapper.writeValueAsString(speakers));
+                script.setSlides(objectMapper.writeValueAsString(slideDtos));
+            } catch (Exception ignored) {}
+            script.setInstructions(finalInstructions);
+            script.setHook(hook);
+            script.setClosingLine(closingLine);
+            script.setTotalSeconds(totalSec);
+            script.setGeneratedBy(user.getId());
+            script.setGeneratedAt(Instant.now());
+
+            PitchScript saved = scriptRepository.save(script);
+
+            // Synchronize with pitch_slides table so lint and coverage keep working
+            syncSlidesTable(roomId, slideDtos);
+
+            return toDto(saved);
         });
-
-        script.setType(req.type());
-        script.setSpeakerCount(speakerCount);
-        try {
-            script.setSpeakers(objectMapper.writeValueAsString(speakers));
-            script.setSlides(objectMapper.writeValueAsString(slideDtos));
-        } catch (Exception ignored) {}
-        script.setInstructions(instructions);
-        script.setHook(hook);
-        script.setClosingLine(closingLine);
-        script.setTotalSeconds(totalSec);
-        script.setGeneratedBy(user.getId());
-        script.setGeneratedAt(Instant.now());
-
-        PitchScript saved = scriptRepository.save(script);
-
-        // Synchronize with pitch_slides table so lint and coverage keep working
-        syncSlidesTable(roomId, slideDtos);
-
-        return toDto(saved);
     }
 
     /**

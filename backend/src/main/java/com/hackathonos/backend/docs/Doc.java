@@ -26,6 +26,10 @@ public class Doc {
     @Column(name = "current_version", nullable = false)
     private int currentVersion = 1;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -74,6 +78,9 @@ public class Doc {
 
     public UUID getLastEditedBy() { return lastEditedBy; }
     public void setLastEditedBy(UUID lastEditedBy) { this.lastEditedBy = lastEditedBy; }
+
+    public Long getVersion() { return version; }
+    public void setVersion(Long version) { this.version = version; }
 
     public String getSource() { return source; }
     public void setSource(String source) { this.source = source; }

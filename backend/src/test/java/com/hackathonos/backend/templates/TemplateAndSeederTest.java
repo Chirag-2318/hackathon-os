@@ -50,6 +50,15 @@ class TemplateAndSeederTest {
     private RoomService roomService;
 
     @Autowired
+    private com.hackathonos.backend.rooms.RoomStageService roomStageService;
+
+    @Autowired
+    private com.hackathonos.backend.common.security.RoomAccess roomAccess;
+
+    @Autowired
+    private com.hackathonos.backend.common.idempotency.IdempotencyService idempotencyService;
+
+    @Autowired
     private UserRepository userRepository;
 
     @Autowired
@@ -70,7 +79,7 @@ class TemplateAndSeederTest {
         CurrentUser currentUser = mock(CurrentUser.class);
         when(currentUser.get()).thenReturn(testUser);
 
-        RoomController roomController = new RoomController(roomService, currentUser);
+        RoomController roomController = new RoomController(roomService, roomStageService, roomAccess, currentUser, idempotencyService);
         mockMvc = MockMvcBuilders
                 .standaloneSetup(roomController)
                 .setControllerAdvice(apiExceptionHandler)
@@ -117,9 +126,8 @@ class TemplateAndSeederTest {
         mockMvc.perform(post("/api/v1/rooms")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_TEMPLATE"))
-                .andExpect(jsonPath("$.fieldErrors.templateId").value("Unknown event template"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TEMPLATE_NOT_FOUND"))
                 .andExpect(jsonPath("$.requestId").isNotEmpty());
     }
 

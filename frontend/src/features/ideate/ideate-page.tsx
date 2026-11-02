@@ -1,3 +1,4 @@
+import { ConflictDialog } from '@/components/conflict/ConflictDialog';
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -6,7 +7,7 @@ import type { Idea, IdeaLink, RoomMember } from '@/services/types';
 import { ApiError } from '@/lib/apiClient';
 import { useCurrentUser } from '@/features/auth/useCurrentUser';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ErrorState, OfflineBanner } from '@/design';
+import { ErrorState, OfflineBanner, useLiveContext } from '@/design';
 import { toast } from 'sonner';
 
 import { IdeateHeader } from './components/ideate-header';
@@ -21,6 +22,7 @@ export function IdeatePage() {
   const activeRoomId = roomId || id || '';
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { isConnected } = useLiveContext();
   const { data: user } = useCurrentUser();
 
   const [feedFilter, setFeedFilter] = useState<IdeateTab>('all');
@@ -50,7 +52,7 @@ export function IdeatePage() {
     queryKey: ['ideate', activeRoomId],
     queryFn: () => ideaService.getIdeateData(activeRoomId),
     enabled: Boolean(activeRoomId),
-    refetchInterval: 15000,
+    refetchInterval: isConnected ? 300_000 : 15_000,
   });
 
   const { data: brief } = useQuery({
@@ -140,9 +142,54 @@ export function IdeatePage() {
     },
   });
 
+  const [ideaConflict, setIdeaConflict] = useState<{
+    open: boolean;
+    idea?: Idea;
+    localText: string;
+    remoteText: string;
+    serverVersion: number;
+    lastEditorName?: string;
+    updatedAt?: string;
+  }>({
+    open: false,
+    localText: '',
+    remoteText: '',
+    serverVersion: 0,
+  });
+
   const updateMutation = useMutation({
-    mutationFn: (idea: Idea) => ideaService.updateIdea(idea),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ideate', activeRoomId] }),
+    mutationFn: (idea: Idea & { baseVersion?: number }) => ideaService.updateIdea(idea),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ideate', activeRoomId] });
+      setIdeaConflict(prev => ({ ...prev, open: false }));
+    },
+    onError: (err: any, variables: Idea) => {
+      if (err?.status === 409 || err?.code === 'EDIT_CONFLICT') {
+        const serverVersion = Number(err?.details?.currentVersion ?? err?.details?.version ?? ((variables as any).version || 0) + 1);
+        const remoteText = err?.details?.currentContent ?? err?.details?.currentCopy?.text ?? err?.details?.latestData?.text ?? '';
+        const editorName = err?.details?.lastEditorName ?? 'A teammate';
+        const updatedAt = err?.details?.updatedAt;
+
+        try {
+          localStorage.setItem(`hos:idea:conflict:${variables.id}`, JSON.stringify({
+            text: variables.text,
+            timestamp: Date.now()
+          }));
+        } catch {}
+
+        setIdeaConflict({
+          open: true,
+          idea: variables,
+          localText: variables.text,
+          remoteText,
+          serverVersion,
+          lastEditorName: editorName,
+          updatedAt,
+        });
+      } else {
+        toast.error(err?.message || 'Failed to update idea');
+      }
+    }
   });
 
   const deleteMutation = useMutation({

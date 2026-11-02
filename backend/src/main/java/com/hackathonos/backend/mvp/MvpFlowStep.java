@@ -26,6 +26,10 @@ public class MvpFlowStep {
     @Column(name = "task_id")
     private UUID taskId;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     protected MvpFlowStep() {}
 
     public MvpFlowStep(UUID roomId, int position, String title, String status, UUID taskId) {
@@ -53,4 +57,7 @@ public class MvpFlowStep {
 
     public UUID getTaskId() { return taskId; }
     public void setTaskId(UUID taskId) { this.taskId = taskId; }
+
+    public Long getVersion() { return version; }
+    public void setVersion(Long version) { this.version = version; }
 }

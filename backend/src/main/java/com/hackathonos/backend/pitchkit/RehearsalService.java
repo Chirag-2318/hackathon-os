@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
@@ -59,6 +60,7 @@ public class RehearsalService {
     private final RoomEventService roomEventService;
     private final AiService aiService;
     private final ObjectMapper objectMapper;
+    private final TransactionTemplate transactionTemplate;
 
     // Rate limiter maps: rehearsalId -> uploadCount, userId -> List of coach call timestamps
     private final ConcurrentHashMap<UUID, Integer> uploadCountMap = new ConcurrentHashMap<>();
@@ -74,7 +76,8 @@ public class RehearsalService {
             RoomAccess roomAccess,
             RoomEventService roomEventService,
             AiService aiService,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            TransactionTemplate transactionTemplate
     ) {
         this.rehearsalRepository = rehearsalRepository;
         this.pitchService = pitchService;
@@ -86,6 +89,7 @@ public class RehearsalService {
         this.roomEventService = roomEventService;
         this.aiService = aiService;
         this.objectMapper = objectMapper;
+        this.transactionTemplate = transactionTemplate;
     }
 
     @Transactional
@@ -131,7 +135,6 @@ public class RehearsalService {
         return new StartRehearsalResponse(rehearsal.getId(), targetBeats, pitch.timeLimitSec());
     }
 
-    @Transactional
     public Map<String, String> uploadAudio(UUID roomId, UUID rehearsalId, String beatId, MultipartFile file, User user) {
         roomAccess.requireMember(roomId, user);
 
@@ -168,7 +171,7 @@ public class RehearsalService {
         // Construct prompt hint: project name, rubric words, team handles
         String promptHint = buildPromptHint(roomId);
 
-        // Transcribe through AI gateway with acting user's key
+        // Transcribe through AI gateway with acting user's key (outside transaction)
         String text;
         try {
             text = aiService.transcribeAudio(user != null ? user.getId() : null, file.getOriginalFilename(), bytes, promptHint);
@@ -177,13 +180,19 @@ public class RehearsalService {
             throw e;
         }
 
-        // Store transcript text (audio bytes are discarded immediately)
-        Map<String, String> transcriptMap = deserializeTranscript(rehearsal.getTranscript());
-        transcriptMap.put(beatId, text != null ? text.trim() : "");
-        rehearsal.setTranscript(serializeTranscript(transcriptMap));
-        rehearsalRepository.save(rehearsal);
+        // Store transcript text in a short transaction
+        final String resolvedText = text != null ? text.trim() : "";
+        transactionTemplate.execute(status -> {
+            Rehearsal r = rehearsalRepository.findByIdAndRoomId(rehearsalId, roomId)
+                    .orElseThrow(() -> new NotFoundException("REHEARSAL_NOT_FOUND", "Rehearsal run not found."));
+            Map<String, String> transcriptMap = deserializeTranscript(r.getTranscript());
+            transcriptMap.put(beatId, resolvedText);
+            r.setTranscript(serializeTranscript(transcriptMap));
+            rehearsalRepository.save(r);
+            return null;
+        });
 
-        return Map.of("text", text != null ? text.trim() : "");
+        return Map.of("text", resolvedText);
     }
 
     @Transactional
@@ -292,7 +301,6 @@ public class RehearsalService {
         return toDetailResponse(rehearsal, delta, pitch.beats(), countsTowardReadiness);
     }
 
-    @Transactional
     public CoachFeedbackDto getCoachFeedback(UUID roomId, UUID rehearsalId, User user) {
         roomAccess.requireMember(roomId, user);
 
@@ -344,6 +352,7 @@ public class RehearsalService {
                 serializeJson(transcript)
         );
 
+        // AI call outside transaction
         CoachFeedbackDto feedback = aiService.json("pitch.feedback", roomId, userId, systemPrompt, userPrompt, CoachFeedbackDto.class);
         if (feedback == null) {
             feedback = new CoachFeedbackDto(
@@ -353,8 +362,14 @@ public class RehearsalService {
             );
         }
 
-        rehearsal.setCoach(serializeJson(feedback));
-        rehearsalRepository.save(rehearsal);
+        final CoachFeedbackDto resolvedFeedback = feedback;
+        transactionTemplate.execute(status -> {
+            Rehearsal r = rehearsalRepository.findByIdAndRoomId(rehearsalId, roomId)
+                    .orElseThrow(() -> new NotFoundException("REHEARSAL_NOT_FOUND", "Rehearsal run not found."));
+            r.setCoach(serializeJson(resolvedFeedback));
+            rehearsalRepository.save(r);
+            return null;
+        });
 
         return feedback;
     }

@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,9 +52,11 @@ class UserIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        primaryUser = userRepository.save(new User(
-                "GITHUB", "usr-1", "Primary Tester", "primary@test.com", "primary-tester", "https://avatar.url/p"
-        ));
+        primaryUser = new User(
+                "GITHUB", "usr-1", "Primary Tester", "primary@test.com", "https://avatar.url/p", "primary-tester"
+        );
+        primaryUser.setUsername("primarytester");
+        primaryUser = userRepository.save(primaryUser);
         peerUser = userRepository.save(new User(
                 "GOOGLE", "usr-2", "Peer Tester", "peer@test.com", null, "https://avatar.url/peer"
         ));
@@ -121,9 +124,10 @@ class UserIntegrationTest {
         memberRepository.save(new RoomMember(room.getId(), peerUser.getId(), "BUILDER"));
 
         MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpServletResponse response = new MockHttpServletResponse();
 
         // Attempt account delete
-        assertThatThrownBy(() -> userService.deleteAccount(primaryUser, new DeleteAccountRequest("DELETE"), request))
+        assertThatThrownBy(() -> userService.deleteAccount(primaryUser, new DeleteAccountRequest("primarytester"), request, response))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("Transfer leadership before deleting your account");
     }
@@ -146,13 +150,11 @@ class UserIntegrationTest {
         memberRepository.save(new RoomMember(room.getId(), primaryUser.getId(), "LEADER"));
 
         MockHttpServletRequest request = new MockHttpServletRequest();
-        userService.deleteAccount(primaryUser, new DeleteAccountRequest("DELETE"), request);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        userService.deleteAccount(primaryUser, new DeleteAccountRequest("primarytester"), request, response);
 
-        // Room should be deleted and user anonymized
+        // Room and user should be deleted
         assertThat(roomRepository.findById(room.getId())).isEmpty();
-        User anonymized = userRepository.findById(primaryUser.getId()).orElseThrow();
-        assertThat(anonymized.getName()).isEqualTo("Deleted user");
-        assertThat(anonymized.getEmail()).isNull();
-        assertThat(anonymized.getDeletedAt()).isNotNull();
+        assertThat(userRepository.findById(primaryUser.getId())).isEmpty();
     }
 }

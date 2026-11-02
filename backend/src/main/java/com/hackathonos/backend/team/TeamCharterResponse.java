@@ -32,6 +32,10 @@ public class TeamCharterResponse {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt = Instant.now();
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     protected TeamCharterResponse() {}
 
     public TeamCharterResponse(UUID roomId, UUID userId, String goal, int hoursAvailable, boolean normsAcknowledged) {
@@ -63,4 +67,7 @@ public class TeamCharterResponse {
 
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+
+    public Long getVersion() { return version; }
+    public void setVersion(Long version) { this.version = version; }
 }

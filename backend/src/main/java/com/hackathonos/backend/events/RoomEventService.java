@@ -3,65 +3,47 @@ package com.hackathonos.backend.events;
 import com.hackathonos.backend.events.dto.RoomEventDto;
 import com.hackathonos.backend.events.dto.RoomEventDto.FeedResponse;
 import com.hackathonos.backend.events.dto.RoomEventDto.LatestEventResponse;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 
 /**
- * Service managing room change feeds and Server-Sent Events.
+ * Service managing room change feeds and persisting mutation events to the database.
+ * Broadcasts events through the unified RoomEventHub.
  */
 @Service
 public class RoomEventService {
 
     private final RoomEventRepository eventRepository;
-    private final RoomSseBroadcaster sseBroadcaster;
+    private final RoomEventHub eventHub;
 
-    public RoomEventService(RoomEventRepository eventRepository, RoomSseBroadcaster sseBroadcaster) {
+    public RoomEventService(RoomEventRepository eventRepository, @Lazy RoomEventHub eventHub) {
         this.eventRepository = eventRepository;
-        this.sseBroadcaster = sseBroadcaster;
+        this.eventHub = eventHub;
     }
 
     /**
      * Records a room mutation event in the database and broadcasts to connected SSE subscribers.
-     * Must be called within the same transactional boundary as the mutation.
      */
     @Transactional
     public RoomEvent recordEvent(UUID roomId, String type, String entityType, String entityId, UUID actorUserId) {
         RoomEvent event = new RoomEvent(roomId, type, entityType, entityId, actorUserId);
         RoomEvent saved = eventRepository.save(event);
-        sseBroadcaster.broadcast(saved);
+        String topic = mapTypeToTopic(type);
+        eventHub.publish(roomId, new RoomEventHub.RoomEvent(
+                saved.getId(),
+                topic,
+                roomId,
+                actorUserId,
+                "Member",
+                entityId,
+                saved.getCreatedAt()
+        ));
         return saved;
-    }
-
-    /**
-     * Subscribes to live Server-Sent Events for a room with optional Last-Event-ID replay.
-     */
-    public SseEmitter subscribe(UUID roomId, UUID userId, Long lastEventId) {
-        SseEmitter emitter = sseBroadcaster.subscribe(roomId, userId);
-
-        // If client provided Last-Event-ID on reconnect, replay missed events
-        if (lastEventId != null && lastEventId > 0) {
-            List<RoomEvent> missed = eventRepository.findEventsAfter(roomId, lastEventId, PageRequest.of(0, 50));
-            for (RoomEvent ev : missed) {
-                try {
-                    emitter.send(SseEmitter.event()
-                            .id(String.valueOf(ev.getId()))
-                            .name("room-event")
-                            .data(new RoomEventDto.SsePayload(
-                                    ev.getId(), ev.getType(), ev.getEntityType(), ev.getEntityId(), ev.getActorUserId()
-                            )));
-                } catch (IOException ignored) {
-                    break;
-                }
-            }
-        }
-
-        return emitter;
     }
 
     /**
@@ -93,5 +75,20 @@ public class RoomEventService {
     public LatestEventResponse getLatestEventId(UUID roomId) {
         long latestId = eventRepository.findLatestEventId(roomId).orElse(0L);
         return new LatestEventResponse(latestId);
+    }
+
+    private String mapTypeToTopic(String type) {
+        if (type == null) return "room";
+        String lower = type.toLowerCase();
+        if (lower.startsWith("task")) return "board";
+        if (lower.startsWith("idea")) return "ideas";
+        if (lower.startsWith("doc")) return "docs";
+        if (lower.startsWith("checkpoint")) return "checkpoints";
+        if (lower.startsWith("member")) return "members";
+        if (lower.startsWith("phase")) return "stage";
+        if (lower.startsWith("submission") || lower.startsWith("reopened")) return "submission";
+        if (lower.startsWith("demo")) return "demo";
+        if (lower.startsWith("pitch")) return "pitch";
+        return "room";
     }
 }

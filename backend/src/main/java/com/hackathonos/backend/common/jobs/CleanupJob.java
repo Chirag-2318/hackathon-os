@@ -18,9 +18,54 @@ public class CleanupJob {
     private final JdbcClient jdbcClient;
     private final DbAdvisoryLockService advisoryLockService;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hackathonos.backend.common.security.OAuthLinkStateService oAuthLinkStateService;
+
     public CleanupJob(JdbcClient jdbcClient, DbAdvisoryLockService advisoryLockService) {
         this.jdbcClient = jdbcClient;
         this.advisoryLockService = advisoryLockService;
+    }
+
+    /**
+     * Hourly pruning of room events and presence rows older than 24h, guarded by DB advisory lock.
+     */
+    @Scheduled(cron = "0 15 * * * *", zone = "UTC")
+    public void runHourlyRealtimePrune() {
+        advisoryLockService.tryLockAndRun(1005L, this::doRealtimePrune);
+    }
+
+    /**
+     * Hourly pruning of idempotency keys older than 24h, guarded by DB advisory lock.
+     */
+    @Scheduled(cron = "0 30 * * * *", zone = "UTC")
+    public void runHourlyIdempotencyPrune() {
+        advisoryLockService.tryLockAndRun(1006L, this::doIdempotencyPrune);
+    }
+
+    @Transactional
+    public void doIdempotencyPrune() {
+        Instant cutoff24h = Instant.now().minus(24, ChronoUnit.HOURS);
+        int purgedKeys = jdbcClient.sql("DELETE FROM idempotency_keys WHERE created_at < :cutoff")
+                .param("cutoff", cutoff24h)
+                .update();
+        if (purgedKeys > 0) {
+            log.info("Hourly idempotency prune: purged {} keys older than 24h", purgedKeys);
+        }
+    }
+
+    @Transactional
+    public void doRealtimePrune() {
+        Instant cutoff24h = Instant.now().minus(24, ChronoUnit.HOURS);
+        int purgedEvents = jdbcClient.sql("DELETE FROM room_events WHERE created_at < :cutoff")
+                .param("cutoff", cutoff24h)
+                .update();
+        int purgedPresence = jdbcClient.sql("DELETE FROM room_presence WHERE last_seen < :cutoff")
+                .param("cutoff", cutoff24h)
+                .update();
+        if (purgedEvents > 0 || purgedPresence > 0) {
+            log.info("Hourly realtime prune: purged {} room_events and {} room_presence records older than 24h",
+                    purgedEvents, purgedPresence);
+        }
     }
 
     /**
@@ -39,11 +84,14 @@ public class CleanupJob {
         int oldNotifications = purgeOldNotifications();
         int expiredExports = purgeExpiredDataExports();
         int oldClientErrors = purgeOldClientErrors();
+        int expiredLinkStates = oAuthLinkStateService != null ? oAuthLinkStateService.cleanExpiredStates() : 0;
+        doRealtimePrune();
+        doIdempotencyPrune();
 
-        log.info("Nightly cleanup complete: purged {} expired invites, {} old notifications, {} expired exports, {} client errors",
-                expiredInvites, oldNotifications, expiredExports, oldClientErrors);
+        log.info("Nightly cleanup complete: purged {} expired invites, {} old notifications, {} expired exports, {} client errors, {} link states",
+                expiredInvites, oldNotifications, expiredExports, oldClientErrors, expiredLinkStates);
 
-        return new CleanupResult(expiredInvites, oldNotifications, expiredExports, oldClientErrors);
+        return new CleanupResult(expiredInvites, oldNotifications, expiredExports, oldClientErrors, expiredLinkStates);
     }
 
     private int purgeExpiredInvites() {
@@ -72,5 +120,9 @@ public class CleanupJob {
                 .update();
     }
 
-    public record CleanupResult(int purgedInvites, int purgedNotifications, int purgedExports, int purgedClientErrors) {}
+    public record CleanupResult(int purgedInvites, int purgedNotifications, int purgedExports, int purgedClientErrors, int purgedLinkStates) {
+        public CleanupResult(int purgedInvites, int purgedNotifications, int purgedExports, int purgedClientErrors) {
+            this(purgedInvites, purgedNotifications, purgedExports, purgedClientErrors, 0);
+        }
+    }
 }

@@ -91,14 +91,42 @@ public class DocController {
         return docService.getDocByFileName(roomId, fileName, resolveUser(user));
     }
 
+    @PostMapping("/{fileName}/editing")
+    public ResponseEntity<Void> touchEditing(
+            @PathVariable UUID roomId,
+            @PathVariable String fileName,
+            @AuthenticationPrincipal User user
+    ) {
+        docService.touchEditingDoc(roomId, fileName, resolveUser(user));
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{fileName}/editors")
+    public List<String> getActiveEditors(
+            @PathVariable UUID roomId,
+            @PathVariable String fileName,
+            @AuthenticationPrincipal User user
+    ) {
+        return docService.getActiveEditors(roomId, fileName, resolveUser(user));
+    }
+
     @PutMapping("/{fileName}")
     public DocDetailDto updateDoc(
             @PathVariable UUID roomId,
             @PathVariable String fileName,
+            @RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
             @RequestBody UpdateDocRequest req,
             @AuthenticationPrincipal User user
     ) {
-        return docService.updateDoc(roomId, fileName, req, resolveUser(user));
+        UpdateDocRequest effectiveReq = req;
+        if (effectiveReq.baseVersion() == null && ifMatch != null && !ifMatch.isBlank()) {
+            try {
+                String clean = ifMatch.replace("\"", "").replace("W/", "").trim();
+                int ver = Integer.parseInt(clean);
+                effectiveReq = new UpdateDocRequest(req.content(), req.summary(), ver);
+            } catch (NumberFormatException ignored) {}
+        }
+        return docService.updateDoc(roomId, fileName, effectiveReq, resolveUser(user));
     }
 
     @DeleteMapping("/{fileName}")

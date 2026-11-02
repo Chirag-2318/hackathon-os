@@ -134,7 +134,8 @@ public class PlanController {
             @PathVariable UUID roomId,
             @RequestBody ValidatePlanRequest request) {
         boolean confirm = Boolean.TRUE.equals(request.confirmWarnings());
-        return planValidationService.validateStepText(roomId, request.stepKey(), request.answer(), confirm, currentUser.get());
+        boolean override = Boolean.TRUE.equals(request.override());
+        return planValidationService.validateStepText(roomId, request.stepKey(), request.answer(), confirm, override, currentUser.get());
     }
 
     @GetMapping("/plan")

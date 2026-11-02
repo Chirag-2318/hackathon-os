@@ -1,5 +1,9 @@
 package com.hackathonos.backend.users;
 
+import com.hackathonos.backend.common.storage.FileStorage;
+import com.hackathonos.backend.common.storage.LocalDiskFileStorage;
+
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hackathonos.backend.common.config.AppProperties;
 import com.hackathonos.backend.common.error.BadRequestException;
@@ -114,6 +118,12 @@ public class UserService {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.hackathonos.backend.admin.AppSettingsService appSettingsService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private FileStorage fileStorage;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private AvatarImageProcessor avatarImageProcessor;
 
 
     public UserService(UserRepository userRepository,
@@ -518,10 +528,18 @@ public class UserService {
             }
         }
         if (user.getAvatarUrl() != null && user.getAvatarUrl().startsWith("/uploads/avatars/")) {
-            File avFile = new File(appProperties.getUploadDir(), "avatars/" + user.getAvatarUrl().substring("/uploads/avatars/".length()));
-            if (avFile.exists() && avFile.isFile()) {
-                fileCount += 1;
-                totalSizeBytes += avFile.length();
+            String avKey = user.getAvatarUrl().substring("/uploads/".length());
+            if (fileStorage != null) {
+                if (fileStorage.exists(avKey)) {
+                    fileCount += 1;
+                    totalSizeBytes += fileStorage.get(avKey).map(com.hackathonos.backend.common.storage.StoredFile::contentLength).orElse(0L);
+                }
+            } else {
+                File avFile = new File(appProperties.getUploadDir(), avKey);
+                if (avFile.exists() && avFile.isFile()) {
+                    fileCount += 1;
+                    totalSizeBytes += avFile.length();
+                }
             }
         }
         DataSummaryResponse.FilesSummary filesSummary = new DataSummaryResponse.FilesSummary(
@@ -758,8 +776,17 @@ public class UserService {
         }
 
         if (user.getAvatarUrl() != null && user.getAvatarUrl().startsWith("/uploads/avatars/")) {
-            File avFile = new File(appProperties.getUploadDir(), "avatars/" + user.getAvatarUrl().substring("/uploads/avatars/".length()));
-            filesToDelete.add(avFile);
+            String avKey = user.getAvatarUrl().substring("/uploads/".length());
+            if (fileStorage != null) {
+                try {
+                    fileStorage.delete(avKey);
+                } catch (Exception e) {
+                    log.warn("Failed to delete avatar from storage: {}", avKey, e);
+                }
+            } else {
+                File avFile = new File(appProperties.getUploadDir(), avKey);
+                filesToDelete.add(avFile);
+            }
         }
 
         String ghEncryptedToken = null;
@@ -972,47 +999,44 @@ public class UserService {
         if (file == null || file.isEmpty()) {
             throw new BadRequestException("EMPTY_FILE", "Please choose an image file to upload");
         }
-        if (file.getSize() > 2 * 1024 * 1024) {
-            throw new PayloadTooLargeException("PAYLOAD_TOO_LARGE", "Avatar file exceeds 2MB limit");
+        if (file.getSize() > 3 * 1024 * 1024) {
+            throw new PayloadTooLargeException("PAYLOAD_TOO_LARGE", "Avatar file exceeds 3MB limit");
         }
 
-        if (appSettingsService != null) {
-            appSettingsService.checkUploadQuota(user.getId(), file.getSize());
-        }
-
-        byte[] bytes;
+        byte[] rawBytes;
         try {
-            bytes = file.getBytes();
+            rawBytes = file.getBytes();
         } catch (IOException e) {
             throw new BadRequestException("FILE_READ_ERROR", "Could not read uploaded file");
         }
 
-        boolean isPng = bytes.length >= 8 &&
-                (bytes[0] & 0xFF) == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47;
-        boolean isJpeg = bytes.length >= 3 &&
-                (bytes[0] & 0xFF) == 0xFF && (bytes[1] & 0xFF) == 0xD8 && (bytes[2] & 0xFF) == 0xFF;
-        boolean isWebp = bytes.length >= 12 &&
-                bytes[0] == 'R' && bytes[1] == 'I' && bytes[2] == 'F' && bytes[3] == 'F' &&
-                bytes[8] == 'W' && bytes[9] == 'E' && bytes[10] == 'B' && bytes[11] == 'P';
+        if (avatarImageProcessor == null) {
+            avatarImageProcessor = new AvatarImageProcessor();
+        }
+        AvatarImageProcessor.ProcessedAvatar processed = avatarImageProcessor.processAvatarImage(rawBytes);
 
-        if (!isPng && !isJpeg && !isWebp) {
-            throw new BadRequestException("INVALID_IMAGE_TYPE", "Only PNG, JPEG, and WebP images are allowed. SVG and GIF are rejected.");
+        if (appSettingsService != null) {
+            appSettingsService.checkUploadQuota(user.getId(), processed.bytes().length);
         }
 
-        File uploadDir = new File(appProperties.getUploadDir(), "avatars");
-        if (!uploadDir.exists() && !uploadDir.mkdirs()) {
-            // directory creation failed or already exists
+        if (fileStorage == null) {
+            fileStorage = new LocalDiskFileStorage(appProperties);
         }
 
-        String filename = UUID.randomUUID().toString() + ".webp";
-        File dest = new File(uploadDir, filename);
-        try {
-            Files.write(dest.toPath(), bytes);
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to save avatar image", e);
+        // Delete previous custom avatar if present
+        if (user.getAvatarUrl() != null && user.getAvatarUrl().startsWith("/uploads/avatars/")) {
+            String oldKey = user.getAvatarUrl().substring("/uploads/".length());
+            try {
+                fileStorage.delete(oldKey);
+            } catch (Exception ex) {
+                log.warn("Failed to delete previous avatar file: {}", oldKey, ex);
+            }
         }
 
-        String avatarUrl = "/uploads/avatars/" + filename;
+        String key = "avatars/" + user.getId() + "_" + UUID.randomUUID() + ".jpg";
+        fileStorage.put(key, new java.io.ByteArrayInputStream(processed.bytes()), processed.contentType(), processed.bytes().length);
+
+        String avatarUrl = "/uploads/" + key;
         user.setAvatarUrl(avatarUrl);
         user.setAvatarType("CUSTOM");
         userRepository.save(user);

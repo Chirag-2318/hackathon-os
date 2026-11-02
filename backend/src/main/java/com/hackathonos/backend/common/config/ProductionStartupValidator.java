@@ -35,6 +35,9 @@ public class ProductionStartupValidator implements ApplicationRunner {
         List<String> errors = new ArrayList<>();
 
         // 1. Database Configuration
+        String poolSize = env.getProperty("spring.datasource.hikari.maximum-pool-size", env.getProperty("DB_POOL_SIZE", "10"));
+        log.warn("HikariCP maximum-pool-size configured to {}. Notice: Pool size must stay below managed Postgres max_connections divided by number of app instances (leaving room for admin connections and scheduler locks).", poolSize);
+
         checkRequired(errors, "SPRING_DATASOURCE_URL",
                 env.getProperty("spring.datasource.url"),
                 "jdbc:postgresql://", "localhost:5433");
@@ -103,6 +106,22 @@ public class ProductionStartupValidator implements ApplicationRunner {
                 env.getProperty("app.ai.platform-fallback", "false"));
         if (Boolean.parseBoolean(fallbackStr)) {
             errors.add("AI_PLATFORM_FALLBACK must be false in prod (platform pays for NO AI usage in production)");
+        }
+
+
+        // 8. Storage Provider
+        String storageProvider = env.getProperty("app.storage.provider", env.getProperty("STORAGE_PROVIDER", "local"));
+        if ("local".equalsIgnoreCase(storageProvider)) {
+            log.warn("\n****************************************************************************************\n"
+                    + "WARNING: STORAGE_PROVIDER is set to 'local' in production!\n"
+                    + "User uploads (avatars) will be stored on Render's ephemeral filesystem and WILL BE LOST\n"
+                    + "on every container restart or redeploy. Set STORAGE_PROVIDER=s3 with S3_* variables for persistence.\n"
+                    + "****************************************************************************************\n");
+        } else if ("s3".equalsIgnoreCase(storageProvider)) {
+            checkRequired(errors, "S3_ENDPOINT", env.getProperty("app.storage.s3.endpoint", env.getProperty("S3_ENDPOINT")), null, null);
+            checkRequired(errors, "S3_BUCKET", env.getProperty("app.storage.s3.bucket", env.getProperty("S3_BUCKET")), null, null);
+            checkRequired(errors, "S3_ACCESS_KEY", env.getProperty("app.storage.s3.access-key", env.getProperty("S3_ACCESS_KEY")), null, null);
+            checkRequired(errors, "S3_SECRET_KEY", env.getProperty("app.storage.s3.secret-key", env.getProperty("S3_SECRET_KEY")), null, null);
         }
 
         if (!errors.isEmpty()) {

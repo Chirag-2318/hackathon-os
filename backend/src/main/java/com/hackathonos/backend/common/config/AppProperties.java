@@ -19,6 +19,65 @@ public class AppProperties {
 
     private CookieProperties cookie = new CookieProperties();
 
+    private StorageProperties storage = new StorageProperties();
+    private EventsProperties events = new EventsProperties();
+
+    public EventsProperties getEvents() { return events; }
+    public void setEvents(EventsProperties events) { this.events = events; }
+
+    public static class EventsProperties {
+        private int maxStreamsPerUser = 6;
+        private String bus = "local";
+
+        public int getMaxStreamsPerUser() { return maxStreamsPerUser; }
+        public void setMaxStreamsPerUser(int maxStreamsPerUser) { this.maxStreamsPerUser = maxStreamsPerUser; }
+
+        public String getBus() { return bus; }
+        public void setBus(String bus) { this.bus = bus; }
+    }
+
+    public StorageProperties getStorage() { return storage; }
+    public void setStorage(StorageProperties storage) { this.storage = storage; }
+
+    public static class StorageProperties {
+        private String provider = "local";
+        private S3Properties s3 = new S3Properties();
+
+        public String getProvider() { return provider; }
+        public void setProvider(String provider) { this.provider = provider; }
+
+        public S3Properties getS3() { return s3; }
+        public void setS3(S3Properties s3) { this.s3 = s3; }
+
+        public static class S3Properties {
+            private String endpoint = "";
+            private String region = "us-east-1";
+            private String bucket = "";
+            private String accessKey = "";
+            private String secretKey = "";
+            private boolean pathStyle = false;
+
+            public String getEndpoint() { return endpoint; }
+            public void setEndpoint(String endpoint) { this.endpoint = endpoint; }
+
+            public String getRegion() { return region; }
+            public void setRegion(String region) { this.region = region; }
+
+            public String getBucket() { return bucket; }
+            public void setBucket(String bucket) { this.bucket = bucket; }
+
+            public String getAccessKey() { return accessKey; }
+            public void setAccessKey(String accessKey) { this.accessKey = accessKey; }
+
+            public String getSecretKey() { return secretKey; }
+            public void setSecretKey(String secretKey) { this.secretKey = secretKey; }
+
+            public boolean isPathStyle() { return pathStyle; }
+            public void setPathStyle(boolean pathStyle) { this.pathStyle = pathStyle; }
+        }
+    }
+
+
     public CookieProperties getCookie() { return cookie; }
     public void setCookie(CookieProperties cookie) { this.cookie = cookie; }
 
@@ -158,4 +217,70 @@ public class AppProperties {
             return clientId != null && !clientId.isBlank() && clientSecret != null && !clientSecret.isBlank();
         }
     }
+
+    private McpProperties mcp = new McpProperties();
+
+    public McpProperties getMcp() { return mcp; }
+    public void setMcp(McpProperties mcp) { this.mcp = mcp; }
+
+    public static class McpProperties {
+        private String allowedPlans = "PRO,MAX";
+        private OAuthProperties oauth = new OAuthProperties();
+
+        public String getAllowedPlans() { return allowedPlans; }
+        public void setAllowedPlans(String allowedPlans) { this.allowedPlans = allowedPlans; }
+
+        public OAuthProperties getOauth() { return oauth; }
+        public void setOauth(OAuthProperties oauth) { this.oauth = oauth; }
+
+        public static class OAuthProperties {
+            private java.util.List<String> allowedRedirectUris = new java.util.ArrayList<>(java.util.List.of("https://claude.ai/api/mcp/auth_callback"));
+            private boolean allowLoopbackRedirects = true;
+            private java.time.Duration accessTokenTtl = java.time.Duration.ofHours(1);
+            private java.time.Duration refreshTokenTtl = java.time.Duration.ofDays(30);
+            private java.time.Duration authCodeTtl = java.time.Duration.ofMinutes(5);
+            private java.util.List<String> resourceUris = new java.util.ArrayList<>();
+
+            public java.util.List<String> getAllowedRedirectUris() { return allowedRedirectUris; }
+            public void setAllowedRedirectUris(java.util.List<String> allowedRedirectUris) { this.allowedRedirectUris = allowedRedirectUris; }
+
+            public boolean isAllowLoopbackRedirects() { return allowLoopbackRedirects; }
+            public void setAllowLoopbackRedirects(boolean allowLoopbackRedirects) { this.allowLoopbackRedirects = allowLoopbackRedirects; }
+
+            public java.time.Duration getAccessTokenTtl() { return accessTokenTtl; }
+            public void setAccessTokenTtl(java.time.Duration accessTokenTtl) { this.accessTokenTtl = accessTokenTtl; }
+
+            public java.time.Duration getRefreshTokenTtl() { return refreshTokenTtl; }
+            public void setRefreshTokenTtl(java.time.Duration refreshTokenTtl) { this.refreshTokenTtl = refreshTokenTtl; }
+
+            public java.time.Duration getAuthCodeTtl() { return authCodeTtl; }
+            public void setAuthCodeTtl(java.time.Duration authCodeTtl) { this.authCodeTtl = authCodeTtl; }
+
+            public java.util.List<String> getResourceUris() { return resourceUris; }
+            public void setResourceUris(java.util.List<String> resourceUris) { this.resourceUris = resourceUris; }
+        }
+    }
+
+    public String getOAuthIssuer() {
+        String base = getApiPublicUrl();
+        if (base == null || base.isBlank()) {
+            base = getBaseUrl();
+        }
+        if (base == null || base.isBlank()) {
+            base = "http://localhost:8080";
+        }
+        try {
+            java.net.URI uri = java.net.URI.create(base);
+            String scheme = uri.getScheme() != null ? uri.getScheme() : "http";
+            String host = uri.getHost() != null ? uri.getHost() : "localhost";
+            int port = uri.getPort();
+            if (port != -1 && !((port == 80 && "http".equalsIgnoreCase(scheme)) || (port == 443 && "https".equalsIgnoreCase(scheme)))) {
+                return scheme + "://" + host + ":" + port;
+            }
+            return scheme + "://" + host;
+        } catch (Exception e) {
+            return base.replaceAll("/+$", "");
+        }
+    }
 }
+

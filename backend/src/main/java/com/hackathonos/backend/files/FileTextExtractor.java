@@ -1,6 +1,8 @@
 package com.hackathonos.backend.files;
 
 import com.hackathonos.backend.common.error.FileExtractionException;
+import com.hackathonos.backend.common.concurrency.ExternalCallBulkhead;
+import org.apache.pdfbox.io.MemoryUsageSetting;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
@@ -76,6 +78,10 @@ public class FileTextExtractor {
     ) {}
 
 
+    private final ExternalCallBulkhead bulkhead;
+    private final int maxPages;
+    private final int maxPptxSlides;
+
     // Bounded executor with at most 5 concurrent tasks and queue capacity
     private final ExecutorService executor = new ThreadPoolExecutor(
             2,
@@ -85,6 +91,24 @@ public class FileTextExtractor {
             new LinkedBlockingQueue<>(20),
             new ThreadPoolExecutor.AbortPolicy()
     );
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public FileTextExtractor(
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            ExternalCallBulkhead bulkhead,
+            @org.springframework.beans.factory.annotation.Value("${PDF_MAX_PAGES:80}")
+            int maxPages,
+            @org.springframework.beans.factory.annotation.Value("${PPTX_MAX_SLIDES:60}")
+            int maxPptxSlides
+    ) {
+        this.bulkhead = bulkhead != null ? bulkhead : new ExternalCallBulkhead(6, 3, 2, 5000);
+        this.maxPages = maxPages > 0 ? maxPages : 80;
+        this.maxPptxSlides = maxPptxSlides > 0 ? maxPptxSlides : 60;
+    }
+
+    public FileTextExtractor() {
+        this(null, 80, 60);
+    }
 
     public ExtractionResult extractText(MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -218,7 +242,8 @@ public class FileTextExtractor {
     }
 
     private ExtractionResult extractPdf(byte[] bytes) {
-        try (PDDocument document = Loader.loadPDF(bytes)) {
+        try (ExternalCallBulkhead.Permit permit = bulkhead.acquire(ExternalCallBulkhead.BULKHEAD_HEAVY_PARSE)) {
+            try (PDDocument document = Loader.loadPDF(bytes, null, null, null, MemoryUsageSetting.setupTempFileOnly().streamCache)) {
             if (document.isEncrypted()) {
                 throw new FileExtractionException("FILE_ENCRYPTED", "This PDF is password protected.", HttpStatus.UNPROCESSABLE_ENTITY);
             }
@@ -283,6 +308,7 @@ public class FileTextExtractor {
         } catch (IOException e) {
             log.warn("PDFBox extraction error: {}", e.getClass().getSimpleName());
             throw new FileExtractionException("FILE_UNREADABLE", "Could not read PDF: " + e.getMessage(), HttpStatus.UNPROCESSABLE_ENTITY);
+        }
         }
     }
 
@@ -456,7 +482,8 @@ public class FileTextExtractor {
     }
 
     private List<SlideTextEntry> extractPdfSlides(byte[] bytes) {
-        try (PDDocument doc = Loader.loadPDF(bytes)) {
+        try (ExternalCallBulkhead.Permit permit = bulkhead.acquire(ExternalCallBulkhead.BULKHEAD_HEAVY_PARSE)) {
+            try (PDDocument doc = Loader.loadPDF(bytes, null, null, null, MemoryUsageSetting.setupTempFileOnly().streamCache)) {
             if (doc.isEncrypted()) {
                 throw new FileExtractionException("FILE_ENCRYPTED", "Password-protected PDFs cannot be audited.", HttpStatus.UNPROCESSABLE_ENTITY);
             }
@@ -487,12 +514,19 @@ public class FileTextExtractor {
             log.warn("Failed to extract PDF slides: {}", e.getMessage());
             throw new FileExtractionException("FILE_UNREADABLE", "Could not parse PDF slides.", HttpStatus.UNPROCESSABLE_ENTITY);
         }
+        }
     }
 
     private List<SlideTextEntry> extractPptxSlides(byte[] bytes) {
-        try (XMLSlideShow pptx = new XMLSlideShow(new ByteArrayInputStream(bytes))) {
-            List<XSLFSlide> slides = pptx.getSlides();
-            int pagesToRead = Math.min(slides.size(), 40);
+        try (ExternalCallBulkhead.Permit permit = bulkhead.acquire(ExternalCallBulkhead.BULKHEAD_HEAVY_PARSE)) {
+            try (XMLSlideShow pptx = new XMLSlideShow(new ByteArrayInputStream(bytes))) {
+                List<XSLFSlide> slides = pptx.getSlides();
+                if (slides.size() > maxPptxSlides) {
+                    throw new FileExtractionException("FILE_TOO_LARGE",
+                            "Presentation exceeds safety limit of " + maxPptxSlides + " slides (found " + slides.size() + ").",
+                            HttpStatus.PAYLOAD_TOO_LARGE);
+                }
+                int pagesToRead = Math.min(slides.size(), maxPptxSlides);
             List<SlideTextEntry> entries = new ArrayList<>();
             int totalChars = 0;
 
@@ -533,6 +567,7 @@ public class FileTextExtractor {
         } catch (Exception e) {
             log.warn("Failed to extract PPTX slides: {}", e.getMessage());
             throw new FileExtractionException("FILE_UNREADABLE", "Could not parse PPTX slides.", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
         }
     }
 

@@ -18,6 +18,7 @@ import com.hackathonos.backend.users.User;
 import com.hackathonos.backend.users.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.*;
@@ -44,6 +45,7 @@ public class PitchQaService {
     private final RoomAccess roomAccess;
     private final AiService aiService;
     private final ObjectMapper objectMapper;
+    private final TransactionTemplate transactionTemplate;
 
     public PitchQaService(
             PitchQaRepository qaRepository,
@@ -55,7 +57,8 @@ public class PitchQaService {
             BriefRubricItemRepository rubricRepository,
             RoomAccess roomAccess,
             AiService aiService,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            TransactionTemplate transactionTemplate
     ) {
         this.qaRepository = qaRepository;
         this.drillRepository = drillRepository;
@@ -67,6 +70,7 @@ public class PitchQaService {
         this.roomAccess = roomAccess;
         this.aiService = aiService;
         this.objectMapper = objectMapper;
+        this.transactionTemplate = transactionTemplate;
     }
 
     /**
@@ -173,7 +177,6 @@ public class PitchQaService {
     /**
      * Generates rich Q&A defense questions using project context and level, saves as GENERATED, ensures required questions.
      */
-    @Transactional
     public List<PitchDtos.QaItemDto> generateQa(UUID roomId, User user, PitchDtos.GenerateQaRequest req) {
         roomAccess.requireMember(roomId, user);
 
@@ -199,60 +202,64 @@ public class PitchQaService {
                 "Generate exactly " + targetCount + " judge questions with counter answers, rationale, risk points, category (one of: PRODUCT, TECH, IMPACT, TEAM, RISK), and difficulty (1 to 3).\n" +
                 "Return ONLY a JSON array of objects with keys: \"question\", \"whyAsked\", \"riskPoint\", \"counterAnswer\", \"category\", \"difficulty\".";
 
+        // Call AI outside transaction
         String json = aiService.complete(user.getId(), prompt);
-        List<Map<String, Object>> parsed = new ArrayList<>();
+        List<Map<String, Object>> parsedList = new ArrayList<>();
         if (json != null && !json.isBlank()) {
             try {
                 String cleaned = extractJsonArray(json);
-                parsed = objectMapper.readValue(cleaned, new TypeReference<>() {});
+                parsedList = objectMapper.readValue(cleaned, new TypeReference<>() {});
             } catch (Exception ignored) {}
         }
+        final List<Map<String, Object>> parsed = parsedList;
 
-        // Delete previous GENERATED questions that are not practiced
-        qaRepository.deleteByRoomIdAndSourceAndPracticedFalse(roomId, "GENERATED");
+        return transactionTemplate.execute(status -> {
+            // Delete previous GENERATED questions that are not practiced
+            qaRepository.deleteByRoomIdAndSourceAndPracticedFalse(roomId, "GENERATED");
 
-        List<PitchQa> current = qaRepository.findByRoomIdOrderByPositionAsc(roomId);
-        int pos = current.size();
+            List<PitchQa> current = qaRepository.findByRoomIdOrderByPositionAsc(roomId);
+            int pos = current.size();
 
-        // Save new generated questions
-        List<PitchQa> toSave = new ArrayList<>();
-        for (Map<String, Object> map : parsed) {
-            String question = String.valueOf(map.getOrDefault("question", "")).trim();
-            if (question.isBlank()) continue;
-            String whyAsked = String.valueOf(map.getOrDefault("whyAsked", ""));
-            String riskPoint = String.valueOf(map.getOrDefault("riskPoint", ""));
-            String answer = String.valueOf(map.getOrDefault("counterAnswer", map.getOrDefault("answer", "")));
-            String category = String.valueOf(map.getOrDefault("category", "PRODUCT")).toUpperCase(Locale.ROOT);
-            int difficulty = 1;
-            Object diffObj = map.get("difficulty");
-            if (diffObj instanceof Number n) {
-                difficulty = Math.max(1, Math.min(3, n.intValue()));
+            // Save new generated questions
+            List<PitchQa> toSave = new ArrayList<>();
+            for (Map<String, Object> map : parsed) {
+                String question = String.valueOf(map.getOrDefault("question", "")).trim();
+                if (question.isBlank()) continue;
+                String whyAsked = String.valueOf(map.getOrDefault("whyAsked", ""));
+                String riskPoint = String.valueOf(map.getOrDefault("riskPoint", ""));
+                String answer = String.valueOf(map.getOrDefault("counterAnswer", map.getOrDefault("answer", "")));
+                String category = String.valueOf(map.getOrDefault("category", "PRODUCT")).toUpperCase(Locale.ROOT);
+                int difficulty = 1;
+                Object diffObj = map.get("difficulty");
+                if (diffObj instanceof Number n) {
+                    difficulty = Math.max(1, Math.min(3, n.intValue()));
+                }
+
+                PitchQa q = new PitchQa(roomId, pos++, question, answer, category, "GENERATED", false, null);
+                q.setWhyAsked(whyAsked);
+                q.setRiskPoint(riskPoint);
+                q.setDifficulty(difficulty);
+                toSave.add(q);
             }
 
-            PitchQa q = new PitchQa(roomId, pos++, question, answer, category, "GENERATED", false, null);
-            q.setWhyAsked(whyAsked);
-            q.setRiskPoint(riskPoint);
-            q.setDifficulty(difficulty);
-            toSave.add(q);
-        }
-
-        // Always include the three required questions if not already present
-        for (String reqQ : REQUIRED_QUESTIONS) {
-            boolean present = current.stream().anyMatch(q -> q.getQuestion().equalsIgnoreCase(reqQ))
-                    || toSave.stream().anyMatch(q -> q.getQuestion().equalsIgnoreCase(reqQ));
-            if (!present) {
-                PitchQa reqItem = new PitchQa(roomId, pos++, reqQ, "Prepare a clear and convincing response.", "PRODUCT", "GENERATED", false, null);
-                reqItem.setWhyAsked("Judges assess basic clarity and risk awareness.");
-                reqItem.setRiskPoint("Failing to state what was built and what breaks signals lack of engineering depth.");
-                reqItem.setDifficulty(2);
-                toSave.add(reqItem);
+            // Always include the three required questions if not already present
+            for (String reqQ : REQUIRED_QUESTIONS) {
+                boolean present = current.stream().anyMatch(q -> q.getQuestion().equalsIgnoreCase(reqQ))
+                        || toSave.stream().anyMatch(q -> q.getQuestion().equalsIgnoreCase(reqQ));
+                if (!present) {
+                    PitchQa reqItem = new PitchQa(roomId, pos++, reqQ, "Prepare a clear and convincing response.", "PRODUCT", "GENERATED", false, null);
+                    reqItem.setWhyAsked("Judges assess basic clarity and risk awareness.");
+                    reqItem.setRiskPoint("Failing to state what was built and what breaks signals lack of engineering depth.");
+                    reqItem.setDifficulty(2);
+                    toSave.add(reqItem);
+                }
             }
-        }
 
-        if (!toSave.isEmpty()) {
-            qaRepository.saveAll(toSave);
-        }
-        return qaRepository.findByRoomIdOrderByPositionAsc(roomId).stream().map(this::toQaDto).toList();
+            if (!toSave.isEmpty()) {
+                qaRepository.saveAll(toSave);
+            }
+            return qaRepository.findByRoomIdOrderByPositionAsc(roomId).stream().map(this::toQaDto).toList();
+        });
     }
 
     /**

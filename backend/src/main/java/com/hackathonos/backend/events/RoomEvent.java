@@ -24,10 +24,10 @@ public class RoomEvent {
     @Column(nullable = false, length = 64)
     private String type;
 
-    @Column(name = "entity_type", nullable = false, length = 64)
+    @Column(name = "entity_type", length = 64)
     private String entityType;
 
-    @Column(name = "entity_id", nullable = false, length = 128)
+    @Column(name = "entity_id", length = 128)
     private String entityId;
 
     @Column(name = "actor_user_id")

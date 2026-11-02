@@ -26,6 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -54,6 +55,7 @@ public class QnaService {
     private final ActivityLogger activityLogger;
     private final AiService aiService;
     private final ObjectMapper objectMapper;
+    private final TransactionTemplate transactionTemplate;
 
     public QnaService(
             QnaItemRepository itemRepository,
@@ -71,7 +73,8 @@ public class QnaService {
             RoomEventService roomEventService,
             ActivityLogger activityLogger,
             AiService aiService,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            TransactionTemplate transactionTemplate
     ) {
         this.itemRepository = itemRepository;
         this.progressRepository = progressRepository;
@@ -89,6 +92,7 @@ public class QnaService {
         this.activityLogger = activityLogger;
         this.aiService = aiService;
         this.objectMapper = objectMapper;
+        this.transactionTemplate = transactionTemplate;
     }
 
     @Transactional
@@ -519,7 +523,6 @@ public class QnaService {
         }
     }
 
-    @Transactional
     public Map<String, String> uploadSessionAudio(UUID roomId, UUID sessionId, String hash, MultipartFile file, User user) {
         roomAccess.requireMember(roomId, user);
         if (file == null || file.isEmpty()) {
@@ -544,11 +547,15 @@ public class QnaService {
         Brief brief = briefRepository.findByRoomId(roomId).orElse(null);
         String promptHint = "Project: " + (brief != null && brief.getProblemStatement() != null ? brief.getProblemStatement() : "Hackathon defense");
 
+        // External STT call outside transaction
         String transcript = aiService.transcribeAudio(user.getId(), "qna-answer.webm", bytes, promptHint);
 
-        sessionAnswerRepository.findBySessionIdAndHash(sessionId, hash).ifPresent(sa -> {
-            sa.setTranscript(transcript);
-            sessionAnswerRepository.save(sa);
+        transactionTemplate.execute(status -> {
+            sessionAnswerRepository.findBySessionIdAndHash(sessionId, hash).ifPresent(sa -> {
+                sa.setTranscript(transcript);
+                sessionAnswerRepository.save(sa);
+            });
+            return null;
         });
 
         return Map.of("text", transcript != null ? transcript : "");
@@ -604,7 +611,6 @@ public class QnaService {
         return summary;
     }
 
-    @Transactional
     public AiGradeResponse gradeAnswer(UUID roomId, AiGradeRequest req, User user) {
         roomAccess.requireMember(roomId, user);
         QnaItem item = itemRepository.findByRoomIdAndHash(roomId, req.hash())
@@ -625,7 +631,6 @@ public class QnaService {
         return aiService.json("qa.grade", roomId, user.getId(), systemPrompt, userPrompt, AiGradeResponse.class);
     }
 
-    @Transactional
     public List<QnaItemDto> generateMore(UUID roomId, AiGenerateMoreRequest req, User user) {
         roomAccess.requireMember(roomId, user);
 
@@ -644,24 +649,27 @@ public class QnaService {
         record GeneratedListWrapper(List<GeneratedQuestionItem> items) {}
         GeneratedListWrapper res = aiService.json("qa.generate", roomId, user.getId(), systemPrompt, userPrompt, GeneratedListWrapper.class);
 
-        List<QnaItem> saved = new ArrayList<>();
-        if (res != null && res.items() != null) {
-            long pos = itemRepository.countByRoomIdAndActive(roomId, true);
-            for (GeneratedQuestionItem gi : res.items()) {
-                String hash = QnaDocumentParser.hashQuestion(gi.question());
-                if (itemRepository.findByRoomIdAndHash(roomId, hash).isPresent()) continue;
+        List<QnaItem> saved = transactionTemplate.execute(status -> {
+            List<QnaItem> items = new ArrayList<>();
+            if (res != null && res.items() != null) {
+                long pos = itemRepository.countByRoomIdAndActive(roomId, true);
+                for (GeneratedQuestionItem gi : res.items()) {
+                    String hash = QnaDocumentParser.hashQuestion(gi.question());
+                    if (itemRepository.findByRoomIdAndHash(roomId, hash).isPresent()) continue;
 
-                QnaItem item = new QnaItem(
-                        UUID.randomUUID(), roomId, hash, "QUESTION",
-                        req.criterion() != null ? req.criterion() : "AI draft",
-                        req.criterion(), gi.question(), gi.answer(), gi.followup(), gi.counter(), "",
-                        null, null, "AI", null, (int) pos++, user != null ? user.getId() : null
-                );
-                saved.add(itemRepository.save(item));
+                    QnaItem item = new QnaItem(
+                            UUID.randomUUID(), roomId, hash, "QUESTION",
+                            req.criterion() != null ? req.criterion() : "AI draft",
+                            req.criterion(), gi.question(), gi.answer(), gi.followup(), gi.counter(), "",
+                            null, null, "AI", null, (int) pos++, user != null ? user.getId() : null
+                    );
+                    items.add(itemRepository.save(item));
+                }
             }
-        }
+            return items;
+        });
 
-        return enrichItems(roomId, saved, user);
+        return enrichItems(roomId, saved != null ? saved : Collections.emptyList(), user);
     }
 
     public record GeneratedQuestionItem(String question, String answer, String followup, String counter) {}

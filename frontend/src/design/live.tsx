@@ -27,6 +27,8 @@ export interface LiveContextType {
   clearConflict: () => void;
   isUserOnline: (userId?: string) => boolean;
   lastSeq: number;
+  lastEvent: any | null;
+  subscribe: (listener: (event: any) => void) => () => void;
 }
 
 export const LiveContext = createContext<LiveContextType>({
@@ -40,6 +42,8 @@ export const LiveContext = createContext<LiveContextType>({
   clearConflict: () => {},
   isUserOnline: () => false,
   lastSeq: 0,
+  lastEvent: null,
+  subscribe: () => () => {},
 });
 
 export function useLiveContext() {
@@ -49,12 +53,12 @@ export function useLiveContext() {
 /**
  * useRoomLive hook:
  * - Connects to SSE stream `/api/v1/rooms/${roomId}/events`
- * - Reconnects with exponential backoff (1s, 2s, 4s up to 30s)
- * - Tab hidden for 2 minutes disconnects; reopens on focus + resync
- * - Fallback to 30s polling if stream fails after 3 tries
- * - 250ms debounced topic registry query invalidation
- * - Notable event toasts and 1.2s soft accent fade for item changes
- * - Presence tracking and conflict banner management
+ * - Reconnects with exponential backoff and full jitter (1s up to 30s), reset on stable connection
+ * - Honors server 'bye' / 'evicted' events with delayed backoff (15s)
+ * - Pauses reconnecting while tab is hidden, reconnects + resyncs immediately when tab becomes visible
+ * - Always transmits lastEventId on reconnect
+ * - Refetches active queries only (refetchType: 'active') with 250ms debounced coalescing
+ * - Exposes lastEvent and subscribe listener registry for seamless context consumption
  */
 export function useRoomLive(roomId: string | undefined, currentUserId?: string) {
   const queryClient = useQueryClient();
@@ -64,16 +68,20 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
   const [onlineUserIds, setOnlineUserIds] = useState<string[]>([]);
   const [recentChanges, setRecentChanges] = useState<Map<string, LiveChangeItem>>(new Map());
   const [conflict, setConflict] = useState<{ editorName: string; entityName: string; onReload: () => void } | null>(null);
+  const [lastEvent, setLastEvent] = useState<any | null>(null);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectAttempts = useRef(0);
   const reconnectTimerRef = useRef<number | null>(null);
+  const stableTimerRef = useRef<number | null>(null);
   const hiddenTimerRef = useRef<number | null>(null);
   const pollTimerRef = useRef<number | null>(null);
   const debounceTimerRef = useRef<number | null>(null);
   const pendingTopicsRef = useRef<Set<string>>(new Set());
   const lastToastTimeRef = useRef(0);
   const lastSeqRef = useRef(0);
+  const isEvictedRef = useRef(false);
+  const listenersRef = useRef<Set<(event: any) => void>>(new Set());
 
   const clearConflict = useCallback(() => setConflict(null), []);
 
@@ -84,6 +92,13 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
     },
     [onlineUserIds]
   );
+
+  const subscribe = useCallback((listener: (event: any) => void) => {
+    listenersRef.current.add(listener);
+    return () => {
+      listenersRef.current.delete(listener);
+    };
+  }, []);
 
   const fetchPresence = useCallback(async () => {
     if (!roomId) return;
@@ -103,43 +118,42 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
     topics.forEach((topic) => {
       if (topic.startsWith('task:')) {
         const taskId = topic.slice(5);
-        queryClient.invalidateQueries({ queryKey: ['task', taskId] });
-        queryClient.invalidateQueries({ queryKey: ['tasks', roomId] });
-        queryClient.invalidateQueries({ queryKey: ['board', roomId] });
+        queryClient.invalidateQueries({ queryKey: ['task', taskId], refetchType: 'active' });
+        queryClient.invalidateQueries({ queryKey: ['tasks', roomId], refetchType: 'active' });
+        queryClient.invalidateQueries({ queryKey: ['board', roomId], refetchType: 'active' });
         return;
       }
 
       switch (topic) {
         case 'board':
-          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.board(roomId) });
-          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.tasks(roomId) });
-          queryClient.invalidateQueries({ queryKey: ['board', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['tasks', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['nav-badges', roomId] });
+          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.board(roomId), refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.tasks(roomId), refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['board', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['tasks', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['nav-badges', roomId], refetchType: 'active' });
           break;
         case 'ideas':
-          queryClient.invalidateQueries({ queryKey: ['ideas', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['ideate', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['nav-badges', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['ideas', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['ideate', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['nav-badges', roomId], refetchType: 'active' });
           break;
         case 'brief':
-          queryClient.invalidateQueries({ queryKey: ['brief', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['briefs', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['nav-badges', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['brief', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['briefs', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['nav-badges', roomId], refetchType: 'active' });
           break;
         case 'plan':
-          queryClient.invalidateQueries({ queryKey: ['plan', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['phases', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['nav-badges', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['plan', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['phases', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['nav-badges', roomId], refetchType: 'active' });
           break;
         case 'members':
-          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.team(roomId) });
-          queryClient.invalidateQueries({ queryKey: ['members', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['team', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['room', roomId] });
-          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.detail(roomId) });
+          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.team(roomId), refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['members', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['team', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['room', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.detail(roomId), refetchType: 'active' });
           fetchPresence();
-          // Check if removed from room
           apiFetch(`/api/v1/rooms/${roomId}`).catch((err: any) => {
             if (err?.status === 403 || err?.status === 404) {
               toast.error('You were removed from this room');
@@ -149,77 +163,91 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
           break;
         case 'presence':
           fetchPresence();
-          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.presence(roomId) });
+          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.presence(roomId), refetchType: 'active' });
           break;
         case 'docs':
-          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.docs(roomId) });
-          queryClient.invalidateQueries({ queryKey: ['docs', roomId] });
+          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.docs(roomId), refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['docs', roomId], refetchType: 'active' });
           break;
         case 'mvp':
-          queryClient.invalidateQueries({ queryKey: ['mvp', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['mvp-state', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['mvp', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['mvp-state', roomId], refetchType: 'active' });
           break;
         case 'checkpoints':
-          queryClient.invalidateQueries({ queryKey: ['checkpoints', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['schedule', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['overview', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['checkpoints', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['schedule', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['overview', roomId], refetchType: 'active' });
           break;
         case 'github':
-          queryClient.invalidateQueries({ queryKey: ['github', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['github-activity', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['nav-badges', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['github', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['github-activity', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['nav-badges', roomId], refetchType: 'active' });
           break;
         case 'pitch':
-          queryClient.invalidateQueries({ queryKey: ['pitch', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['deck', roomId] });
+        case 'pitchkit':
+          queryClient.invalidateQueries({ queryKey: ['pitch', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['deck', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['pitchkit-readiness', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['pitchkit-settings', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['demo-assets', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['demo-ladder', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['demo-preflight', roomId], refetchType: 'active' });
+          break;
+        case 'phases':
+          queryClient.invalidateQueries({ queryKey: ['phases', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['board', roomId], refetchType: 'active' });
+          break;
+        case 'comments':
+          queryClient.invalidateQueries({ queryKey: ['comments', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['board', roomId], refetchType: 'active' });
           break;
         case 'demo':
-          queryClient.invalidateQueries({ queryKey: ['demo', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['submission', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['demo', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['submission', roomId], refetchType: 'active' });
           break;
         case 'submission':
-          queryClient.invalidateQueries({ queryKey: ['submission', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['submission', roomId], refetchType: 'active' });
           break;
         case 'mentor':
-          queryClient.invalidateQueries({ queryKey: ['mentor', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['mentor', roomId], refetchType: 'active' });
           break;
         case 'stage':
-          queryClient.invalidateQueries({ queryKey: ['stage', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['journey', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['room', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['phases', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['stage', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['journey', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['room', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['phases', roomId], refetchType: 'active' });
           break;
         case 'apis':
-          queryClient.invalidateQueries({ queryKey: ['apis', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['apis', roomId], refetchType: 'active' });
           break;
         case 'diagrams':
-          queryClient.invalidateQueries({ queryKey: ['diagrams', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['diagrams', roomId], refetchType: 'active' });
           break;
         case 'retro':
-          queryClient.invalidateQueries({ queryKey: ['retro', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['retro', roomId], refetchType: 'active' });
           break;
         case 'overview':
-          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.overview(roomId) });
-          queryClient.invalidateQueries({ queryKey: ['room-overview', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['overview', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['room', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['nav-badges', roomId] });
-          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.overview(roomId), refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['room-overview', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['overview', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['room', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['nav-badges', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: queryKeys.home, refetchType: 'active' });
           break;
         case 'resync':
-          queryClient.invalidateQueries({ queryKey: ['room', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['board', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['tasks', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['ideas', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['brief', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['plan', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['members', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['docs', roomId] });
-          queryClient.invalidateQueries({ queryKey: ['stage', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['room', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['board', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['tasks', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['ideas', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['brief', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['plan', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['members', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['docs', roomId], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['stage', roomId], refetchType: 'active' });
           fetchPresence();
           break;
         default:
-          queryClient.invalidateQueries({ queryKey: ['room-overview', roomId] });
+          queryClient.invalidateQueries({ queryKey: ['room-overview', roomId], refetchType: 'active' });
           break;
       }
     });
@@ -245,7 +273,6 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
       return next;
     });
 
-    // Soft accent fade clears after 1.2s
     window.setTimeout(() => {
       setRecentChanges((prev) => {
         const next = new Map(prev);
@@ -263,14 +290,19 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
         lastSeqRef.current = Math.max(lastSeqRef.current, seq);
       }
 
+      setLastEvent(eventData);
+      listenersRef.current.forEach((listener) => {
+        try {
+          listener(eventData);
+        } catch {}
+      });
+
       const isMe = actorId && currentUserId && String(actorId) === String(currentUserId);
 
-      // Flash highlight if changed by someone else
       if (entityId && !isMe) {
         registerFlashChange(String(entityId), actorName || 'Teammate', topic || 'room');
       }
 
-      // Small notable toasts from others (max 1 per 3 seconds)
       const now = Date.now();
       if (!isMe && actorName && now - lastToastTimeRef.current >= 3000) {
         let msg: string | null = null;
@@ -291,7 +323,6 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
         }
       }
 
-      // 250ms debounced invalidation with burst merge
       scheduleTopicInvalidation(topic || 'overview');
     },
     [roomId, currentUserId, registerFlashChange, scheduleTopicInvalidation]
@@ -329,7 +360,10 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
       const baseUrl = typeof window !== 'undefined' && window.location.port === '5173'
         ? ''
         : (API_BASE_URL || '');
-      const url = `${baseUrl}/api/v1/rooms/${roomId}/events`;
+      const baseEndpoint = `${baseUrl}/api/v1/rooms/${roomId}/events`;
+      const url = lastSeqRef.current > 0
+        ? `${baseEndpoint}?lastEventId=${lastSeqRef.current}`
+        : baseEndpoint;
 
       try {
         const es = new EventSource(url, { withCredentials: true });
@@ -338,9 +372,12 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
         es.onopen = () => {
           if (isUnmounted) return;
           setStatus('live');
-          reconnectAttempts.current = 0;
           stopPolling();
           fetchPresence();
+          if (stableTimerRef.current !== null) clearTimeout(stableTimerRef.current);
+          stableTimerRef.current = window.setTimeout(() => {
+            reconnectAttempts.current = 0;
+          }, 5000);
         };
 
         es.addEventListener('room', (e: MessageEvent) => {
@@ -359,22 +396,59 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
           }
         });
 
+        const handleEvicted = () => {
+          if (isUnmounted) return;
+          isEvictedRef.current = true;
+          setStatus('offline');
+          if (eventSourceRef.current) {
+            eventSourceRef.current.close();
+            eventSourceRef.current = null;
+          }
+          if (reconnectTimerRef.current !== null) {
+            clearTimeout(reconnectTimerRef.current);
+          }
+          reconnectTimerRef.current = window.setTimeout(() => {
+            isEvictedRef.current = false;
+            if (document.visibilityState === 'visible' && !isUnmounted) {
+              connectSSE();
+            }
+          }, 15_000);
+        };
+
+        es.addEventListener('bye', handleEvicted);
+        es.addEventListener('evicted', handleEvicted);
+
         es.onerror = () => {
           if (isUnmounted) return;
+          if (stableTimerRef.current !== null) {
+            clearTimeout(stableTimerRef.current);
+            stableTimerRef.current = null;
+          }
           es.close();
           eventSourceRef.current = null;
 
+          if (isEvictedRef.current) return;
+
+          if (document.visibilityState === 'hidden') {
+            setStatus('offline');
+            return;
+          }
+
           reconnectAttempts.current += 1;
-          if (reconnectAttempts.current >= 3) {
+          if (reconnectAttempts.current >= 4) {
             startFallbackPolling();
           } else {
             setStatus('reconnecting');
           }
 
-          // Backoff: 1s, 2s, 4s up to 30s
-          const delay = Math.min(30000, 1000 * Math.pow(2, reconnectAttempts.current - 1));
+          const maxDelay = Math.min(30000, 1000 * Math.pow(2, reconnectAttempts.current - 1));
+          const delay = Math.floor(Math.random() * (maxDelay - 1000 + 1)) + 1000;
+
+          if (reconnectTimerRef.current !== null) clearTimeout(reconnectTimerRef.current);
           reconnectTimerRef.current = window.setTimeout(() => {
-            if (!isUnmounted) connectSSE();
+            if (!isUnmounted && document.visibilityState === 'visible') {
+              connectSSE();
+            }
           }, delay);
         };
       } catch {
@@ -387,7 +461,10 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        // Close after 2 minutes with tab hidden
+        if (reconnectTimerRef.current !== null) {
+          clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = null;
+        }
         hiddenTimerRef.current = window.setTimeout(() => {
           if (eventSourceRef.current) {
             eventSourceRef.current.close();
@@ -396,12 +473,11 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
           }
         }, 120_000);
       } else {
-        // Tab focused / visible again
         if (hiddenTimerRef.current !== null) {
           clearTimeout(hiddenTimerRef.current);
           hiddenTimerRef.current = null;
         }
-        if (!eventSourceRef.current) {
+        if (!eventSourceRef.current && !isEvictedRef.current) {
           reconnectAttempts.current = 0;
           connectSSE();
           scheduleTopicInvalidation('resync');
@@ -419,6 +495,9 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
 
       if (reconnectTimerRef.current !== null) {
         clearTimeout(reconnectTimerRef.current);
+      }
+      if (stableTimerRef.current !== null) {
+        clearTimeout(stableTimerRef.current);
       }
       if (hiddenTimerRef.current !== null) {
         clearTimeout(hiddenTimerRef.current);
@@ -446,6 +525,8 @@ export function useRoomLive(roomId: string | undefined, currentUserId?: string) 
     clearConflict,
     isUserOnline,
     lastSeq: lastSeqRef.current,
+    lastEvent,
+    subscribe,
   };
 }
 

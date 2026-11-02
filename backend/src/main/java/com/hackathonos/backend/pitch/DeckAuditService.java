@@ -44,6 +44,7 @@ public class DeckAuditService {
     private final RoomAccess roomAccess;
     private final AiService aiService;
     private final ObjectMapper objectMapper;
+    private final org.springframework.transaction.support.TransactionTemplate transactionTemplate;
 
     public DeckAuditService(
             DeckSlideRepository slideRepository,
@@ -57,6 +58,25 @@ public class DeckAuditService {
             AiService aiService,
             ObjectMapper objectMapper
     ) {
+        this(slideRepository, auditRepository, fileTextExtractor, briefRepository, rubricRepository,
+                docRepository, docVersionRepository, roomAccess, aiService, objectMapper, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DeckAuditService(
+            DeckSlideRepository slideRepository,
+            DeckAuditRepository auditRepository,
+            FileTextExtractor fileTextExtractor,
+            BriefRepository briefRepository,
+            BriefRubricItemRepository rubricRepository,
+            DocRepository docRepository,
+            DocVersionRepository docVersionRepository,
+            RoomAccess roomAccess,
+            AiService aiService,
+            ObjectMapper objectMapper,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            org.springframework.transaction.PlatformTransactionManager transactionManager
+    ) {
         this.slideRepository = slideRepository;
         this.auditRepository = auditRepository;
         this.fileTextExtractor = fileTextExtractor;
@@ -67,20 +87,25 @@ public class DeckAuditService {
         this.roomAccess = roomAccess;
         this.aiService = aiService;
         this.objectMapper = objectMapper;
+        this.transactionTemplate = transactionManager != null
+                ? new org.springframework.transaction.support.TransactionTemplate(transactionManager)
+                : new org.springframework.transaction.support.TransactionTemplate();
     }
 
-    @Transactional
     public DeckSlidesResponse saveSlidesFromUpload(UUID roomId, MultipartFile file, User user) {
         roomAccess.requireMember(roomId, user);
+        // Heavy slide parsing outside transaction
         List<FileTextExtractor.SlideTextEntry> extracted = fileTextExtractor.extractDeckSlides(file);
         if (extracted.isEmpty()) {
             throw new BadRequestException("FILE_NO_TEXT", "This deck has no readable text. Export a PDF with text, or paste the slide text.");
         }
 
-        slideRepository.deleteByRoomId(roomId);
-        for (FileTextExtractor.SlideTextEntry e : extracted) {
-            slideRepository.save(new DeckSlide(roomId, e.pageNo(), e.title(), e.text(), e.chars()));
-        }
+        transactionTemplate.executeWithoutResult(status -> {
+            slideRepository.deleteByRoomId(roomId);
+            for (FileTextExtractor.SlideTextEntry e : extracted) {
+                slideRepository.save(new DeckSlide(roomId, e.pageNo(), e.title(), e.text(), e.chars()));
+            }
+        });
 
         return getSlides(roomId, user);
     }
@@ -172,7 +197,6 @@ public class DeckAuditService {
         public String timingNote = "";
     }
 
-    @Transactional
     public SlideAuditResponse auditSlide(UUID roomId, int page, User user) {
         roomAccess.requireMember(roomId, user);
         List<DeckSlide> slides = slideRepository.findByRoomIdOrderByPageNoAsc(roomId);
@@ -223,6 +247,7 @@ public class DeckAuditService {
                 %s
                 """, projectContext, deckOutline, page, slides.size(), target.getTitle(), target.getText());
 
+        // AI call executed with NO database transaction held
         SlideAuditJson auditJson = aiService.json("deck.audit.slide", roomId, user.getId(), systemPrompt, userPrompt, SlideAuditJson.class);
         if (auditJson.fixes != null && auditJson.fixes.size() > 3) {
             auditJson.fixes = auditJson.fixes.subList(0, 3);
@@ -230,7 +255,9 @@ public class DeckAuditService {
 
         try {
             String resultStr = objectMapper.writeValueAsString(auditJson);
-            auditRepository.save(new DeckAudit(roomId, "SLIDE", page, resultStr, currentHash, user.getId()));
+            transactionTemplate.executeWithoutResult(status -> {
+                auditRepository.save(new DeckAudit(roomId, "SLIDE", page, resultStr, currentHash, user.getId()));
+            });
         } catch (Exception ex) {
             log.error("Failed to serialize slide audit result", ex);
         }
@@ -238,7 +265,6 @@ public class DeckAuditService {
         return new SlideAuditResponse(page, auditJson.role, auditJson.verdict, auditJson.issues, auditJson.fixes, auditJson.rubric, auditJson.missing, false);
     }
 
-    @Transactional
     public DeckAuditResponse auditDeck(UUID roomId, User user) {
         roomAccess.requireMember(roomId, user);
         List<DeckSlide> slides = slideRepository.findByRoomIdOrderByPageNoAsc(roomId);
@@ -282,11 +308,14 @@ public class DeckAuditService {
                 %s
                 """, projectContext, slides.size(), slidesText.toString());
 
+        // AI call executed with NO database transaction held
         DeckAuditJson auditJson = aiService.json("deck.audit.deck", roomId, user.getId(), systemPrompt, userPrompt, DeckAuditJson.class);
 
         try {
             String resultStr = objectMapper.writeValueAsString(auditJson);
-            auditRepository.save(new DeckAudit(roomId, "DECK", null, resultStr, currentHash, user.getId()));
+            transactionTemplate.executeWithoutResult(status -> {
+                auditRepository.save(new DeckAudit(roomId, "DECK", null, resultStr, currentHash, user.getId()));
+            });
         } catch (Exception ex) {
             log.error("Failed to serialize deck audit result", ex);
         }

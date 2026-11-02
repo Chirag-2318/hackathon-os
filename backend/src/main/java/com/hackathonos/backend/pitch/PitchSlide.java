@@ -29,6 +29,10 @@ public class PitchSlide {
     @Column(name = "content", nullable = false, columnDefinition = "TEXT")
     private String content;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     public PitchSlide() {}
 
     public PitchSlide(UUID roomId, int position, String kind, String title, String question, String content) {
@@ -60,4 +64,7 @@ public class PitchSlide {
 
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
+
+    public Long getVersion() { return version; }
+    public void setVersion(Long version) { this.version = version; }
 }

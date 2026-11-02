@@ -102,10 +102,15 @@ public class PitchService {
         });
 
         // Concurrency check
-        if (req.expectedVersion() != null && req.expectedVersion() != pitch.getVersion()) {
+        Long expected = req.baseVersion() != null ? req.baseVersion() : (req.expectedVersion() != null ? req.expectedVersion().longValue() : null);
+        if (expected != null && expected.intValue() != pitch.getVersion()) {
             String lastEditorName = resolveUserName(pitch.getUpdatedBy());
-            throw new ConflictException("PITCH_CONFLICT",
-                    "Pitch was modified by @" + lastEditorName + ". Please reload the latest changes.");
+            throw new com.hackathonos.backend.common.error.EntityConflictException("EDIT_CONFLICT",
+                    "Pitch was modified by @" + lastEditorName + ". Please reload the latest changes.",
+                    (long) pitch.getVersion(),
+                    lastEditorName,
+                    pitch.getUpdatedAt(),
+                    getPitch(roomId, user));
         }
 
         // Locked check
@@ -122,7 +127,6 @@ public class PitchService {
         int nextVersion = pitch.getVersion() + 1;
         String serialized = serializeBeats(beats);
 
-        pitch.setVersion(nextVersion);
         pitch.setBeats(serialized);
         pitch.setTimeLimitSec(timeLimit);
         pitch.setSource("CUSTOM");
@@ -187,7 +191,6 @@ public class PitchService {
             pitch.setTimeLimitSec(parsedLimit);
         }
 
-        pitch.setVersion(nextVersion);
         pitch.setBeats(serialized);
         pitch.setSource("DOC");
         pitch.setDocVersion(doc.getCurrentVersion());
@@ -275,7 +278,6 @@ public class PitchService {
         Pitch pitch = pitchRepository.findById(roomId).orElseThrow();
 
         int nextVersion = pitch.getVersion() + 1;
-        pitch.setVersion(nextVersion);
         pitch.setBeats(pv.getBeats());
         pitch.setSource("CUSTOM");
         pitch.setUpdatedBy(user != null ? user.getId() : null);
@@ -329,7 +331,6 @@ public class PitchService {
         return coverageList;
     }
 
-    @Transactional(readOnly = true)
     public PitchAiEditResponse aiEdit(UUID roomId, PitchAiEditRequest req, User user) {
         roomAccess.requireMember(roomId, user);
 

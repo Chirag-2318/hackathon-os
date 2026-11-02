@@ -27,6 +27,7 @@ import io.swagger.v3.parser.core.models.ParseOptions;
 import io.swagger.v3.parser.core.models.SwaggerParseResult;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -53,6 +54,7 @@ public class ApiHubService {
     private final UserRepository userRepository;
     private final RoomAccess roomAccess;
     private final SafeHttpClient safeHttpClient;
+    private final TransactionTemplate transactionTemplate;
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
     private final DocRepository docRepository;
@@ -67,6 +69,7 @@ public class ApiHubService {
                           UserRepository userRepository,
                           RoomAccess roomAccess,
                           SafeHttpClient safeHttpClient,
+                          TransactionTemplate transactionTemplate,
                           AppProperties appProperties,
                           ObjectMapper objectMapper,
                           DocRepository docRepository,
@@ -79,6 +82,7 @@ public class ApiHubService {
         this.userRepository = userRepository;
         this.roomAccess = roomAccess;
         this.safeHttpClient = safeHttpClient;
+        this.transactionTemplate = transactionTemplate;
         this.appProperties = appProperties;
         this.objectMapper = objectMapper;
         this.docRepository = docRepository;
@@ -274,7 +278,6 @@ public class ApiHubService {
         externalRepository.delete(ext);
     }
 
-    @Transactional
     public ExternalDto checkExternal(UUID roomId, UUID id, User user) {
         roomAccess.requireMember(roomId, user);
 
@@ -285,22 +288,35 @@ public class ApiHubService {
             throw new ForbiddenException("FORBIDDEN", "API belongs to another room");
         }
 
-        Instant start = Instant.now();
+        // External HTTP check outside transaction
+        String status;
+        Integer latencyMs;
         try {
             com.hackathonos.backend.common.http.SafeHttpClient.SafeHttpResponse res = safeHttpClient.headOrGet(ext.getBaseUrl(), 5000);
             if (res.ok()) {
-                ext.setStatus("WORKING");
-                ext.setLastLatencyMs((int) res.latencyMs());
+                status = "WORKING";
+                latencyMs = (int) res.latencyMs();
             } else {
-                ext.setStatus("FAILING");
-                ext.setLastLatencyMs(null);
+                status = "FAILING";
+                latencyMs = null;
             }
         } catch (Exception ex) {
-            ext.setStatus("FAILING");
-            ext.setLastLatencyMs(null);
+            status = "FAILING";
+            latencyMs = null;
         }
-        ext.setLastCheckedAt(clock.instant());
-        return mapExternal(externalRepository.save(ext));
+
+        final String finalStatus = status;
+        final Integer finalLatency = latencyMs;
+        final Instant checkedAt = clock.instant();
+
+        return transactionTemplate.execute(txStatus -> {
+            ApiExternal current = externalRepository.findById(id)
+                    .orElseThrow(() -> new NotFoundException("EXTERNAL_NOT_FOUND", "External API not found"));
+            current.setStatus(finalStatus);
+            current.setLastLatencyMs(finalLatency);
+            current.setLastCheckedAt(checkedAt);
+            return mapExternal(externalRepository.save(current));
+        });
     }
 
     // ==========================================
