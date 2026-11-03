@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Hackathon OS (Brackit) - Auth, Security & Trust Boundaries",
+    "output": "docs/architecture/07-auth-security.html",
+    "quality_profile": "standard"
+  },
+  "components": [
+    { "id": "browser_client", "type": "frontend", "label": "Browser Sandbox", "sublabel": "Zero Secret Storage", "pos": [40, 300], "size": [130, 60], "tag": "No LocalStorage" },
+    { "id": "oauth_idps", "type": "external", "label": "External IdPs", "sublabel": "GitHub & Google", "pos": [250, 130], "size": [130, 60], "tag": "OAuth 2.0 Auth" },
+    { "id": "vercel_proxy", "type": "cloud", "label": "Vercel Edge Proxy", "sublabel": "Reverse Proxy", "pos": [250, 300], "size": [130, 60], "tag": "x-vercel-forw" },
+    { "id": "csp_headers", "type": "security", "label": "Security Headers", "sublabel": "CSP + FrameOptions", "pos": [250, 470], "size": [130, 60], "tag": "DENY Frame" },
+    { "id": "mcp_auth_filter", "type": "security", "label": "MCP Bearer Auth", "sublabel": "McpBearerAuthFilter", "pos": [460, 130], "size": [130, 60], "tag": "Stateless API" },
+    { "id": "ip_resolver", "type": "security", "label": "ClientIpResolver", "sublabel": "Literal Validation", "pos": [460, 300], "size": [130, 60], "tag": "Anti-Spoofing" },
+    { "id": "rate_interceptor", "type": "security", "label": "RateLimiter", "sublabel": "120/min & 600/min", "pos": [460, 470], "size": [130, 60], "tag": "Retry-After" },
+    { "id": "aes_encryption", "type": "security", "label": "AES-256 Vault", "sublabel": "APP_ENCRYPTION_KEY", "pos": [670, 130], "size": [130, 60], "tag": "GCM Encryption" },
+    { "id": "spring_security", "type": "security", "label": "Spring Security", "sublabel": "DelegatingContext", "pos": [670, 300], "size": [130, 60], "tag": "CSRF + Cookie" },
+    { "id": "prometheus_guard", "type": "security", "label": "Metrics Guard", "sublabel": "/actuator/prometheus", "pos": [670, 470], "size": [130, 60], "tag": "METRICS_TOKEN" },
+    { "id": "session_db", "type": "database", "label": "SPRING_SESSION", "sublabel": "Persistent Session", "pos": [880, 300], "size": [130, 60], "tag": "JSESSIONID" }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Client Trust Boundary", "wraps": ["browser_client"] },
+    { "kind": "region", "label": "Reverse Proxy Edge Zone", "wraps": ["vercel_proxy", "csp_headers"] },
+    { "kind": "region", "label": "Security Enforcement Core", "wraps": ["mcp_auth_filter", "ip_resolver", "rate_interceptor", "spring_security"] },
+    { "kind": "region", "label": "Encrypted Persistence Zone", "wraps": ["aes_encryption", "prometheus_guard", "session_db"] }
+  ],
+  "connections": [
+    { "id": "c-browser-idp", "from": "browser_client", "to": "oauth_idps", "label": "Login Redirect", "variant": "security" },
+    { "id": "c-browser-proxy", "from": "browser_client", "to": "vercel_proxy", "label": "TLS :443", "variant": "emphasis" },
+    { "id": "c-proxy-headers", "from": "vercel_proxy", "to": "csp_headers", "label": "Inject Headers", "variant": "default", "labelDy": 24 },
+    { "id": "c-proxy-ip", "from": "vercel_proxy", "to": "ip_resolver", "label": "Forwarded IP", "variant": "emphasis" },
+    { "id": "c-ip-rate", "from": "ip_resolver", "to": "rate_interceptor", "label": "Check Quota", "variant": "security", "labelDy": 24 },
+    { "id": "c-ip-sec", "from": "ip_resolver", "to": "spring_security", "label": "Authorized Flow", "variant": "emphasis" },
+    { "id": "c-sec-mcp", "from": "spring_security", "to": "mcp_auth_filter", "label": "McpMatcher", "variant": "default" },
+    { "id": "c-sec-session", "from": "spring_security", "to": "session_db", "label": "Load Session", "variant": "emphasis" },
+    { "id": "c-sec-aes", "from": "spring_security", "to": "aes_encryption", "label": "Decrypt BYOK", "variant": "security" },
+    { "id": "c-sec-prom", "from": "spring_security", "to": "prometheus_guard", "label": "Check Token", "variant": "security", "labelDy": 24 }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Zero-Trust Browser Sandbox", "items": ["No auth tokens, user credentials, or AI API keys are stored in localStorage or sessionStorage", "HttpOnly, SameSite=Lax, Secure session cookie (JSESSIONID) scoped as host-only", "XSRF-TOKEN cookie verified on all state-mutating requests (POST, PUT, PATCH, DELETE)"] },
+    { "dot": "emerald", "title": "Proxy & Rate Limiting Guard", "items": ["ClientIpResolver inspects x-vercel-forwarded-for and validates IP literals with InetAddress", "Prevents reverse proxy IP clustering where all visitors shared a single bucket", "RateLimitInterceptor returns HTTP 429 with explicit Retry-After headers"] },
+    { "dot": "violet", "title": "Session Persistence & OAuth", "items": ["Spring Session JDBC persists sessions in PostgreSQL across server cold starts and deploys", "Dual-chain security architecture separates stateful web UI from stateless Bearer MCP", "Full OAuth 2.0 authorization server supports dynamic client registration (RFC 7591)"] },
+    { "dot": "amber", "title": "Cryptographic Protection", "items": ["AES-256-GCM encryption for stored user BYOK API keys using APP_ENCRYPTION_KEY", "Content Security Policy (CSP) and X-Frame-Options: DENY prevent clickjacking", "Prometheus actuator endpoint (/actuator/prometheus) protected by METRICS_TOKEN"] }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Hackathon OS (Brackit) - Data Architecture & Persistence",
+    "output": "docs/architecture/06-data-architecture.html",
+    "quality_profile": "standard"
+  },
+  "components": [
+    { "id": "backend_orm", "type": "backend", "label": "ORM & Data Access", "sublabel": "Spring Data JPA / JDBC", "pos": [40, 300], "size": [130, 60], "tag": "open-in-view: false" },
+    { "id": "caffeine_cache", "type": "database", "label": "Caffeine L1 Cache", "sublabel": "In-Memory JVM Cache", "pos": [250, 130], "size": [130, 60], "tag": "1h TTL / 5000 max" },
+    { "id": "hikaricp", "type": "database", "label": "HikariCP Pool", "sublabel": "Connection Pool (10)", "pos": [250, 300], "size": [130, 60], "tag": "Leak Detect 30s" },
+    { "id": "advisory_locks", "type": "database", "label": "Advisory Locks", "sublabel": "pg_try_advisory_lock", "pos": [250, 470], "size": [130, 60], "tag": "Locks 1010/1011" },
+    { "id": "session_store", "type": "database", "label": "Spring Session JDBC", "sublabel": "SPRING_SESSION", "pos": [460, 130], "size": [130, 60], "tag": "8h Expiration" },
+    { "id": "postgres_engine", "type": "database", "label": "PostgreSQL 17", "sublabel": "Render Managed DB", "pos": [460, 300], "size": [130, 60], "tag": "UTC Timestamps" },
+    { "id": "room_events_store", "type": "database", "label": "Event Store", "sublabel": "room_events Table", "pos": [460, 470], "size": [130, 60], "tag": "Monotonic Bigserial" },
+    { "id": "idempotency_store", "type": "database", "label": "Idempotency Store", "sublabel": "idempotency_keys", "pos": [670, 130], "size": [130, 60], "tag": "24h Prune" },
+    { "id": "core_tables", "type": "database", "label": "Core Relational DB", "sublabel": "50+ JPA Entities", "pos": [670, 300], "size": [130, 60], "tag": "Users/Rooms/Tasks" },
+    { "id": "s3_blob_store", "type": "cloud", "label": "Cloudflare R2 / S3", "sublabel": "Object Storage", "pos": [670, 470], "size": [130, 60], "tag": "Blobs & Media" },
+    { "id": "flyway_engine", "type": "backend", "label": "Flyway Migrations", "sublabel": "V1 to V48 SQL", "pos": [880, 300], "size": [130, 60], "tag": "Automatic DDL" }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "In-Memory & Connection Tier", "wraps": ["backend_orm", "hikaricp", "caffeine_cache", "advisory_locks"] },
+    { "kind": "region", "label": "PostgreSQL 17 Database Engine", "wraps": ["postgres_engine", "session_store", "room_events_store"] },
+    { "kind": "region", "label": "Schemas & Relational Tables", "wraps": ["core_tables", "idempotency_store", "flyway_engine"] },
+    { "kind": "region", "label": "External Object Storage", "wraps": ["s3_blob_store"] }
+  ],
+  "connections": [
+    { "id": "c-orm-cache", "from": "backend_orm", "to": "caffeine_cache", "label": "Fast Lookup", "variant": "default" },
+    { "id": "c-orm-hikari", "from": "backend_orm", "to": "hikaricp", "label": "Borrow Conn", "variant": "emphasis" },
+    { "id": "c-hikari-pg", "from": "hikaricp", "to": "postgres_engine", "label": "TCP :5432", "variant": "emphasis" },
+    { "id": "c-pg-session", "from": "postgres_engine", "to": "session_store", "label": "Persist Session", "variant": "security" },
+    { "id": "c-pg-events", "from": "postgres_engine", "to": "room_events_store", "label": "Append Only", "variant": "default", "labelDy": 24 },
+    { "id": "c-pg-core", "from": "postgres_engine", "to": "core_tables", "label": "CRUD Query", "variant": "emphasis" },
+    { "id": "c-pg-idempotent", "from": "postgres_engine", "to": "idempotency_store", "label": "Lookup Key", "variant": "default" },
+    { "id": "c-core-flyway", "from": "core_tables", "to": "flyway_engine", "label": "Apply DDL", "variant": "default" },
+    { "id": "c-hikari-locks", "from": "hikaricp", "to": "advisory_locks", "label": "Advisory Lock", "variant": "security", "labelDy": 24 },
+    { "id": "c-orm-s3", "from": "backend_orm", "to": "s3_blob_store", "label": "Store Binary", "variant": "default" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Connection Management", "items": ["HikariCP connection pool sized to 10 connections for managed PostgreSQL headroom", "Connection timeout of 10s and leak detection threshold of 30s", "Spring JPA configured with open-in-view: false and batch fetching (size 50)"] },
+    { "dot": "emerald", "title": "PostgreSQL 17 Relational Storage", "items": ["Managed PostgreSQL hosted on Render with forced UTC timezone option", "48 Flyway migrations automating schema evolution and indexes", "Monotonic BIGSERIAL sequence on room_events for gapless event sync"] },
+    { "dot": "violet", "title": "Distributed Coordination & Caching", "items": ["PostgreSQL advisory locks (1005L, 1006L, 1010L, 1011L) guard singleton jobs", "Spring Session JDBC maintains distributed HTTP user sessions across restarts", "Caffeine in-memory cache isolates rate limit buckets and SSE ring buffers"] },
+    { "dot": "amber", "title": "Object Storage & Idempotency", "items": ["S3-compatible Cloudflare R2 / AWS S3 bucket stores PPTX decks, PDFs, and OCR screenshots", "idempotency_keys table stores hashed request URIs and status codes with 24h retention", "Timestamp conversion explicitly maps Java Instant to java.sql.Timestamp for JDBC compatibility"] }
+  ]
+}

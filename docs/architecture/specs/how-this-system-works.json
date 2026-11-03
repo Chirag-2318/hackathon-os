@@ -1,0 +1,182 @@
+{
+  "schema_version": 1,
+  "diagram_type": "explainer",
+  "meta": {
+    "title": "How Hackathon OS (Brackit) Works",
+    "id": "hackathon-os-architecture",
+    "locale": "en",
+    "output": "how-this-system-works.html"
+  },
+  "answer": {
+    "summary": "Hackathon OS coordinates 24-48 hour teams through a linear execution operating system. It combines real-time SSE live sync with an automated backend AI gateway.",
+    "reasons": [
+      "Enforces mandatory rubric confirmation gates before coding begins, preventing disqualified submissions.",
+      "Replaces unstructured chat chaos with synchronized workspaces: Silent Ideation, 4-Step Plan Vault, and Kanban Board.",
+      "Synchronizes all teammates in real time via virtual-threaded Server-Sent Events with optimistic locking."
+    ],
+    "scope": "Covers React 19 + Vite frontend, Spring Boot 4.1 backend, PostgreSQL 17, and Groq-hosted LLaMA 3.3 70B & Whisper STT AI gateway."
+  },
+  "panels": [
+    {
+      "id": "lifecycle-steps",
+      "title": "How does a team progress from brief intake to final pitch?",
+      "blocks": [
+        {
+          "type": "steps",
+          "id": "journey-steps",
+          "items": [
+            {
+              "id": "step-brief",
+              "text": "1. Intake & Rules Extraction",
+              "detail": "Multimodal OCR ingests competition PDFs. The team leader confirms every extracted rule before ideation unlocks. [](source:brief-src)"
+            },
+            {
+              "id": "step-ideate",
+              "text": "2. Silent Solo Storming",
+              "detail": "Members draft ideas without bias until revealed. AI stress tests feasibility before the room locks a winner. [](source:ideate-src)"
+            },
+            {
+              "id": "step-plan",
+              "text": "3. 4-Step Planning Vault",
+              "detail": "AiService generates PRD, Architecture, Phases, and Demo Script into a versioned 9-doc Markdown vault. [](source:plan-src)"
+            },
+            {
+              "id": "step-execute",
+              "text": "4. Execution & Reality Sync",
+              "detail": "Phase-driven Kanban board coordinates tasks with dependency checks. Reality Ledger tracks what was actually built. [](source:board-src)"
+            },
+            {
+              "id": "step-pitch",
+              "text": "5. Pitch Kit & Final Sign-off",
+              "detail": "Live mic telemetry evaluates pace, Judge's Chair trains defense, and link checkers verify repos before sign-off. [](source:pitch-src)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "comparison-panel",
+      "title": "Why do ad-hoc teams lose compared to Brackit-guided teams?",
+      "blocks": [
+        {
+          "type": "comparison",
+          "id": "comparison-table",
+          "columns": [
+            "Brackit Hackathon OS",
+            "Ad-Hoc Team Chat (Discord/WhatsApp)"
+          ],
+          "rows": [
+            {
+              "label": "Rules & Rubrics",
+              "cells": [
+                {
+                  "text": "Mandatory leader confirmation gate",
+                  "assessment": "good",
+                  "verdict": "Zero rule disqualifications"
+                },
+                {
+                  "text": "Unread rules in scattered PDFs",
+                  "assessment": "caution",
+                  "verdict": "Frequent rubric penalties"
+                }
+              ],
+              "id": "row-rubrics"
+            },
+            {
+              "label": "Ideation & Scope",
+              "cells": [
+                {
+                  "text": "Silent card reveal + AI reality stress test",
+                  "assessment": "good",
+                  "verdict": "Feasible MVP scope"
+                },
+                {
+                  "text": "Loudest-voice debates & overscoping",
+                  "assessment": "caution",
+                  "verdict": "Broken demo at judging"
+                }
+              ],
+              "id": "row-scope"
+            },
+            {
+              "label": "State Synchronization",
+              "cells": [
+                {
+                  "text": "Virtual-threaded SSE streams + optimistic lock",
+                  "assessment": "good",
+                  "verdict": "Zero UI desync"
+                },
+                {
+                  "text": "Buried messages and manual check-ins",
+                  "assessment": "caution",
+                  "verdict": "Duplicated work & panic"
+                }
+              ],
+              "id": "row-sync"
+            },
+            {
+              "label": "Pitch Preparation",
+              "cells": [
+                {
+                  "text": "Teleprompter + Whisper STT pace telemetry",
+                  "assessment": "good",
+                  "verdict": "Rehearsed 3-minute delivery"
+                },
+                {
+                  "text": "Slides thrown together in last 15 minutes",
+                  "assessment": "caution",
+                  "verdict": "Unrehearsed presentation"
+                }
+              ],
+              "id": "row-pitch"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "architecture-guardrails",
+      "title": "What architectural safeguards guarantee production stability?",
+      "blocks": [
+        {
+          "type": "list",
+          "ordered": false,
+          "items": [
+            "Reverse Proxy IP Resolution: ClientIpResolver parses x-vercel-forwarded-for literals, preventing shared 429 rate limit buckets.",
+            "Circuit Breaking & Bulkheads: ExternalCallBulkhead isolates Groq LLM calls (max 6 concurrent) with 45-second timeouts.",
+            "Distributed PostgreSQL Locks: Advisory locks 1010L and 1011L ensure scheduled jobs never execute concurrently across instances.",
+            "Spring Session Persistence: JDBC-backed HTTP sessions prevent user logout storms during container redeployments and cold starts."
+          ],
+          "id": "list-guardrails"
+        }
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "id": "brief-src",
+      "title": "BriefService: Multimodal statement intake & rules engine",
+      "url": "https://github.com/Chirag-2318/hackathon-os/blob/main/backend/src/main/java/com/hackathonos/backend/brief/BriefService.java"
+    },
+    {
+      "id": "ideate-src",
+      "title": "IdeasService: Silent ideation & AI stress testing",
+      "url": "https://github.com/Chirag-2318/hackathon-os/blob/main/backend/src/main/java/com/hackathonos/backend/ideas/IdeasService.java"
+    },
+    {
+      "id": "plan-src",
+      "title": "PlanPromptService: 4-step dynamic planning & heading validation",
+      "url": "https://github.com/Chirag-2318/hackathon-os/blob/main/backend/src/main/java/com/hackathonos/backend/plan/PlanPromptService.java"
+    },
+    {
+      "id": "board-src",
+      "title": "BoardController: Phase-driven Kanban board with task dependencies",
+      "url": "https://github.com/Chirag-2318/hackathon-os/blob/main/backend/src/main/java/com/hackathonos/backend/tasks/BoardController.java"
+    },
+    {
+      "id": "pitch-src",
+      "title": "PitchKitController: Speech teleprompter & judge Q&A simulator",
+      "url": "https://github.com/Chirag-2318/hackathon-os/blob/main/backend/src/main/java/com/hackathonos/backend/pitchkit/PitchKitController.java"
+    }
+  ]
+}

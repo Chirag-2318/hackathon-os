@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Hackathon OS (Brackit) - AI & LLM Pipeline",
+    "output": "docs/architecture/04-ai-pipeline.html",
+    "quality_profile": "standard"
+  },
+  "components": [
+    { "id": "feature_caller", "type": "backend", "label": "Feature Services", "sublabel": "Plan / Brief / Pitch", "pos": [40, 300], "size": [130, 60], "tag": "13 AI Features" },
+    { "id": "prompt_engine", "type": "backend", "label": "Prompt Engine", "sublabel": "plan-prompts/*.md", "pos": [250, 130], "size": [130, 60], "tag": "Template Injector" },
+    { "id": "byok_resolver", "type": "security", "label": "Key Resolver", "sublabel": "UserAiKeyService", "pos": [250, 300], "size": [130, 60], "tag": "BYOK + AES-256" },
+    { "id": "rate_limiter", "type": "security", "label": "AiRateLimiter", "sublabel": "10 req/min per User", "pos": [250, 470], "size": [130, 60], "tag": "Caffeine Bucket" },
+    { "id": "circuit_breaker", "type": "security", "label": "CircuitBreaker", "sublabel": "AiCircuitBreaker", "pos": [460, 130], "size": [130, 60], "tag": "50% Error Trip" },
+    { "id": "ai_service", "type": "backend", "label": "AiService Gateway", "sublabel": "Unified Orchestrator", "pos": [460, 300], "size": [130, 60], "tag": "Temperature Steer" },
+    { "id": "json_repair", "type": "backend", "label": "JSON Repair", "sublabel": "1-Shot Repair Loop", "pos": [460, 470], "size": [130, 60], "tag": "Schema Enforcer" },
+    { "id": "whisper_stt", "type": "cloud", "label": "Whisper STT", "sublabel": "whisper-large-v3", "pos": [670, 130], "size": [130, 60], "tag": "Pitch Audio STT" },
+    { "id": "client_bulkhead", "type": "security", "label": "Bulkhead Limiter", "sublabel": "ExternalCallBulkhead", "pos": [670, 300], "size": [130, 60], "tag": "Semaphore(6)" },
+    { "id": "usage_ledger", "type": "database", "label": "AiUsageDaily", "sublabel": "Token Accounting", "pos": [670, 470], "size": [130, 60], "tag": "Daily Quota" },
+    { "id": "groq_client", "type": "external", "label": "Groq LLM Engine", "sublabel": "llama-3.3-70b", "pos": [880, 300], "size": [130, 60], "tag": "45s Timeout / Jitter" }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Prompt & Key Intake", "wraps": ["feature_caller", "prompt_engine", "byok_resolver", "rate_limiter"] },
+    { "kind": "region", "label": "Gateway Resilience Core", "wraps": ["circuit_breaker", "ai_service", "json_repair", "client_bulkhead"] },
+    { "kind": "region", "label": "External Providers & Auditing", "wraps": ["whisper_stt", "usage_ledger", "groq_client"] }
+  ],
+  "connections": [
+    { "id": "c-feature-prompt", "from": "feature_caller", "to": "prompt_engine", "label": "Assemble Context", "variant": "default" },
+    { "id": "c-feature-byok", "from": "feature_caller", "to": "byok_resolver", "label": "Resolve Credential", "variant": "security" },
+    { "id": "c-byok-ai", "from": "byok_resolver", "to": "ai_service", "label": "Gateway Invoke", "variant": "emphasis" },
+    { "id": "c-ai-breaker", "from": "ai_service", "to": "circuit_breaker", "label": "State Check", "variant": "security" },
+    { "id": "c-ai-bulkhead", "from": "ai_service", "to": "client_bulkhead", "label": "Acquire Slot", "variant": "emphasis" },
+    { "id": "c-bulkhead-groq", "from": "client_bulkhead", "to": "groq_client", "label": "OpenAI REST", "variant": "emphasis" },
+    { "id": "c-ai-whisper", "from": "ai_service", "to": "whisper_stt", "label": "Audio MultiPart", "variant": "default" },
+    { "id": "c-ai-json", "from": "ai_service", "to": "json_repair", "label": "Parse JSON", "variant": "default", "labelDy": 24 },
+    { "id": "c-ai-rate", "from": "ai_service", "to": "rate_limiter", "label": "Check Rate", "variant": "security" },
+    { "id": "c-ai-usage", "from": "ai_service", "to": "usage_ledger", "label": "Log Tokens", "variant": "default" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Prompt & Key Resolution", "items": ["PlanPromptService dynamically injects team roles, rubric weights, and PRD context into markdown templates", "UserAiKeyService supports Bring-Your-Own-Key (BYOK) with AES-256 encrypted database storage", "Platform key fallback active in development mode with zero client exposure"] },
+    { "dot": "emerald", "title": "Gateway Resilience", "items": ["AiCircuitBreaker tracks 5-minute rolling window and trips after 50% failures", "ExternalCallBulkhead bounds concurrent LLM calls to 6 and STT to 3", "AiRateLimiter enforces 10 requests/minute per authenticated user"] },
+    { "dot": "violet", "title": "Model Providers & Audio", "items": ["Primary generation via Groq LLaMA 3.3 70B Versatile with temperature steering per feature tag", "Speech-to-Text transcription via Groq Whisper Large v3 for pitch kit practice", "45-second read timeout with 2x exponential retries and backoff jitter"] },
+    { "dot": "amber", "title": "Structured Parsing & Audit", "items": ["Enforces JSON Mode and executes automated 1-shot repair if LLM outputs markdown syntax", "Strict Jackson deserialization validating expected heading schemas", "AiUsageDaily increments daily token counters per room and user for cost observability"] }
+  ]
+}

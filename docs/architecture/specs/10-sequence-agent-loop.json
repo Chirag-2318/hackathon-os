@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Hackathon OS (Brackit) - Autonomous Agent MCP Planning Loop",
+    "output": "docs/architecture/10-sequence-agent-loop.html",
+    "viewBox": [920, 1080],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard"
+  },
+  "participants": [
+    { "id": "agent", "type": "external", "label": "AI Agent", "sublabel": "Claude/Cursor/AGY" },
+    { "id": "mcp", "type": "backend", "label": "Brackit MCP", "sublabel": "Node.js Server" },
+    { "id": "auth", "type": "security", "label": "OAuth Guard", "sublabel": "RFC 6749 Bearer" },
+    { "id": "api", "type": "backend", "label": "Spring API", "sublabel": "McpController" },
+    { "id": "val", "type": "backend", "label": "PlanValidator", "sublabel": "Headings Engine" },
+    { "id": "vault", "type": "database", "label": "Docs Vault", "sublabel": "PostgreSQL Store" }
+  ],
+  "segments": [
+    { "from": 150, "to": 345, "label": "1. Discover & Inspect Brief" },
+    { "from": 355, "to": 585, "label": "2. Delimited Bundle Submission" },
+    { "from": 595, "to": 825, "label": "3. Automated Heading Repair Loop" },
+    { "from": 835, "to": 1020, "label": "4. Persistence & Direct Team Link" }
+  ],
+  "messages": [
+    { "from": "agent", "to": "mcp", "y": 180, "label": "Tool call: 'list_rooms'", "variant": "emphasis" },
+    { "from": "mcp", "to": "auth", "y": 215, "label": "Validate Bearer token", "variant": "security" },
+    { "from": "auth", "to": "api", "y": 250, "label": "GET /api/v1/mcp/rooms", "variant": "default" },
+    { "from": "api", "to": "mcp", "y": 285, "label": "Active rooms + member roles", "variant": "return" },
+    { "from": "agent", "to": "mcp", "y": 320, "label": "Tool call: 'get_step_brief(id, prd)'", "variant": "emphasis" },
+
+    { "from": "mcp", "to": "api", "y": 385, "label": "GET /mcp/rooms/{id}/steps/prd/brief", "variant": "default" },
+    { "from": "api", "to": "agent", "y": 420, "label": "Instructions, context & expected files", "variant": "return" },
+    { "from": "agent", "to": "mcp", "y": 465, "label": "Submit =====FILE===== bundle", "variant": "emphasis" },
+    { "from": "mcp", "to": "api", "y": 505, "label": "POST /steps/prd/submit", "variant": "emphasis" },
+    { "from": "api", "to": "val", "y": 545, "label": "Validate headings & length", "variant": "default" },
+
+    { "from": "val", "to": "api", "y": 625, "label": "Error: Missing 'Reality check' section", "variant": "dashed" },
+    { "from": "api", "to": "mcp", "y": 665, "label": "400 + targeted repairPrompt", "variant": "return" },
+    { "from": "mcp", "to": "agent", "y": 705, "label": "Fix and resubmit instructions", "variant": "dashed" },
+    { "from": "agent", "to": "mcp", "y": 745, "label": "Resubmit corrected bundle", "variant": "emphasis" },
+    { "from": "mcp", "to": "val", "y": 785, "label": "Re-verify heading hierarchy", "variant": "emphasis" },
+
+    { "from": "val", "to": "vault", "y": 860, "label": "Save versioned PRD & MVP docs", "variant": "emphasis" },
+    { "from": "vault", "to": "api", "y": 900, "label": "DocVersion record created", "variant": "return" },
+    { "from": "api", "to": "mcp", "y": 940, "label": "200 OK + webUrl link", "variant": "return" },
+    { "from": "mcp", "to": "agent", "y": 980, "label": "Final summary + team URL", "variant": "emphasis" }
+  ],
+  "activations": [
+    { "participant": "mcp", "from": 180, "to": 295, "type": "backend" },
+    { "participant": "auth", "from": 215, "to": 260, "type": "security" },
+    { "participant": "api", "from": 250, "to": 290, "type": "backend" },
+    { "participant": "mcp", "from": 320, "to": 430, "type": "backend" },
+    { "participant": "mcp", "from": 465, "to": 515, "type": "backend" },
+    { "participant": "api", "from": 505, "to": 675, "type": "backend" },
+    { "participant": "val", "from": 545, "to": 635, "type": "backend" },
+    { "participant": "mcp", "from": 745, "to": 795, "type": "backend" },
+    { "participant": "val", "from": 785, "to": 870, "type": "backend" },
+    { "participant": "vault", "from": 860, "to": 910, "type": "database" },
+    { "participant": "mcp", "from": 940, "to": 990, "type": "backend" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Room & Brief Discovery", "items": ["Agent calls list_rooms to enumerate hackathon rooms where user has LEADER/BUILDER role", "get_step_brief returns strict instructions, rubric weights, and =====FILE===== formatting rules", "Read-only tools are marked with readOnlyHint: true in MCP tool registration"] },
+    { "dot": "emerald", "title": "Delimited Bundle Submission", "items": ["submit_step_document accepts multi-file bundles bounded by 200,000 character payload limits", "Transmits confirm=false by default and flags non-fatal ambiguities needing user approval", "Handles Render 60-second cold-start delays transparently in the client"] },
+    { "dot": "violet", "title": "Automated Heading Repair", "items": ["PlanValidator compares Markdown AST against plan-headings.json requirements", "Generates structured repair prompts highlighting exact missing H2 sections or length deficiencies", "Caps autonomous agent retries at 3 attempts before escalating to the human user"] },
+    { "dot": "amber", "title": "Persistence & Team Handoff", "items": ["Valid submissions write versioned markdown rows to postgres doc_versions table", "Returns direct web link (e.g. /app/room/{id}/docs) for immediate team review in UI", "Agent outputs a concise 3-5 line confirmation rather than echoing full text"] }
+  ]
+}

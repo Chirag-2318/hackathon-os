@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Hackathon OS (Brackit) - Frontend Architecture",
+    "output": "docs/architecture/02-frontend.html",
+    "quality_profile": "standard"
+  },
+  "components": [
+    { "id": "router", "type": "frontend", "label": "AppRouter", "sublabel": "React Router v7", "pos": [40, 300], "size": [130, 60], "tag": "Code-Split /app" },
+    { "id": "pwa_worker", "type": "frontend", "label": "PWA Worker", "sublabel": "Service Worker", "pos": [40, 470], "size": [130, 60], "tag": "Offline Cache" },
+    { "id": "shell", "type": "frontend", "label": "ResponsiveShell", "sublabel": "App & Room Nav", "pos": [250, 300], "size": [130, 60], "tag": "Layout Frame" },
+    { "id": "ui_tokens", "type": "frontend", "label": "UI & Design System", "sublabel": "Radix + Tailwind 4", "pos": [250, 130], "size": [130, 60], "tag": "shadcn Tokens" },
+    { "id": "pages", "type": "frontend", "label": "Room Workspaces", "sublabel": "Brief/Plan/Board/MVP", "pos": [460, 300], "size": [130, 60], "tag": "Feature Pages" },
+    { "id": "state_stores", "type": "frontend", "label": "Zustand Stores", "sublabel": "Client Preferences", "pos": [460, 130], "size": [130, 60], "tag": "Ephemeral State" },
+    { "id": "query", "type": "frontend", "label": "TanStack Query v5", "sublabel": "QueryClient & Cache", "pos": [670, 300], "size": [130, 60], "tag": "5m Stale / Jitter" },
+    { "id": "specialized_ui", "type": "frontend", "label": "Specialized Engines", "sublabel": "Mermaid / CodeMirror", "pos": [670, 130], "size": [130, 60], "tag": "Recharts + Cal" },
+    { "id": "api_client", "type": "backend", "label": "design/api.ts", "sublabel": "apiFetch Wrapper", "pos": [880, 300], "size": [130, 60], "tag": "CSRF + Idempotent" },
+    { "id": "live_stream", "type": "messagebus", "label": "useRoomLive", "sublabel": "SSE Hook / Coalesce", "pos": [460, 470], "size": [130, 60], "tag": "Conflict Guard" },
+    { "id": "audio_mic", "type": "frontend", "label": "Audio & Telemetry", "sublabel": "Web Audio API", "pos": [670, 470], "size": [130, 60], "tag": "Mic Waveform" }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Presentation Hierarchy", "wraps": ["router", "shell", "pages", "ui_tokens"] },
+    { "kind": "region", "label": "State & Client Logic", "wraps": ["query", "state_stores", "api_client", "specialized_ui"] },
+    { "kind": "region", "label": "Sensory & Realtime Channels", "wraps": ["live_stream", "audio_mic"] }
+  ],
+  "connections": [
+    { "id": "c-router-shell", "from": "router", "to": "shell", "label": "Protected Route", "variant": "emphasis" },
+    { "id": "c-shell-pages", "from": "shell", "to": "pages", "label": "Outlet Render", "variant": "emphasis" },
+    { "id": "c-pages-query", "from": "pages", "to": "query", "label": "useQuery Hook", "variant": "emphasis" },
+    { "id": "c-query-api", "from": "query", "to": "api_client", "label": "Fetch Function", "variant": "emphasis" },
+    { "id": "c-pages-stores", "from": "pages", "to": "state_stores", "label": "Sync State", "variant": "default" },
+    { "id": "c-pages-spec", "from": "pages", "to": "specialized_ui", "label": "Render Canvas", "variant": "default" },
+    { "id": "c-pages-live", "from": "pages", "to": "live_stream", "label": "Subscribe Room", "variant": "default", "labelDy": 24 },
+    { "id": "c-live-query", "from": "live_stream", "to": "query", "label": "Debounced Invalidate", "variant": "dashed" },
+    { "id": "c-pages-audio", "from": "pages", "to": "audio_mic", "label": "Stream Mic", "variant": "default" },
+    { "id": "c-router-pwa", "from": "router", "to": "pwa_worker", "label": "Service Worker", "variant": "dashed", "labelDy": 24 }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Router & Layout", "items": ["React Router v7 with ProtectedRoute session verification", "Lazy-loaded route splitting via React.lazy and Suspense boundaries", "Unified ResponsiveShell with room banner, timer, and checkpoint HUD"] },
+    { "dot": "emerald", "title": "Data & Network Client", "items": ["TanStack Query v5 with 5-minute staleTime and 2x exponential retry with jitter", "apiFetch in design/api.ts with automatic XSRF-TOKEN header injection", "Per-request Idempotency-Key UUID headers on creates and mutations"] },
+    { "dot": "violet", "title": "Real-time & Sensory UI", "items": ["useRoomLive SSE hook with exponential backoff and tab-visibility pausing", "Optimistic locking conflict alert dialog with one-click reload", "Web Audio API microphone waveform analyser and speech pacing teleprompter"] },
+    { "dot": "amber", "title": "Design System Tokens", "items": ["Tailwind CSS v4 with semantic CSS theme tokens (shadcn/ui style)", "Radix UI unstyled primitives for dialogs, popovers, tooltips, and tabs", "CodeMirror 6 for markdown authoring and Mermaid.js runtime rendering"] }
+  ]
+}

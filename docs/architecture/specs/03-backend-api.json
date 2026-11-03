@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Hackathon OS (Brackit) - Backend & API Architecture",
+    "output": "docs/architecture/03-backend-api.html",
+    "quality_profile": "standard"
+  },
+  "components": [
+    { "id": "filter_chain", "type": "security", "label": "Security Filters", "sublabel": "RequestId + CSRF + Auth", "pos": [40, 300], "size": [130, 60], "tag": "Order(1 & 2)" },
+    { "id": "idempotency", "type": "security", "label": "IdempotencyFilter", "sublabel": "24h POST Dedup", "pos": [250, 130], "size": [130, 60], "tag": "idempotency_keys" },
+    { "id": "rate_limiter", "type": "security", "label": "RateLimiter", "sublabel": "ClientIpResolver", "pos": [250, 300], "size": [130, 60], "tag": "Vercel-Aware" },
+    { "id": "room_interceptor", "type": "messagebus", "label": "RoomInterceptor", "sublabel": "Mutation Capture", "pos": [250, 470], "size": [130, 60], "tag": "WebMvcConfig" },
+    { "id": "auth_manager", "type": "backend", "label": "Session & OAuth", "sublabel": "Spring Session JDBC", "pos": [460, 130], "size": [130, 60], "tag": "JSESSIONID" },
+    { "id": "controllers", "type": "backend", "label": "REST Controllers", "sublabel": "50+ Feature Endpoints", "pos": [460, 300], "size": [130, 60], "tag": "@RestController" },
+    { "id": "event_hub", "type": "messagebus", "label": "RoomEventHub", "sublabel": "SSE Live Dispatcher", "pos": [460, 470], "size": [130, 60], "tag": "RingBuffer(200)" },
+    { "id": "mcp_gateway", "type": "backend", "label": "MCP & OAuth Server", "sublabel": "RFC 6749 Endpoints", "pos": [670, 130], "size": [130, 60], "tag": "McpController" },
+    { "id": "core_services", "type": "backend", "label": "Domain Services", "sublabel": "Brief/Plan/Task/Pitch", "pos": [670, 300], "size": [130, 60], "tag": "@Service Beans" },
+    { "id": "schedulers", "type": "backend", "label": "Scheduled Jobs", "sublabel": "Cleanup + Reminders", "pos": [670, 470], "size": [130, 60], "tag": "Advisory Locks" },
+    { "id": "data_layer", "type": "database", "label": "Data Access", "sublabel": "Spring Data JPA + JDBC", "pos": [880, 300], "size": [130, 60], "tag": "HikariCP Pool" }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "HTTP Ingress & Security", "wraps": ["filter_chain", "rate_limiter", "idempotency"] },
+    { "kind": "region", "label": "Controllers & Identity", "wraps": ["controllers", "auth_manager", "mcp_gateway"] },
+    { "kind": "region", "label": "Domain & Realtime Engine", "wraps": ["core_services", "room_interceptor", "event_hub"] },
+    { "kind": "region", "label": "Persistence & Background Tasks", "wraps": ["data_layer", "schedulers"] }
+  ],
+  "connections": [
+    { "id": "c-filter-idempotent", "from": "filter_chain", "to": "idempotency", "label": "Verify Key", "variant": "security" },
+    { "id": "c-filter-rate", "from": "filter_chain", "to": "rate_limiter", "label": "Filter Pipeline", "variant": "emphasis" },
+    { "id": "c-rate-ctrl", "from": "rate_limiter", "to": "controllers", "label": "Dispatch Request", "variant": "emphasis" },
+    { "id": "c-ctrl-auth", "from": "controllers", "to": "auth_manager", "label": "CurrentUser", "variant": "default" },
+    { "id": "c-ctrl-service", "from": "controllers", "to": "core_services", "label": "Invoke Logic", "variant": "emphasis" },
+    { "id": "c-service-data", "from": "core_services", "to": "data_layer", "label": "Read/Write SQL", "variant": "emphasis" },
+    { "id": "c-ctrl-mcp", "from": "controllers", "to": "mcp_gateway", "label": "Route MCP", "variant": "default" },
+    { "id": "c-rate-interceptor", "from": "rate_limiter", "to": "room_interceptor", "label": "PostHandle", "variant": "default", "labelDy": 24 },
+    { "id": "c-interceptor-hub", "from": "room_interceptor", "to": "event_hub", "label": "Emit Event", "variant": "dashed" },
+    { "id": "c-schedulers-data", "from": "schedulers", "to": "data_layer", "label": "Advisory Lock", "variant": "default" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Security Ingress", "items": ["RequestIdFilter sets MDC and X-Request-Id header on all requests", "ClientIpResolver parses x-vercel-forwarded-for with InetAddress literal checks", "RateLimitInterceptor enforces 120/min unauth and 600/min auth limits"] },
+    { "dot": "emerald", "title": "Controllers & Sessions", "items": ["CurrentUser method argument resolver injects authenticated User model", "Spring Session JDBC stores encrypted sessions in postgres table", "RFC 6749 OAuth 2.0 authorization server exposes token issuing and verification"] },
+    { "dot": "violet", "title": "Real-time SSE Engine", "items": ["RoomChangeInterceptor captures POST/PUT/PATCH mutations matching /api/v1/**", "RoomEventHub maintains in-memory ring buffers of 200 events and emits heartbeats", "Supports Last-Event-ID event replay for reconnecting browsers"] },
+    { "dot": "amber", "title": "Persistence & Schedulers", "items": ["HikariCP connection pool configured for 10 connections on managed Postgres", "Postgres advisory locks (1010L for reminders, 1011L for link checks) prevent overlap", "Scheduled CleanupJob prunes idempotency records older than 24 hours"] }
+  ]
+}

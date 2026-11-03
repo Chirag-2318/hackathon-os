@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Hackathon OS (Brackit) - End-to-End User Hackathon Journey",
+    "output": "docs/architecture/09-sequence-main-flow.html",
+    "viewBox": [920, 1100],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard"
+  },
+  "participants": [
+    { "id": "user", "type": "external", "label": "Team Leader", "sublabel": "Browser / UI" },
+    { "id": "ui", "type": "frontend", "label": "React 19 UI", "sublabel": "App Shell" },
+    { "id": "api", "type": "backend", "label": "Spring Boot", "sublabel": "REST API" },
+    { "id": "ai", "type": "backend", "label": "AiService", "sublabel": "AI Gateway" },
+    { "id": "llm", "type": "external", "label": "Groq LLM", "sublabel": "Llama 3.3 70B" },
+    { "id": "db", "type": "database", "label": "PostgreSQL", "sublabel": "Persistence" },
+    { "id": "sse", "type": "messagebus", "label": "EventHub", "sublabel": "SSE Live Sync" }
+  ],
+  "segments": [
+    { "from": 150, "to": 350, "label": "1. Intake & Multimodal OCR" },
+    { "from": 360, "to": 625, "label": "2. AI 4-Step Planning Generation" },
+    { "from": 635, "to": 825, "label": "3. Live Execution & Reality Sync" },
+    { "from": 835, "to": 1030, "label": "4. Pitch Teleprompter & Submission" }
+  ],
+  "messages": [
+    { "from": "user", "to": "ui", "y": 180, "label": "Upload problem PDF/images", "variant": "emphasis" },
+    { "from": "ui", "to": "api", "y": 215, "label": "POST /brief/source/images", "variant": "emphasis" },
+    { "from": "api", "to": "ai", "y": 250, "label": "Extract rules & rubrics", "variant": "emphasis" },
+    { "from": "ai", "to": "api", "y": 285, "label": "Extracted rubric weights", "variant": "return" },
+    { "from": "api", "to": "db", "y": 320, "label": "Save brief rules & rubrics", "variant": "default" },
+
+    { "from": "user", "to": "ui", "y": 390, "label": "Click 'Generate Plan'", "variant": "emphasis" },
+    { "from": "ui", "to": "api", "y": 425, "label": "POST /plan/steps/1/generate", "variant": "emphasis" },
+    { "from": "api", "to": "ai", "y": 460, "label": "Assemble context + prompt", "variant": "emphasis" },
+    { "from": "ai", "to": "llm", "y": 495, "label": "POST /chat/completions (JSON)", "variant": "emphasis" },
+    { "from": "llm", "to": "ai", "y": 530, "label": "PRD & MVP markdown bundle", "variant": "return" },
+    { "from": "ai", "to": "api", "y": 565, "label": "Parsed & validated headings", "variant": "return" },
+    { "from": "api", "to": "db", "y": 600, "label": "Store versioned documents", "variant": "emphasis" },
+
+    { "from": "api", "to": "sse", "y": 655, "label": "Publish 'plan.updated' event", "variant": "dashed" },
+    { "from": "sse", "to": "ui", "y": 690, "label": "Push live sync to all members", "variant": "dashed" },
+    { "from": "user", "to": "ui", "y": 725, "label": "Move task to 'IN_PROGRESS'", "variant": "emphasis" },
+    { "from": "ui", "to": "api", "y": 760, "label": "PATCH /board/tasks/{id}", "variant": "emphasis" },
+    { "from": "api", "to": "sse", "y": 795, "label": "Broadcast 'board.task_moved'", "variant": "dashed" },
+
+    { "from": "user", "to": "ui", "y": 860, "label": "Rehearse pitch with mic audio", "variant": "emphasis" },
+    { "from": "ui", "to": "api", "y": 895, "label": "POST /pitch/rehearsals/audio", "variant": "emphasis" },
+    { "from": "api", "to": "ai", "y": 930, "label": "Whisper STT pace analysis", "variant": "default" },
+    { "from": "api", "to": "user", "y": 965, "label": "WPM telemetry & feedback", "variant": "return" },
+    { "from": "user", "to": "ui", "y": 1000, "label": "Leader sign-off & submission", "variant": "emphasis" }
+  ],
+  "activations": [
+    { "participant": "ui", "from": 180, "to": 330, "type": "frontend" },
+    { "participant": "api", "from": 215, "to": 325, "type": "backend" },
+    { "participant": "ai", "from": 250, "to": 290, "type": "backend" },
+    { "participant": "ui", "from": 390, "to": 610, "type": "frontend" },
+    { "participant": "api", "from": 425, "to": 605, "type": "backend" },
+    { "participant": "ai", "from": 460, "to": 570, "type": "backend" },
+    { "participant": "llm", "from": 495, "to": 535, "type": "external" },
+    { "participant": "ui", "from": 690, "to": 805, "type": "frontend" },
+    { "participant": "api", "from": 760, "to": 800, "type": "backend" },
+    { "participant": "ui", "from": 860, "to": 1010, "type": "frontend" },
+    { "participant": "api", "from": 895, "to": 970, "type": "backend" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Phase 1: Brief & Intake", "items": ["Multimodal OCR parses competition PDFs and rubric tables", "Leader enforces mandatory confirmation toggles before ideation unlocks", "Rules engine flags forbidden technologies and judging priorities"] },
+    { "dot": "emerald", "title": "Phase 2: 4-Step Planning", "items": ["Assembles room context into 4 structured markdown files (PRD, Stack, Phases, Demo)", "Enforces strict heading hierarchies and automated repair prompts", "Persists versioned documents in PostgreSQL vault with ZIP export"] },
+    { "dot": "violet", "title": "Phase 3: Real-Time Execution", "items": ["RoomChangeInterceptor broadcasts state mutations over Server-Sent Events", "Clients receive debounced query invalidation preventing UI desync", "Lead approvals protect critical task completions and phase transitions"] },
+    { "dot": "amber", "title": "Phase 4: Pitch & Final Submission", "items": ["Web Audio API teleprompter records rehearsal audio for speech analysis", "SubmissionLinkCheckJob validates live demo links and GitHub repos", "Red stamp leader sign-off seals the final flight checklist"] }
+  ]
+}

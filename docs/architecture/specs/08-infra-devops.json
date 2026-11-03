@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Hackathon OS (Brackit) - Infrastructure, CI/CD & Observability",
+    "output": "docs/architecture/08-infra-devops.html",
+    "quality_profile": "standard"
+  },
+  "components": [
+    { "id": "dev_git", "type": "external", "label": "Git Repository", "sublabel": "Push to main", "pos": [40, 300], "size": [130, 60], "tag": "GitHub Repo" },
+    { "id": "playwright_e2e", "type": "backend", "label": "Test Automation", "sublabel": "Vitest + Playwright", "pos": [250, 130], "size": [130, 60], "tag": "E2E + Unit" },
+    { "id": "github_actions", "type": "cloud", "label": "GitHub Actions", "sublabel": "Java 25 + Node 20", "pos": [250, 300], "size": [130, 60], "tag": "Postgres 17 Svc" },
+    { "id": "loadtest_suite", "type": "backend", "label": "Loadtest Suite", "sublabel": "loadtest/run.mjs", "pos": [250, 470], "size": [130, 60], "tag": "Autocannon" },
+    { "id": "gmail_smtp", "type": "cloud", "label": "Gmail SMTP", "sublabel": "Outbox Dispatcher", "pos": [460, 130], "size": [130, 60], "tag": "TLS :587" },
+    { "id": "vercel_cdn", "type": "cloud", "label": "Vercel Frontend", "sublabel": "Edge CDN & Rewrites", "pos": [460, 300], "size": [130, 60], "tag": "SPA Hosting" },
+    { "id": "system_logs", "type": "messagebus", "label": "Structured Logs", "sublabel": "MDC [requestId]", "pos": [460, 470], "size": [130, 60], "tag": "Logback" },
+    { "id": "cloudflare_r2", "type": "cloud", "label": "Cloudflare R2", "sublabel": "Object Storage", "pos": [670, 130], "size": [130, 60], "tag": "S3-Compatible" },
+    { "id": "render_app", "type": "backend", "label": "Render Web Svc", "sublabel": "Spring Boot Docker", "pos": [670, 300], "size": [130, 60], "tag": "Port 10000" },
+    { "id": "prometheus_metrics", "type": "security", "label": "Prometheus Actuator", "sublabel": "/actuator/prometheus", "pos": [670, 470], "size": [130, 60], "tag": "METRICS_TOKEN" },
+    { "id": "render_db", "type": "database", "label": "Render Postgres", "sublabel": "PostgreSQL 17 DB", "pos": [880, 300], "size": [130, 60], "tag": "Hikari 10 Conn" }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Continuous Integration Pipeline", "wraps": ["dev_git", "github_actions", "playwright_e2e", "loadtest_suite"] },
+    { "kind": "region", "label": "Edge Delivery & Logging", "wraps": ["vercel_cdn", "system_logs"] },
+    { "kind": "region", "label": "Cloud Compute & Database Tier", "wraps": ["render_app", "render_db", "prometheus_metrics"] },
+    { "kind": "region", "label": "External Cloud Services", "wraps": ["cloudflare_r2", "gmail_smtp"] }
+  ],
+  "connections": [
+    { "id": "c-git-actions", "from": "dev_git", "to": "github_actions", "label": "Push Trigger", "variant": "emphasis" },
+    { "id": "c-actions-test", "from": "github_actions", "to": "playwright_e2e", "label": "Run Matrix", "variant": "default" },
+    { "id": "c-actions-load", "from": "github_actions", "to": "loadtest_suite", "label": "Perf Baseline", "variant": "default", "labelDy": 24 },
+    { "id": "c-actions-vercel", "from": "github_actions", "to": "vercel_cdn", "label": "Deploy Edge", "variant": "emphasis" },
+    { "id": "c-vercel-render", "from": "vercel_cdn", "to": "render_app", "label": "Reverse Proxy", "variant": "emphasis" },
+    { "id": "c-render-db", "from": "render_app", "to": "render_db", "label": "TCP :5432", "variant": "emphasis" },
+    { "id": "c-render-r2", "from": "render_app", "to": "cloudflare_r2", "label": "S3 Protocol", "variant": "default" },
+    { "id": "c-render-mail", "from": "render_app", "to": "gmail_smtp", "label": "SMTP :587", "variant": "default" },
+    { "id": "c-render-prom", "from": "render_app", "to": "prometheus_metrics", "label": "Scrape Target", "variant": "security", "labelDy": 24 },
+    { "id": "c-render-logs", "from": "render_app", "to": "system_logs", "label": "MDC Output", "variant": "default" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "GitHub Actions CI", "items": ["Runs on every push to main with parallel backend and frontend jobs", "Spins up postgres:17-alpine service container with UTC timezone options", "Executes Maven compile, static forbidden syntax scans, and unit tests"] },
+    { "dot": "emerald", "title": "Dual-Cloud Hosting", "items": ["Vercel hosts the React 19 Single Page Application and edge rewrites", "Render hosts the containerized Spring Boot 4.1 / Java 25 web application", "Managed PostgreSQL 17 on Render with strict connection limits (pool size 10)"] },
+    { "dot": "violet", "title": "External Infrastructure", "items": ["Cloudflare R2 provides zero-egress S3-compatible storage for pitch media", "Gmail SMTP configured with transactional retry worker reading email_outbox table", "Local Docker Compose manifests provided for full offline reproduction"] },
+    { "dot": "amber", "title": "Observability & Alerting", "items": ["Spring Actuator Prometheus endpoint scraped securely using Bearer METRICS_TOKEN", "RequestIdFilter logs execution durations and flags slow requests (>1500ms)", "ClientErrorController captures frontend exception telemetry and stores in DB"] }
+  ]
+}

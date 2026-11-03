@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Hackathon OS (Brackit) - Agent Orchestration & MCP Server",
+    "output": "docs/architecture/05-agent-orchestration.html",
+    "quality_profile": "standard"
+  },
+  "components": [
+    { "id": "mcp_client", "type": "external", "label": "Autonomous Agent", "sublabel": "Claude/Cursor/AGY", "pos": [40, 300], "size": [130, 60], "tag": "LLM Orchestrator" },
+    { "id": "client_reg", "type": "security", "label": "Client Registration", "sublabel": "RFC 7591 /register", "pos": [250, 130], "size": [130, 60], "tag": "Dynamic Client" },
+    { "id": "mcp_server", "type": "backend", "label": "Brackit MCP Server", "sublabel": "Node.js MCP SDK", "pos": [250, 300], "size": [130, 60], "tag": "Hono Transport" },
+    { "id": "mcp_backend_client", "type": "backend", "label": "Backend Client", "sublabel": "backend-client.ts", "pos": [250, 470], "size": [130, 60], "tag": "60s Render Cold" },
+    { "id": "token_service", "type": "security", "label": "OAuth Token Service", "sublabel": "PKCE & Refresh", "pos": [460, 130], "size": [130, 60], "tag": "OAuthServerService" },
+    { "id": "oauth_guard", "type": "security", "label": "Bearer Auth Filter", "sublabel": "McpBearerAuthFilter", "pos": [460, 300], "size": [130, 60], "tag": "Stateless Guard" },
+    { "id": "prompt_registry", "type": "backend", "label": "Prompt Registry", "sublabel": "5 Step Prompts", "pos": [670, 130], "size": [130, 60], "tag": "prd/tech/phases" },
+    { "id": "tool_router", "type": "messagebus", "label": "MCP Tool Registry", "sublabel": "4 Execution Tools", "pos": [670, 300], "size": [130, 60], "tag": "list/get/submit" },
+    { "id": "repair_loop", "type": "backend", "label": "Repair Generator", "sublabel": "Fix & Resubmit Loop", "pos": [670, 470], "size": [130, 60], "tag": "Max 3 Attempts" },
+    { "id": "plan_validator", "type": "backend", "label": "Plan Validator", "sublabel": "Headings & Reality", "pos": [880, 300], "size": [130, 60], "tag": "Strict Headings" },
+    { "id": "doc_vault", "type": "database", "label": "Docs Vault", "sublabel": "Versioned Documents", "pos": [880, 470], "size": [130, 60], "tag": "DocRepository" }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "External Agent Environment", "wraps": ["mcp_client"] },
+    { "kind": "region", "label": "MCP Server & Auth Boundary", "wraps": ["client_reg", "mcp_server", "token_service", "oauth_guard"] },
+    { "kind": "region", "label": "Tools & Execution Engine", "wraps": ["prompt_registry", "tool_router", "mcp_backend_client"] },
+    { "kind": "region", "label": "Validation & Persistence Core", "wraps": ["plan_validator", "repair_loop", "doc_vault"] }
+  ],
+  "connections": [
+    { "id": "c-client-mcp", "from": "mcp_client", "to": "mcp_server", "label": "MCP Protocol", "variant": "emphasis" },
+    { "id": "c-mcp-reg", "from": "mcp_server", "to": "client_reg", "label": "Dynamic Client", "variant": "security" },
+    { "id": "c-mcp-guard", "from": "mcp_server", "to": "oauth_guard", "label": "Bearer Token", "variant": "security" },
+    { "id": "c-guard-token", "from": "oauth_guard", "to": "token_service", "label": "Validate Code", "variant": "security" },
+    { "id": "c-guard-tools", "from": "oauth_guard", "to": "tool_router", "label": "Authorize Call", "variant": "emphasis" },
+    { "id": "c-tools-prompts", "from": "tool_router", "to": "prompt_registry", "label": "Get Brief", "variant": "default" },
+    { "id": "c-tools-backend", "from": "tool_router", "to": "mcp_backend_client", "label": "API Fetch", "variant": "default" },
+    { "id": "c-tools-validator", "from": "tool_router", "to": "plan_validator", "label": "Submit Bundle", "variant": "emphasis" },
+    { "id": "c-validator-repair", "from": "plan_validator", "to": "repair_loop", "label": "Errors Found", "variant": "dashed", "labelDy": 24 },
+    { "id": "c-validator-vault", "from": "plan_validator", "to": "doc_vault", "label": "Save Validated", "variant": "emphasis", "labelDy": 24 }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Model Context Protocol Server", "items": ["Node.js MCP implementation using @modelcontextprotocol/sdk/server/mcp.js", "Handles Render cold-start timeouts with explicit 60-second fetch budget", "Communicates with Spring Boot backend via dedicated /api/v1/mcp/** API"] },
+    { "dot": "emerald", "title": "OAuth 2.0 Authorization Server", "items": ["Full RFC 6749 and RFC 7636 (PKCE) implementation in Spring Security", "Dynamic client registration (RFC 7591) at /oauth/register", "Issues opaque, cryptographically random 40-character tokens with refresh rotation"] },
+    { "dot": "violet", "title": "Tool Registry & Prompts", "items": ["Exposes 4 core tools: list_rooms, get_plan_steps, get_step_brief, and submit_step_document", "Exposes 5 structured planning prompts (prd, tech, phases, tasks, demo)", "Enforces 200,000 character payload ceilings before backend handoff"] },
+    { "dot": "amber", "title": "Automated Validation & Repair", "items": ["Enforces strict heading hierarchies (plan-headings.json) and delimiters", "Generates targeted Fix and Resubmit repair prompts on validation failures", "Supports warnings confirmation gate (confirm=true) for non-blocking ambiguities"] }
+  ]
+}

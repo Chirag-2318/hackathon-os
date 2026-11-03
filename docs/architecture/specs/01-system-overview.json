@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Hackathon OS (Brackit) - System Overview",
+    "output": "docs/architecture/01-system-overview.html",
+    "quality_profile": "standard"
+  },
+  "components": [
+    { "id": "browser", "type": "frontend", "label": "Client Browser", "sublabel": "React 19 + PWA", "pos": [40, 300], "size": [130, 60], "tag": "TanStack + SSE" },
+    { "id": "auth_idp", "type": "external", "label": "OAuth 2.0 IdPs", "sublabel": "GitHub & Google", "pos": [40, 110], "size": [130, 60], "tag": "RFC 6749" },
+    { "id": "vercel", "type": "cloud", "label": "Vercel Edge", "sublabel": "Reverse Proxy", "pos": [250, 300], "size": [130, 60], "tag": "Forwarded IP" },
+    { "id": "api_gateway", "type": "backend", "label": "Spring Boot API", "sublabel": "Java 25 Engine", "pos": [470, 300], "size": [130, 60], "tag": "Monolith" },
+    { "id": "mcp_server", "type": "backend", "label": "Brackit MCP", "sublabel": "Agent Tools/Prompts", "pos": [470, 110], "size": [130, 60], "tag": "RFC 6749 Auth" },
+    { "id": "ai_gateway", "type": "backend", "label": "AI Gateway", "sublabel": "AiService + BYOK", "pos": [690, 300], "size": [130, 60], "tag": "CircuitBreaker" },
+    { "id": "groq_llm", "type": "external", "label": "Groq & Whisper", "sublabel": "Llama 3.3 & STT", "pos": [910, 300], "size": [130, 60], "tag": "Zero Client Key" },
+    { "id": "sse_hub", "type": "messagebus", "label": "RoomEventHub", "sublabel": "SSE Live Sync", "pos": [250, 480], "size": [130, 60], "tag": "Virtual Threads" },
+    { "id": "postgres", "type": "database", "label": "PostgreSQL 17", "sublabel": "Persistent Store", "pos": [470, 480], "size": [130, 60], "tag": "V1-V48 Flyway" },
+    { "id": "s3_storage", "type": "cloud", "label": "Cloudflare R2", "sublabel": "S3-Compatible", "pos": [690, 480], "size": [130, 60], "tag": "Decks & Media" }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Client Zone", "wraps": ["browser"] },
+    { "kind": "region", "label": "Edge Routing Zone", "wraps": ["vercel"] },
+    { "kind": "region", "label": "Application Network", "wraps": ["api_gateway", "mcp_server", "ai_gateway"] },
+    { "kind": "region", "label": "Data Persistence Zone", "wraps": ["postgres", "s3_storage"] }
+  ],
+  "connections": [
+    { "id": "c-browser-auth", "from": "browser", "to": "auth_idp", "label": "OAuth Login", "variant": "security", "labelDx": 50 },
+    { "id": "c-browser-vercel", "from": "browser", "to": "vercel", "label": "HTTPS :443", "variant": "emphasis" },
+    { "id": "c-vercel-api", "from": "vercel", "to": "api_gateway", "label": "Proxy Forward", "variant": "emphasis" },
+    { "id": "c-mcp-api", "from": "mcp_server", "to": "api_gateway", "label": "Bearer Auth", "variant": "security", "labelDy": 24 },
+    { "id": "c-api-ai", "from": "api_gateway", "to": "ai_gateway", "label": "AI Invocation", "variant": "emphasis" },
+    { "id": "c-ai-groq", "from": "ai_gateway", "to": "groq_llm", "label": "REST Client", "variant": "emphasis" },
+    { "id": "c-api-db", "from": "api_gateway", "to": "postgres", "label": "HikariCP JDBC", "labelDy": 24 },
+    { "id": "c-api-s3", "from": "api_gateway", "to": "s3_storage", "label": "S3 SDK" },
+    { "id": "c-api-sse", "from": "api_gateway", "to": "sse_hub", "label": "Mutations" },
+    { "id": "c-sse-browser", "from": "sse_hub", "to": "browser", "label": "SSE Events", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Client Tier", "items": ["React 19 SPA with Vite and TanStack Query v5", "PWA offline-ready service worker", "Real-time SSE event stream with auto-reconnection"] },
+    { "dot": "emerald", "title": "Backend Core", "items": ["Spring Boot 4.1 monolith on Java 25", "Per-IP rate limiting with Vercel proxy awareness", "Idempotency filter caching POST requests for 24h"] },
+    { "dot": "violet", "title": "AI & Agent Layer", "items": ["Unified AiService gateway with circuit breaking and BYOK fallback", "Groq-hosted LLaMA 3.3 70B and Whisper Large v3 STT", "Stand-alone MCP server with 4 room tools and 5 plan prompts"] },
+    { "dot": "amber", "title": "Data Persistence", "items": ["PostgreSQL 17 with 48 Flyway migrations", "JDBC-backed persistent user sessions (SPRING_SESSION)", "Cloudflare R2 / AWS S3 object storage for pitch decks and media"] }
+  ]
+}
