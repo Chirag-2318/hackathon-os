@@ -1,0 +1,91 @@
+# Load-Testing Profile Configuration
+server:
+  port: ${PORT:8080}
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      timeout: ${SESSION_TIMEOUT:8h}
+      cookie:
+        name: JSESSIONID
+        http-only: true
+        same-site: Lax
+        secure: false
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:hackathon_os?options=-c%20TimeZone=UTC}}
+    username: ${SPRING_DATASOURCE_USERNAME:${DB_USERNAME:hackathon}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:hackathon}}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      minimum-idle: 2
+      connection-timeout: 10000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 30000
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+        default_batch_fetch_size: 50
+        jdbc:
+          batch_size: 25
+          order_inserts: true
+          order_updates: true
+
+  session:
+    store-type: jdbc
+    jdbc:
+      initialize-schema: never
+      table-name: SPRING_SESSION
+
+  mail:
+    host: localhost
+    port: 25
+
+app:
+  mail:
+    provider: log
+    enabled: true
+  storage:
+    provider: local
+  startup-validation:
+    enabled: false
+  events:
+    max-streams-per-user: ${SSE_MAX_STREAMS_PER_USER:6}
+    bus: ${EVENTS_BUS:local}
+  ai:
+    base-url: ${AI_BASE_URL:http://localhost:8088/v1}
+    platform-key: ${AI_PLATFORM_KEY:loadtest-fake-key}
+    platform-fallback: false
+    groq:
+      base-url: ${GROQ_BASE_URL:http://localhost:8088/v1}
+      api-key: ${GROQ_API_KEY:loadtest-fake-key}
+    stt:
+      base-url: ${STT_BASE_URL:http://localhost:8088/v1}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+  endpoint:
+    prometheus:
+      enabled: true
+    metrics:
+      enabled: true
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+METRICS_TOKEN: ${METRICS_TOKEN:loadtest-metrics-token}
+

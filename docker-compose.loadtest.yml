@@ -1,0 +1,87 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: loadtest-postgres
+    command: >
+      postgres
+      -c max_connections=${POSTGRES_MAX_CONNECTIONS:-50}
+      -c log_min_duration_statement=200
+      -c shared_preload_libraries=pg_stat_statements
+    environment:
+      POSTGRES_DB: hackathon_os
+      POSTGRES_USER: hackathon
+      POSTGRES_PASSWORD: hackathon
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hackathon -d hackathon_os"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  mock-llm:
+    build:
+      context: ./loadtest/mock-llm
+    container_name: loadtest-mock-llm
+    environment:
+      PORT: 8088
+      MOCK_AI_DELAY_MIN_MS: ${MOCK_AI_DELAY_MIN_MS:-15000}
+      MOCK_AI_DELAY_MAX_MS: ${MOCK_AI_DELAY_MAX_MS:-40000}
+    ports:
+      - "8088:8088"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8088/health').then(r=>process.exit(r.ok?0:1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: loadtest-backend
+    environment:
+      SPRING_PROFILES_ACTIVE: loadtest
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/hackathon_os?options=-c%20TimeZone=UTC
+      SPRING_DATASOURCE_USERNAME: hackathon
+      SPRING_DATASOURCE_PASSWORD: hackathon
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+      PORT: 8080
+      AI_BASE_URL: http://mock-llm:8088/v1
+      STT_BASE_URL: http://mock-llm:8088/v1
+      GROQ_BASE_URL: http://mock-llm:8088/v1
+      GROQ_API_KEY: loadtest-fake-key
+      AI_PLATFORM_KEY: loadtest-fake-key
+      METRICS_TOKEN: loadtest-metrics-token
+      JAVA_OPTS: "-XX:MaxRAMPercentage=65 -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss512k"
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: "${LOADTEST_CPU_LIMIT:-0.5}"
+          memory: "${LOADTEST_MEM_LIMIT:-512M}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mock-llm:
+        condition: service_healthy
+    restart: unless-stopped
+
+  load-generator:
+    image: node:22-alpine
+    container_name: loadtest-generator
+    working_dir: /loadtest
+    volumes:
+      - ./loadtest:/loadtest
+    environment:
+      TARGET_URL: http://backend:8080
+      METRICS_TOKEN: loadtest-metrics-token
+    depends_on:
+      backend:
+        condition: service_started
+    profiles:
+      - "runner"
+

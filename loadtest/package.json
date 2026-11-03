@@ -1,0 +1,12 @@
+{
+  "name": "brackit-loadtest",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Comprehensive Render-equivalent load testing suite for Brackit",
+  "scripts": {
+    "test": "node run.mjs all",
+    "mock-llm": "node mock-llm/server.js"
+  },
+  "dependencies": {},
+  "private": true
+}

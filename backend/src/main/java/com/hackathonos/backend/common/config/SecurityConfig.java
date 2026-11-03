@@ -75,15 +75,6 @@ public class SecurityConfig {
                     ErrorResponse err = new ErrorResponse(Instant.now().toString(), 401, "UNAUTHORIZED", "Authentication required", reqId);
                     response.getWriter().write(new ObjectMapper().writeValueAsString(err));
                 })
-                .accessDeniedHandler((request, response, accessDeniedException) -> {
-                    if (request.getRequestURI().startsWith("/api/") || request.getRequestURI().startsWith("/actuator/")) {
-                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                        response.setContentType("application/json");
-                        response.getWriter().write("{\"timestamp\":\"" + Instant.now() + "\",\"status\":403,\"code\":\"FORBIDDEN\",\"message\":\"Access denied\"}");
-                    } else {
-                        response.sendRedirect(appProperties.getPublicUrl() + "/login");
-                    }
-                })
             );
         return http.build();
     }
@@ -111,6 +102,8 @@ public class SecurityConfig {
             .csrf(csrf -> csrf
                 .ignoringRequestMatchers(
                         "/mock/**",
+                        "/api/v1/dev/**",
+                        "/api/v1/loadtest/**",
                         "/api/v1/mentor/**",
                         "/api/v1/public/**",
                         "/api/v1/client-errors",
@@ -165,15 +158,6 @@ public class SecurityConfig {
                     String authHeader = context.getRequest().getHeader("Authorization");
                     boolean matches = authHeader != null && authHeader.equals("Bearer " + metricsToken.trim());
                     return new org.springframework.security.authorization.AuthorizationDecision(matches);
-                })
-                .accessDeniedHandler((request, response, accessDeniedException) -> {
-                    if (request.getRequestURI().startsWith("/api/") || request.getRequestURI().startsWith("/actuator/")) {
-                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                        response.setContentType("application/json");
-                        response.getWriter().write("{\"timestamp\":\"" + Instant.now() + "\",\"status\":403,\"code\":\"FORBIDDEN\",\"message\":\"Access denied\"}");
-                    } else {
-                        response.sendRedirect(appProperties.getPublicUrl() + "/login");
-                    }
                 });
 
 
@@ -200,6 +184,7 @@ public class SecurityConfig {
                         "/api/v1/users/username-available",
                         "/uploads/**",
                         "/api/v1/dev/**",
+                        "/api/v1/loadtest/**",
                         "/mock/**"
                 ).permitAll();
 
@@ -232,30 +217,12 @@ public class SecurityConfig {
                     String target = appProperties.getPublicUrl() + "/login?error="
                             + URLEncoder.encode(exception.getMessage() != null ? exception.getMessage() : "OAuth authentication failed", StandardCharsets.UTF_8);
                     response.sendRedirect(target);
-                })
-                .accessDeniedHandler((request, response, accessDeniedException) -> {
-                    if (request.getRequestURI().startsWith("/api/") || request.getRequestURI().startsWith("/actuator/")) {
-                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                        response.setContentType("application/json");
-                        response.getWriter().write("{\"timestamp\":\"" + Instant.now() + "\",\"status\":403,\"code\":\"FORBIDDEN\",\"message\":\"Access denied\"}");
-                    } else {
-                        response.sendRedirect(appProperties.getPublicUrl() + "/login");
-                    }
                 });
             })
             .logout(logout -> logout
                 .logoutUrl("/api/v1/logout")
                 .logoutSuccessHandler((request, response, authentication) -> {
                     response.setStatus(HttpServletResponse.SC_NO_CONTENT);
-                })
-                .accessDeniedHandler((request, response, accessDeniedException) -> {
-                    if (request.getRequestURI().startsWith("/api/") || request.getRequestURI().startsWith("/actuator/")) {
-                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                        response.setContentType("application/json");
-                        response.getWriter().write("{\"timestamp\":\"" + Instant.now() + "\",\"status\":403,\"code\":\"FORBIDDEN\",\"message\":\"Access denied\"}");
-                    } else {
-                        response.sendRedirect(appProperties.getPublicUrl() + "/login");
-                    }
                 })
             )
             .addFilterAfter(new OncePerRequestFilter() {
