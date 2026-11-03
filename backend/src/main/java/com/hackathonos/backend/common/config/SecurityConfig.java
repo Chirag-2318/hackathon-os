@@ -3,6 +3,8 @@ package com.hackathonos.backend.common.config;
 import com.hackathonos.backend.common.security.ExplicitRedirectUriOAuth2AuthorizationRequestResolver;
 import com.hackathonos.backend.common.security.OAuth2LoginSuccessHandler;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.web.servlet.ServletContextInitializer;
 import org.springframework.context.annotation.Bean;
@@ -14,6 +16,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -30,30 +33,33 @@ import org.slf4j.MDC;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
+
     private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     private final CorsConfigurationSource corsConfigurationSource;
     private final AppProperties appProperties;
     private final Environment environment;
     private final ClientRegistrationRepository clientRegistrationRepository;
+    private final SecurityContextRepository securityContextRepository;
 
     public SecurityConfig(OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler,
                           CorsConfigurationSource corsConfigurationSource,
                           AppProperties appProperties,
                           Environment environment,
-                          @Autowired(required = false) ClientRegistrationRepository clientRegistrationRepository) {
+                          @Autowired(required = false) ClientRegistrationRepository clientRegistrationRepository,
+                          SecurityContextRepository securityContextRepository) {
         this.oAuth2LoginSuccessHandler = oAuth2LoginSuccessHandler;
         this.corsConfigurationSource = corsConfigurationSource;
         this.appProperties = appProperties;
         this.environment = environment;
         this.clientRegistrationRepository = clientRegistrationRepository;
+        this.securityContextRepository = securityContextRepository;
     }
 
     @Bean
@@ -91,6 +97,7 @@ public class SecurityConfig {
         });
 
         http
+            .securityContext(sc -> sc.securityContextRepository(securityContextRepository))
             .cors(cors -> cors.configurationSource(corsConfigurationSource))
             .headers(headers -> headers
                 .contentTypeOptions(org.springframework.security.config.Customizer.withDefaults())
@@ -149,7 +156,6 @@ public class SecurityConfig {
                         "/actuator/health/readiness"
                 ).permitAll();
 
-
                 auth.requestMatchers("/actuator/prometheus").access((authentication, context) -> {
                     String metricsToken = environment.getProperty("METRICS_TOKEN");
                     if (metricsToken == null || metricsToken.isBlank()) {
@@ -159,7 +165,6 @@ public class SecurityConfig {
                     boolean matches = authHeader != null && authHeader.equals("Bearer " + metricsToken.trim());
                     return new org.springframework.security.authorization.AuthorizationDecision(matches);
                 });
-
 
                 // Core public endpoints
                 auth.requestMatchers(
@@ -188,7 +193,6 @@ public class SecurityConfig {
                         "/mock/**"
                 ).permitAll();
 
-
                 // Dev/Swagger endpoints permitted ONLY when not in production profile
                 if (!isProd) {
                     auth.requestMatchers(
@@ -196,15 +200,13 @@ public class SecurityConfig {
                             "/swagger-ui/**",
                             "/swagger-ui.html"
                     ).permitAll();
-
-
-    
                 }
 
                 auth.requestMatchers(HttpMethod.GET, "/api/v1/invites/**").permitAll();
                 auth.anyRequest().authenticated();
             })
             .oauth2Login(oauth2 -> {
+                oauth2.securityContextRepository(securityContextRepository);
                 if (clientRegistrationRepository != null) {
                     oauth2.authorizationEndpoint(endpoint ->
                             endpoint.authorizationRequestResolver(
@@ -214,8 +216,20 @@ public class SecurityConfig {
                 }
                 oauth2.successHandler(oAuth2LoginSuccessHandler);
                 oauth2.failureHandler((request, response, exception) -> {
+                    String shortCode = "oauth_failed";
+                    if (exception instanceof org.springframework.security.oauth2.core.OAuth2AuthenticationException oauthEx) {
+                        shortCode = oauthEx.getError() != null && oauthEx.getError().getErrorCode() != null
+                                ? oauthEx.getError().getErrorCode()
+                                : "oauth_error";
+                    } else if (exception instanceof org.springframework.security.authentication.DisabledException) {
+                        shortCode = "account_disabled";
+                    } else if (exception instanceof org.springframework.security.authentication.LockedException) {
+                        shortCode = "account_locked";
+                    }
+                    log.warn("OAuth2 login failure: exception={}, message={}, shortCode={}",
+                            exception.getClass().getName(), exception.getMessage(), shortCode);
                     String target = appProperties.getPublicUrl() + "/login?error="
-                            + URLEncoder.encode(exception.getMessage() != null ? exception.getMessage() : "OAuth authentication failed", StandardCharsets.UTF_8);
+                            + URLEncoder.encode(shortCode, StandardCharsets.UTF_8);
                     response.sendRedirect(target);
                 });
             })
@@ -245,9 +259,14 @@ public class SecurityConfig {
 
     @Bean
     public ServletContextInitializer sessionCookieInitializer() {
+        boolean isProd = environment.acceptsProfiles(Profiles.of("prod"));
+        boolean secure = isProd || appProperties.getCookie().isSecure();
         return servletContext -> {
+            servletContext.getSessionCookieConfig().setName("JSESSIONID");
             servletContext.getSessionCookieConfig().setHttpOnly(true);
-            servletContext.getSessionCookieConfig().setSecure(appProperties.getCookie().isSecure());
+            servletContext.getSessionCookieConfig().setSecure(secure);
+            servletContext.getSessionCookieConfig().setPath("/");
+            servletContext.getSessionCookieConfig().setDomain(null);
         };
     }
 }

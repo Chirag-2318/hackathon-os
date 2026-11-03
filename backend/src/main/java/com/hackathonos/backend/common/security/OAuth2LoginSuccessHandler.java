@@ -2,45 +2,64 @@ package com.hackathonos.backend.common.security;
 
 import com.hackathonos.backend.common.config.AppProperties;
 import com.hackathonos.backend.users.User;
-import com.hackathonos.backend.users.UserRepository;
-import com.hackathonos.backend.users.UserSettings;
-import com.hackathonos.backend.users.UserSettingsRepository;
+import com.hackathonos.backend.users.UserOAuthTokenRepository;
+import com.hackathonos.backend.users.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
+import org.springframework.security.web.savedrequest.RequestCache;
+import org.springframework.security.web.savedrequest.SavedRequest;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 
 @Component
 public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
-    private final com.hackathonos.backend.users.UserService userService;
-    private final com.hackathonos.backend.users.UserOAuthTokenRepository userOAuthTokenRepository;
+    private static final Logger log = LoggerFactory.getLogger(OAuth2LoginSuccessHandler.class);
+
+    private final UserService userService;
+    private final UserOAuthTokenRepository userOAuthTokenRepository;
     private final SecretCipher secretCipher;
     private final AppProperties appProperties;
-    private final org.springframework.security.oauth2.client.OAuth2AuthorizedClientService authorizedClientService;
+    private final OAuth2AuthorizedClientService authorizedClientService;
+    private final SecurityContextRepository securityContextRepository;
 
-    public OAuth2LoginSuccessHandler(com.hackathonos.backend.users.UserService userService,
-                                     com.hackathonos.backend.users.UserOAuthTokenRepository userOAuthTokenRepository,
+    public OAuth2LoginSuccessHandler(UserService userService,
+                                     UserOAuthTokenRepository userOAuthTokenRepository,
                                      SecretCipher secretCipher,
                                      AppProperties appProperties,
-                                     @org.springframework.beans.factory.annotation.Autowired(required = false)
-                                     org.springframework.security.oauth2.client.OAuth2AuthorizedClientService authorizedClientService) {
+                                     @Autowired(required = false) OAuth2AuthorizedClientService authorizedClientService,
+                                     @Autowired(required = false) SecurityContextRepository securityContextRepository) {
         this.userService = userService;
         this.userOAuthTokenRepository = userOAuthTokenRepository;
         this.secretCipher = secretCipher;
         this.appProperties = appProperties;
         this.authorizedClientService = authorizedClientService;
+        this.securityContextRepository = securityContextRepository != null
+                ? securityContextRepository
+                : new HttpSessionSecurityContextRepository();
     }
 
     @Override
-    @Transactional
     public void onAuthenticationSuccess(HttpServletRequest request,
                                         HttpServletResponse response,
                                         Authentication authentication) throws IOException {
@@ -57,28 +76,41 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         try {
             user = userService.findOrCreateFromPrincipal(oauth2User, registrationId);
         } catch (com.hackathonos.backend.common.error.SignupClosedException ex) {
-            org.springframework.security.core.context.SecurityContextHolder.clearContext();
-            jakarta.servlet.http.HttpSession session = request.getSession(false);
+            log.warn("OAuth login rejected: signup closed, reason={}", ex.getReason());
+            SecurityContextHolder.clearContext();
+            HttpSession session = request.getSession(false);
             if (session != null) {
                 session.invalidate();
             }
-            String targetUrl = appProperties.getPublicUrl() + "/full?reason=" + ex.getReason();
+            String targetUrl = appProperties.getPublicUrl() + "/full?reason="
+                    + URLEncoder.encode(ex.getReason() != null ? ex.getReason() : "closed", StandardCharsets.UTF_8);
             response.sendRedirect(targetUrl);
             return;
         } catch (com.hackathonos.backend.common.error.AccountDeletedException ex) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setContentType("application/json");
-            response.getWriter().write("{\"code\":\"ACCOUNT_DELETED\",\"message\":\"" + ex.getMessage() + "\"}");
+            log.warn("OAuth login rejected: account deleted for user: exception={}", ex.getMessage());
+            SecurityContextHolder.clearContext();
+            HttpSession session = request.getSession(false);
+            if (session != null) {
+                session.invalidate();
+            }
+            String targetUrl = appProperties.getPublicUrl() + "/login?error=account_deleted";
+            response.sendRedirect(targetUrl);
+            return;
+        } catch (Exception ex) {
+            log.warn("OAuth login failed during user provisioning: exception={}, message={}",
+                    ex.getClass().getName(), ex.getMessage(), ex);
+            SecurityContextHolder.clearContext();
+            String targetUrl = appProperties.getPublicUrl() + "/login?error=provisioning_failed";
+            response.sendRedirect(targetUrl);
             return;
         }
 
         if ("GITHUB".equals(user.getProvider()) && authentication instanceof OAuth2AuthenticationToken oauthToken && authorizedClientService != null) {
             try {
-                org.springframework.security.oauth2.client.OAuth2AuthorizedClient client =
-                        authorizedClientService.loadAuthorizedClient(
-                                oauthToken.getAuthorizedClientRegistrationId(),
-                                oauthToken.getName()
-                        );
+                OAuth2AuthorizedClient client = authorizedClientService.loadAuthorizedClient(
+                        oauthToken.getAuthorizedClientRegistrationId(),
+                        oauthToken.getName()
+                );
                 if (client != null && client.getAccessToken() != null) {
                     String tokenVal = client.getAccessToken().getTokenValue();
                     String encrypted = secretCipher.encrypt(tokenVal);
@@ -92,18 +124,35 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                             Instant.now()
                     ));
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                log.warn("Failed to persist GitHub OAuth token for user={}: {}", user.getId(), e.getMessage());
+            }
         }
 
-        org.springframework.security.web.savedrequest.RequestCache requestCache =
-                new org.springframework.security.web.savedrequest.HttpSessionRequestCache();
-        org.springframework.security.web.savedrequest.SavedRequest savedRequest =
-                requestCache.getRequest(request, response);
+        // Persist SecurityContext into HTTP Session via SecurityContextRepository
+        try {
+            SecurityContext context = SecurityContextHolder.getContext();
+            if (context == null || context.getAuthentication() == null) {
+                context = SecurityContextHolder.createEmptyContext();
+                context.setAuthentication(authentication);
+                SecurityContextHolder.setContext(context);
+            }
+            securityContextRepository.saveContext(context, request, response);
+            log.info("Persisted SecurityContext to session for user={}, provider={}", user.getId(), registrationId);
+        } catch (Exception ex) {
+            log.warn("Failed to persist SecurityContext to session during OAuth login: exception={}, message={}",
+                    ex.getClass().getName(), ex.getMessage(), ex);
+            response.sendRedirect(appProperties.getPublicUrl() + "/login?error=session_save_failed");
+            return;
+        }
+
+        RequestCache requestCache = new HttpSessionRequestCache();
+        SavedRequest savedRequest = requestCache.getRequest(request, response);
         if (savedRequest != null) {
             String redirectUrl = savedRequest.getRedirectUrl();
             if (redirectUrl != null) {
                 try {
-                    java.net.URI uri = java.net.URI.create(redirectUrl);
+                    URI uri = URI.create(redirectUrl);
                     if ("/oauth/authorize".equals(uri.getPath())) {
                         requestCache.removeRequest(request, response);
                         response.sendRedirect(redirectUrl);

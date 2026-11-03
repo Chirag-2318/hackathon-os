@@ -2,9 +2,13 @@ package com.hackathonos.backend.admin;
 
 import com.hackathonos.backend.admin.dto.CapacityDto;
 import com.hackathonos.backend.admin.dto.WaitlistRequest;
+import com.hackathonos.backend.common.config.AppProperties;
 import com.hackathonos.backend.common.error.TooManyRequestsException;
+import com.hackathonos.backend.common.security.ClientIpResolver;
 import com.hackathonos.backend.common.security.RateLimiter;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +16,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -22,21 +27,24 @@ import java.util.regex.Pattern;
 public class PublicCapacityController {
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
-    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PublicCapacityController.class);
+    private static final Logger log = LoggerFactory.getLogger(PublicCapacityController.class);
 
     private final AppSettingsService appSettingsService;
     private final RateLimiter rateLimiter;
     private final JdbcTemplate jdbcTemplate;
-    private final com.hackathonos.backend.common.security.ClientIpResolver clientIpResolver;
+    private final ClientIpResolver clientIpResolver;
+    private final AppProperties appProperties;
 
     public PublicCapacityController(AppSettingsService appSettingsService,
                                     RateLimiter rateLimiter,
                                     JdbcTemplate jdbcTemplate,
-                                    com.hackathonos.backend.common.security.ClientIpResolver clientIpResolver) {
+                                    ClientIpResolver clientIpResolver,
+                                    AppProperties appProperties) {
         this.appSettingsService = appSettingsService;
         this.rateLimiter = rateLimiter;
         this.jdbcTemplate = jdbcTemplate;
         this.clientIpResolver = clientIpResolver;
+        this.appProperties = appProperties;
     }
 
     @GetMapping("/capacity")
@@ -45,6 +53,18 @@ public class PublicCapacityController {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(30, TimeUnit.SECONDS).cachePublic())
                 .body(dto);
+    }
+
+    @GetMapping("/config")
+    public ResponseEntity<Map<String, String>> getPublicConfig() {
+        Map<String, String> config = new HashMap<>();
+        String email = appProperties.getSupportEmail();
+        if (email != null && !email.isBlank()) {
+            config.put("supportEmail", email);
+        }
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.maxAge(60, TimeUnit.SECONDS).cachePublic())
+                .body(config);
     }
 
     @PostMapping("/waitlist")

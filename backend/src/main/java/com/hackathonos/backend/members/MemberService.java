@@ -257,10 +257,10 @@ public class MemberService {
                 .orElseThrow(() -> new IllegalStateException("Caller leadership not found"));
 
         oldLeader.setRole("BUILDER");
-        memberRepository.save(oldLeader);
+        memberRepository.saveAndFlush(oldLeader);
 
         target.setRole("LEADER");
-        memberRepository.save(target);
+        memberRepository.saveAndFlush(target);
 
         room.setOwnerId(target.getUserId());
         room.setUpdatedAt(Instant.now());
