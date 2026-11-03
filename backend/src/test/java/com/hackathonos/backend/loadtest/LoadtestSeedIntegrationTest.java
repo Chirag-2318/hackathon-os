@@ -114,3 +114,4 @@ class LoadtestSeedIntegrationTest {
                 .andExpect(jsonPath("$.choices[0].message.content").isNotEmpty());
     }
 }
+

@@ -98,3 +98,4 @@ export async function runRestartResilienceScenario({ clients, rooms, baseUrl, co
     restartAttempted
   };
 }
+

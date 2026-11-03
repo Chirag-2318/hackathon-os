@@ -32,3 +32,4 @@
 - Peak Live SSE Streams: **400**
 - AI Bulkhead Shedding: **HTTP 503 SERVER_BUSY cleanly handled (mean latency 14ms)**
 - Optimistic Lock Collisions: **238 handled via HTTP 409 (0 HTTP 500)**
+

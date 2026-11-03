@@ -132,3 +132,4 @@ As Step 8 is the final step of the hardening project, here is the prioritized li
 | **3** | **Read-Replica Routing for Analytics & Exports** | **Medium** | 2 Days | Route read-heavy background queries (`GET /export`, `/stats`, `/audit-logs`) to a read-only PostgreSQL replica using Spring Data `@Transactional(readOnly = true)` routing datasource. |
 | **4** | **Distributed Rate Limiting via PostgreSQL Token Bucket** | **Medium** | 1 Day | Migrate in-memory `RateLimitInterceptor` token buckets to a lightweight PostgreSQL table or Redis if multiple backend instances are deployed, ensuring uniform abuse protection. |
 | **5** | **Pre-warmed AI Request Queuing & Webhook Callbacks** | **Medium** | 2 Days | Replace synchronous HTTP waiting for Groq/Whisper with asynchronous background jobs stored in an `ai_jobs` table, polling or notifying the client via SSE once generation finishes, reducing client timeout vulnerability. |
+

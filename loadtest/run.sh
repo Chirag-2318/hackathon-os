@@ -68,3 +68,4 @@ else
 fi
 
 echo "Load test run finished successfully."
+

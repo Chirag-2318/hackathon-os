@@ -108,3 +108,4 @@ export async function runWriteScenario({ clients, rooms, durationSeconds = 30, t
 
   return { totalWrites, conflictCount, internalErrorCount };
 }
+

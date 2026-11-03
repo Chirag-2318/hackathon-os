@@ -46,3 +46,4 @@ export async function runBrowseScenario({ clients, rooms, durationSeconds = 30, 
   await Promise.all(activeClients.map((client, i) => userBrowseLoop(client, i)));
   console.log(`[browse] Completed ${totalRounds} browse cycles across ${activeClients.length} virtual users.`);
 }
+

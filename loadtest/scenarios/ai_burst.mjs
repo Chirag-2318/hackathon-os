@@ -91,3 +91,4 @@ export async function runAiBurstScenario({ clients, rooms, monitor, userCount = 
     minHikariIdle: monitorSummary.minHikariIdle
   };
 }
+

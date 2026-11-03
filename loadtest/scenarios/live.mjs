@@ -124,3 +124,4 @@ export async function runLiveScenario({ clients, rooms, durationSeconds = 60, to
   console.log(`[live] SSE Event Delivery Latency -> p50: ${p50}ms, p95: ${p95}ms, p99: ${p99}ms`);
   return { p50, p95, p99, sampleCount: deliveryLatencies.length };
 }
+

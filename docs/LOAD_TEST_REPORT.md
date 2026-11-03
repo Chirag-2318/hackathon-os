@@ -227,3 +227,4 @@ Using a **30% safety margin** (engineering headroom for background tasks, GC spi
   1. **Horizontal Scaling:** Whenever Render backend is scaled to **2 or more container instances** (so an event triggered on Instance A reaches an SSE client connected to Instance B).
   2. **Connection Scale:** Whenever single-instance SSE streams exceed **600 concurrent connections**.
 - **Implementation Mechanism:** Flip environment variable `EVENTS_BUS=postgres`. The pre-built Spring configuration activates PostgreSQL `LISTEN/NOTIFY` via `pg_notify('room_events', ...)` or polling the `room_events_outbox` table, seamlessly fanning out real-time signals across all instances without requiring Redis.
+

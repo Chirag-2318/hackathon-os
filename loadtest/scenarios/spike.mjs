@@ -78,3 +78,4 @@ export async function runSpikeScenario({ clients, rooms, totalDurationSec = 60, 
     peakVUs: spawnedWorkers.size
   };
 }
+

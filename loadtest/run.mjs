@@ -242,3 +242,4 @@ main().catch(err => {
   console.error('Fatal load test failure:', err);
   process.exit(1);
 });
+
