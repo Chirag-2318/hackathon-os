@@ -26,7 +26,9 @@ export function SignInPage() {
       cap: 1000,
       spotsLeft: null,
     })),
-    staleTime: 30000,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 
   // Immediate redirect for authenticated visitors (no flash of login screen)

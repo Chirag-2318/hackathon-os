@@ -153,6 +153,22 @@ public class AppProperties {
     public int getMaxUploadMbPerUser() { return maxUploadMbPerUser; }
     public void setMaxUploadMbPerUser(int maxUploadMbPerUser) { this.maxUploadMbPerUser = maxUploadMbPerUser; }
 
+    private RateLimitProperties rateLimit = new RateLimitProperties();
+
+    public RateLimitProperties getRateLimit() { return rateLimit; }
+    public void setRateLimit(RateLimitProperties rateLimit) { this.rateLimit = rateLimit; }
+
+    public static class RateLimitProperties {
+        private int unauthPerMinute = 120;
+        private int authPerMinute = 600;
+
+        public int getUnauthPerMinute() { return unauthPerMinute; }
+        public void setUnauthPerMinute(int unauthPerMinute) { this.unauthPerMinute = unauthPerMinute; }
+
+        public int getAuthPerMinute() { return authPerMinute; }
+        public void setAuthPerMinute(int authPerMinute) { this.authPerMinute = authPerMinute; }
+    }
+
     private RetentionProperties retention = new RetentionProperties();
 
     public RetentionProperties getRetention() { return retention; }

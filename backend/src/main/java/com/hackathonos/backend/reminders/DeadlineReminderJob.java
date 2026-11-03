@@ -58,7 +58,7 @@ public class DeadlineReminderJob {
      */
     @Scheduled(fixedRate = 300000)
     public void scheduledRun() {
-        advisoryLockService.tryLockAndRun(1005L, this::runReminders);
+        advisoryLockService.tryLockAndRun(1010L, this::runReminders);
     }
 
     @Transactional

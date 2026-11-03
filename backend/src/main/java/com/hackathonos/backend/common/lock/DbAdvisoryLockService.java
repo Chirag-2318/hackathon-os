@@ -64,6 +64,10 @@ public class DbAdvisoryLockService {
                 try {
                     task.run();
                     return true;
+                } catch (Throwable t) {
+                    log.error("Execution error in advisory lock {}: class={}, message={}",
+                            lockKey, t.getClass().getName(), t.getMessage(), t);
+                    throw t;
                 } finally {
                     try (PreparedStatement unlockPs = con.prepareStatement("SELECT pg_advisory_unlock(?)")) {
                         unlockPs.setLong(1, lockKey);
@@ -74,7 +78,12 @@ public class DbAdvisoryLockService {
                 }
             }));
         } catch (DataAccessException ex) {
-            log.error("Database error while evaluating advisory lock {}: {}", lockKey, ex.getMessage());
+            log.error("Database error while evaluating advisory lock {}: class={}, message={}",
+                    lockKey, ex.getClass().getName(), ex.getMessage(), ex);
+            return false;
+        } catch (Throwable ex) {
+            log.error("Unexpected error in advisory lock {}: class={}, message={}",
+                    lockKey, ex.getClass().getName(), ex.getMessage(), ex);
             return false;
         }
     }
@@ -109,7 +118,8 @@ public class DbAdvisoryLockService {
                 return claimFunction.get();
             }));
         } catch (Exception ex) {
-            log.error("Error executing transaction advisory lock claim for key {}: {}", lockKey, ex.getMessage(), ex);
+            log.error("Error executing transaction advisory lock claim for key {}: class={}, message={}",
+                    lockKey, ex.getClass().getName(), ex.getMessage(), ex);
             return Optional.empty();
         }
     }

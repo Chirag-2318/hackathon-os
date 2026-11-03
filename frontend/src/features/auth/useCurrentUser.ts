@@ -13,7 +13,8 @@ export function useCurrentUser() {
     queryKey: ['currentUser'],
     queryFn: authApi.me,
     retry: false,
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   useEffect(() => {

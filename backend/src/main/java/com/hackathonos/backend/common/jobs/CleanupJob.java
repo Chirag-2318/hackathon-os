@@ -8,6 +8,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
@@ -46,7 +47,7 @@ public class CleanupJob {
     public void doIdempotencyPrune() {
         Instant cutoff24h = Instant.now().minus(24, ChronoUnit.HOURS);
         int purgedKeys = jdbcClient.sql("DELETE FROM idempotency_keys WHERE created_at < :cutoff")
-                .param("cutoff", cutoff24h)
+                .param("cutoff", Timestamp.from(cutoff24h))
                 .update();
         if (purgedKeys > 0) {
             log.info("Hourly idempotency prune: purged {} keys older than 24h", purgedKeys);
@@ -57,10 +58,10 @@ public class CleanupJob {
     public void doRealtimePrune() {
         Instant cutoff24h = Instant.now().minus(24, ChronoUnit.HOURS);
         int purgedEvents = jdbcClient.sql("DELETE FROM room_events WHERE created_at < :cutoff")
-                .param("cutoff", cutoff24h)
+                .param("cutoff", Timestamp.from(cutoff24h))
                 .update();
         int purgedPresence = jdbcClient.sql("DELETE FROM room_presence WHERE last_seen < :cutoff")
-                .param("cutoff", cutoff24h)
+                .param("cutoff", Timestamp.from(cutoff24h))
                 .update();
         if (purgedEvents > 0 || purgedPresence > 0) {
             log.info("Hourly realtime prune: purged {} room_events and {} room_presence records older than 24h",
@@ -96,27 +97,27 @@ public class CleanupJob {
 
     private int purgeExpiredInvites() {
         return jdbcClient.sql("DELETE FROM invites WHERE expires_at < :now")
-                .param("now", Instant.now())
+                .param("now", Timestamp.from(Instant.now()))
                 .update();
     }
 
     private int purgeOldNotifications() {
         Instant thirtyDaysAgo = Instant.now().minus(30, ChronoUnit.DAYS);
         return jdbcClient.sql("DELETE FROM notifications WHERE read_at IS NOT NULL AND created_at < :cutoff")
-                .param("cutoff", thirtyDaysAgo)
+                .param("cutoff", Timestamp.from(thirtyDaysAgo))
                 .update();
     }
 
     private int purgeExpiredDataExports() {
         return jdbcClient.sql("DELETE FROM data_exports WHERE expires_at < :now")
-                .param("now", Instant.now())
+                .param("now", Timestamp.from(Instant.now()))
                 .update();
     }
 
     private int purgeOldClientErrors() {
         Instant thirtyDaysAgo = Instant.now().minus(30, ChronoUnit.DAYS);
         return jdbcClient.sql("DELETE FROM client_errors WHERE created_at < :cutoff")
-                .param("cutoff", thirtyDaysAgo)
+                .param("cutoff", Timestamp.from(thirtyDaysAgo))
                 .update();
     }
 

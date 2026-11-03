@@ -67,7 +67,7 @@ public class SubmissionLinkCheckJob {
         Instant cutoff = Instant.now().minus(Duration.ofMinutes(30));
 
         // 1. Claim links inside a short transaction using transaction advisory lock
-        List<ClaimedLink> claimed = advisoryLockService.tryXactLockAndClaim(1006L, () -> {
+        List<ClaimedLink> claimed = advisoryLockService.tryXactLockAndClaim(1011L, () -> {
             List<Submission> drafts = submissionRepository.findAll().stream()
                     .filter(s -> "DRAFT".equalsIgnoreCase(s.getStatus()))
                     .toList();

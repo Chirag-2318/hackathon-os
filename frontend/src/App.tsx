@@ -45,7 +45,7 @@ const queryClient = new QueryClient({
       }
 
       const queryType = Array.isArray(query.queryKey) ? String(query.queryKey[0]) : 'query';
-      if (status !== 401) {
+      if (status !== 401 && status !== 429) {
         showThrottledErrorToast(queryType, error?.message || `Request failed (${queryType})`);
       }
     },
@@ -53,14 +53,25 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 5 * 60 * 1000, // 5 minutes
+      refetchOnWindowFocus: false,
       retry: (failureCount, error: any) => {
         const status = error?.status ?? error?.response?.status;
-        if (status === 400 || status === 403 || status === 404) {
+        if (status === 400 || status === 401 || status === 403 || status === 404 || status === 429) {
           return false;
         }
-        return failureCount < 3;
+        // Retry network errors and 5xx only, max 2 times, with jitter
+        const is5xx = typeof status === 'number' && status >= 500 && status < 600;
+        const isNetworkError = !status || status === 0 || error?.name === 'TypeError';
+        if ((is5xx || isNetworkError) && failureCount < 2) {
+          return true;
+        }
+        return false;
       },
-      retryDelay: (attemptIndex) => Math.min(1000 * Math.pow(2, attemptIndex), 60000),
+      retryDelay: (attemptIndex) => {
+        const base = Math.min(1000 * Math.pow(2, attemptIndex), 30000);
+        const jitter = Math.floor(Math.random() * 500);
+        return base + jitter;
+      },
     },
   },
 });

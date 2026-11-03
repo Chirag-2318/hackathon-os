@@ -41,7 +41,21 @@ export class ApiError extends Error {
   }
 }
 
-function getCookie(name: string): string | null {
+let last429ToastTime = 0;
+
+export function showThrottled429Toast(retryAfterSeconds?: number | null) {
+  const now = Date.now();
+  if (now - last429ToastTime < 10_000) {
+    return;
+  }
+  last429ToastTime = now;
+  const message = retryAfterSeconds && retryAfterSeconds > 0
+    ? `Too many requests. Please retry in ${retryAfterSeconds}s.`
+    : 'Too many requests. Please slow down and try again.';
+  toast.warning(message);
+}
+
+export function getCookie(name: string): string | null {
   if (typeof document === 'undefined') return null;
   const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
   return match ? decodeURIComponent(match[2]) : null;
@@ -162,7 +176,8 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     const retryMessage = retryAfter
       ? `Rate limit reached. Please retry in ${retryAfter} seconds.`
       : 'Too many requests. Please slow down and try again.';
-    toast.warning(retryMessage);
+    const retrySec = retryAfter ? parseInt(retryAfter, 10) : null;
+    showThrottled429Toast(retrySec);
 
     throw new ApiError(429, retryMessage, 'RATE_LIMITED');
   }

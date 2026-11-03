@@ -7,15 +7,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { SignInAuthButtons } from './sign-in-auth-buttons';
 import { FullCapacityCard } from '@/features/public/full-capacity-card';
 import { apiFetch } from '@/design/api';
+import { usePublicConfig } from '../usePublicConfig';
 
 interface CapacityDto {
   open: boolean;
   cap: number;
   spotsLeft: number | null;
-}
-
-interface PublicConfigDto {
-  supportEmail?: string;
 }
 
 interface InvitePreviewDto {
@@ -44,22 +41,31 @@ export function SignInLeftColumn({ capacity, isLoadingCapacity }: SignInLeftColu
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [invitePreview, setInvitePreview] = useState<InvitePreviewDto | null>(null);
-  const [supportEmail, setSupportEmail] = useState<string | null>(null);
   const [showMemberSignIn, setShowMemberSignIn] = useState<boolean>(false);
 
-  // 1. Process URL error param (?error=denied, failed, deleted, unknown)
+  // Use shared React Query hook for public config (deduped & cached)
+  const { data: publicConfig } = usePublicConfig();
+  const supportEmail = publicConfig?.supportEmail || null;
+
+  // 1. Process URL error param with friendly specific messages per code
   useEffect(() => {
     const errParam = searchParams.get('error');
     if (errParam) {
-      if (errParam === 'denied') {
-        setErrorMessage('You cancelled the sign-in. Nothing was changed.');
-      } else if (errParam === 'failed') {
-        setErrorMessage("Sign-in didn't complete. Please try again.");
-      } else if (errParam === 'deleted') {
-        setErrorMessage('Your account has been deleted.');
-      } else {
-        setErrorMessage('Something went wrong. Please try again.');
-      }
+      const ERROR_MESSAGES: Record<string, string> = {
+        denied: 'You cancelled the sign-in. Nothing was changed.',
+        access_denied: 'You cancelled the sign-in. Nothing was changed.',
+        failed: "Sign-in didn't complete. Please try again.",
+        deleted: 'Your account has been deleted.',
+        account_deleted: 'Your account has been deleted. Please contact support if you believe this was an error.',
+        provisioning_failed: 'We were unable to set up your account. Please try signing in again.',
+        session_save_failed: 'Unable to establish an authenticated session. Please verify cookie settings and try again.',
+        account_disabled: 'Your account has been disabled. Please contact support.',
+        account_locked: 'Your account has been temporarily locked. Please try again later.',
+        oauth_error: 'Authentication with the identity provider failed. Please try again.',
+        invalid_token: 'Your sign-in session expired or was invalid. Please try again.',
+      };
+
+      setErrorMessage(ERROR_MESSAGES[errParam] || 'Something went wrong. Please try again.');
 
       // Remove error parameter from URL without page reload
       try {
@@ -106,19 +112,6 @@ export function SignInLeftColumn({ capacity, isLoadingCapacity }: SignInLeftColu
         });
     }
   }, [searchParams]);
-
-  // 4. Public Config for Contact supportEmail
-  useEffect(() => {
-    apiFetch<PublicConfigDto>('/api/v1/public/config')
-      .then((cfg) => {
-        if (cfg?.supportEmail) {
-          setSupportEmail(cfg.supportEmail);
-        }
-      })
-      .catch(() => {
-        // Quiet fallback
-      });
-  }, []);
 
   // Theme cycle: Light -> Dark -> System -> Light
   const getNextTheme = (curr: Theme): { next: Theme; label: string } => {

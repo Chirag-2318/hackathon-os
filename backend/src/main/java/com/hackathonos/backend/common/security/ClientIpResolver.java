@@ -4,15 +4,20 @@ import com.hackathonos.backend.common.config.AppProperties;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Component;
 
+import java.net.InetAddress;
+
 /**
  * Resolves the client's public IP address from incoming HTTP requests.
  *
- * <p>Header resolution order:
- * 1. Configured trusted header name from {@code CLIENT_IP_HEADER} (e.g., {@code x-vercel-forwarded-for}).
- *    If {@code PROXY_SHARED_SECRET} is configured, this header is ONLY trusted when accompanied
- *    by a matching {@code x-proxy-secret} header from the reverse proxy.
- * 2. Fall back to the right-most (last) entry in {@code X-Forwarded-For} (appended by the nearest trusted proxy).
- * 3. Fall back to the direct socket address {@link HttpServletRequest#getRemoteAddr()}.
+ * <p>Resolution order:
+ * 1. If {@code PROXY_SHARED_SECRET} is configured, forwarded headers are ONLY trusted when
+ *    accompanied by a matching {@code x-proxy-secret} header.
+ * 2. When trusted (or when {@code PROXY_SHARED_SECRET} is unset behind Vercel):
+ *    a. Try {@code x-vercel-forwarded-for} (Vercel sets this with the real visitor IP).
+ *    b. Try custom configured header {@code CLIENT_IP_HEADER} if different.
+ *    c. Try {@code X-Forwarded-For} (taking the leftmost valid client IP literal).
+ * 3. Fall back to socket direct address {@link HttpServletRequest#getRemoteAddr()}.
+ * 4. Never trust any header value that is not a valid IP literal.
  */
 @Component
 public class ClientIpResolver {
@@ -28,48 +33,78 @@ public class ClientIpResolver {
             return "unknown";
         }
 
-        // 1. Try custom trusted header (e.g., x-vercel-forwarded-for)
-        String customHeaderName = appProperties.getClientIpHeader();
-        String proxySecret = appProperties.getProxySharedSecret();
-        boolean proxySecretConfigured = proxySecret != null && !proxySecret.isBlank();
+        boolean trustForwarded = shouldTrustForwardedHeaders(request);
 
-        boolean trustCustomHeader = true;
-        if (proxySecretConfigured) {
-            String incomingSecret = request.getHeader("x-proxy-secret");
-            if (incomingSecret == null || incomingSecret.isBlank()) {
-                incomingSecret = request.getHeader("X-Proxy-Secret");
+        if (trustForwarded) {
+            // 1. Try Vercel's trusted visitor IP header
+            String vercelIp = extractFirstValidIp(request.getHeader("x-vercel-forwarded-for"));
+            if (vercelIp != null) {
+                return vercelIp;
             }
-            trustCustomHeader = proxySecret.equals(incomingSecret);
-        }
 
-        if (trustCustomHeader && customHeaderName != null && !customHeaderName.isBlank()) {
-            String val = request.getHeader(customHeaderName);
-            if (val != null && !val.isBlank()) {
-                return extractRightmostIp(val);
+            // 2. Try custom configured header if set and different
+            String customHeaderName = appProperties.getClientIpHeader();
+            if (customHeaderName != null && !customHeaderName.isBlank()
+                    && !"x-vercel-forwarded-for".equalsIgnoreCase(customHeaderName)) {
+                String customIp = extractFirstValidIp(request.getHeader(customHeaderName));
+                if (customIp != null) {
+                    return customIp;
+                }
+            }
+
+            // 3. Fall back to standard X-Forwarded-For (take the leftmost originating client IP)
+            String xff = request.getHeader("X-Forwarded-For");
+            String xffIp = extractFirstValidIp(xff);
+            if (xffIp != null) {
+                return xffIp;
             }
         }
 
-        // 2. Fall back to standard X-Forwarded-For (take the right-most hop)
-        String xff = request.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            return extractRightmostIp(xff);
-        }
-
-        // 3. Fall back to socket remote address
+        // 4. Fall back to direct socket remote address
         String remote = request.getRemoteAddr();
-        if (remote != null && !remote.isBlank()) {
+        if (remote != null && !remote.isBlank() && isValidIpLiteral(remote.trim())) {
             return remote.trim();
         }
 
         return "unknown";
     }
 
-    private String extractRightmostIp(String headerValue) {
+    private boolean shouldTrustForwardedHeaders(HttpServletRequest request) {
+        String proxySecret = appProperties.getProxySharedSecret();
+        if (proxySecret != null && !proxySecret.isBlank()) {
+            String incomingSecret = request.getHeader("x-proxy-secret");
+            if (incomingSecret == null || incomingSecret.isBlank()) {
+                incomingSecret = request.getHeader("X-Proxy-Secret");
+            }
+            return proxySecret.equals(incomingSecret);
+        }
+        // When PROXY_SHARED_SECRET is not configured, trust forwarded headers from reverse proxy (e.g. Vercel)
+        return true;
+    }
+
+    public static boolean isValidIpLiteral(String ip) {
+        if (ip == null || ip.isBlank()) {
+            return false;
+        }
+        try {
+            InetAddress.ofLiteral(ip.trim());
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    private String extractFirstValidIp(String headerValue) {
         if (headerValue == null || headerValue.isBlank()) {
-            return "unknown";
+            return null;
         }
         String[] parts = headerValue.split(",");
-        String last = parts[parts.length - 1].trim();
-        return last.isEmpty() ? "unknown" : last;
+        for (String part : parts) {
+            String candidate = part.trim();
+            if (isValidIpLiteral(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
     }
 }

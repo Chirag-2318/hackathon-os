@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
@@ -90,7 +91,7 @@ public class IdempotencyService {
 
             var spec = jdbcClient.sql(sql)
                     .param("key", idempotencyKey.trim())
-                    .param("cutoff", cutoff);
+                    .param("cutoff", Timestamp.from(cutoff));
 
             if (userId != null) {
                 spec = spec.param("userId", userId);
